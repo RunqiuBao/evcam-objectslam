@@ -1,0 +1,3 @@
+[submodule "3rdparty/logging-log4cxx"]
+	path = 3rdparty/logging-log4cxx
+	url = https://github.com/apache/logging-log4cxx.git

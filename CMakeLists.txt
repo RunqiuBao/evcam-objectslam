@@ -13,7 +13,7 @@ endif()
 set(MYLIB_VERSION 0.0.1)
 project(tool_detectobjects
     VERSION ${MYLIB_VERSION}
-    DESCRIPTION "A event based object detection library"
+    DESCRIPTION "An object detection library for event camera"
     LANGUAGES C CXX
 )
 message(STATUS "tool_detectobjects ${MYLIB_VERSION}")
@@ -21,3 +21,4 @@ message(STATUS "tool_detectobjects ${MYLIB_VERSION}")
 set(CMAKE_CXX_STANDARD 17)
 
 add_subdirectory(cpp)
+
