@@ -1,1 +1,1 @@
-add_subdirectory(evlinemod)
+add_subdirectory(eventlinemod)
