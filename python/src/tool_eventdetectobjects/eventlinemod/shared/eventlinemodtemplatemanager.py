@@ -2,26 +2,99 @@ import cv2
 import os
 import numpy
 import json
+import queue
+
+from quadtree import Point, Rect, QuadTree
 
 import logging
 logger = logging.getLogger(__name__)
 
 
-class EvlinemodTemplate(object):
+class EventLinemodTemplate(object):
     _image = None
+    _simulationCamInObjectTransform = None
     _featureVector = None
     _featurePointsX = None
     _featurePointsY = None
     _imageW = None
     _imageH = None
 
-    def __init__(self, image, featureVector, featurePointsX, featurePointsY):
-        self._image = image
+    def __init__(self, image, simulationCamInObjectTransform, resize=1.0):
+        simulationCamInObjectTransform[:3, 3] /= resize
+        self._simulationCamInObjectTransform = simulationCamInObjectTransform
+        self._image = cv2.resize(image.astype('uint8'), dsize=None, fx=resize, fy=resize, interpolation=cv2.INTER_CUBIC)
         self._imageH = image.shape[0]
         self._imageW = image.shape[1]
-        self._featureVector = featureVector
-        self._featurePointsX = featurePointsX
-        self._featurePointsY = featurePointsY
+        templateMask = self._image >= 10
+        self._image[~templateMask] = 0
+        self._featurePointsX, self._featurePointsY, self._featureVector = EventLinemodTemplate.GetFeatureVector(self._image)
+
+    @staticmethod
+    def GetFeatureVector(image, numFeaturePoints=64, maxNumPointsQuadtreeNode=10, gradMagnitudeThreshold=100):
+        '''
+        Randomized and distributed N feature points forming as a featured vector
+        '''
+        # sample feature points
+        imageLaplacian = cv2.Laplacian(image, cv2.CV_32F, ksize=3)
+        imageLaplacianMask = numpy.where(numpy.abs(imageLaplacian) >= 40, 255, 0)
+        kernels = []
+        kernels.append(numpy.ones((3, 3), numpy.uint8))
+        imageLaplacianMask = cv2.morphologyEx(imageLaplacianMask.astype('uint8'), cv2.MORPH_CLOSE, kernels[0])
+        # # select n feature points
+        coordinateMaskedPoints = numpy.where(imageLaplacianMask > 0)
+        indexMaskedPointsRandom = numpy.random.default_rng().choice(coordinateMaskedPoints[0].shape[0], size=coordinateMaskedPoints[0].shape[0], replace=False)
+        # build quad tree
+        h, w = image.shape
+        domain = Rect(w // 2, h // 2, w, h)
+        qtree = QuadTree(domain, maxNumPointsQuadtreeNode)
+        for index in indexMaskedPointsRandom:
+            featurePoint = Point(coordinateMaskedPoints[1][index], coordinateMaskedPoints[0][index], 1.0)
+            qtree.insert(featurePoint)
+        # get top N points
+        nodeQueue = EventLinemodTemplate.ReturnDistributedTopScoreNPoints(qtree, N=numFeaturePoints)
+        distributedPointsX, distributedPointsY = [], []
+        for i in range(nodeQueue.qsize()):
+            thisNode = nodeQueue.get()
+            foundPointsX, foundPointsY, foundPointsScore = [], [], []
+            foundPointsX, foundPointsY = thisNode.getAllPoints(foundPointsX, foundPointsY, foundPointsScore)[:2]
+            distributedPointsX.append(foundPointsX[0])
+            distributedPointsY.append(foundPointsY[0])
+        distributedPointsX, distributedPointsY = numpy.array(distributedPointsX), numpy.array(distributedPointsY)
+        # compute feature vector
+        featureVector = numpy.zeros_like(distributedPointsY)
+        for indexPoint, localCenter in enumerate(zip(distributedPointsX, distributedPointsY)):
+            localPatch = imageLaplacianMask[localCenter[0] - 2:localCenter[0] + 3, localCenter[1] - 2:localCenter[1] + 3]
+            featureVector[indexPoint] = EventLinemodTemplate.ComputeQuantizedGradientOrientation(localPatch, gradMagnitudeThreshold=gradMagnitudeThreshold)
+        return distributedPointsX, distributedPointsX, featureVector
+
+    ## BFS
+    @staticmethod
+    def ReturnDistributedTopScoreNPoints(rootNode, N=600):
+        if N > len(rootNode):
+            N = len(rootNode)
+        nodeQueue = queue.Queue()
+        nodeQueue.put(rootNode)
+        while nodeQueue.qsize() < N:
+    #         if nodeQueue.qsize() == 1214:
+    #             import pdb; pdb.set_trace()
+            firstNode = nodeQueue.get()
+            if firstNode.divided:
+                if len(firstNode.nw) != 0:
+                    nodeQueue.put(firstNode.nw)
+                if len(firstNode.ne) != 0:
+                    nodeQueue.put(firstNode.ne)
+                    if nodeQueue.qsize() >= N:
+                        break
+                if len(firstNode.se) != 0:
+                    nodeQueue.put(firstNode.se)
+                    if nodeQueue.qsize() >= N:
+                        break
+                if len(firstNode.sw) != 0:
+                    nodeQueue.put(firstNode.sw)
+            else:
+                if len(firstNode) != 0:
+                    nodeQueue.put(firstNode)
+        return nodeQueue
 
     @property
     def imageH(self):
@@ -79,23 +152,23 @@ class EvlinemodTemplate(object):
         inputFeatureVector = numpy.zeros_like(self._featureVector)
         for indexPoint, localCenter in enumerate(zip(self._featurePointsY, self._featurePointsX)):
             localPatch = imagePatch[localCenter[0] - 2:localCenter[0] + 3, localCenter[1] - 2:localCenter[1] + 3]
-            inputFeatureVector[indexPoint] = EvlinemodTemplate.ComputeQuantizedGradientOrientation(localPatch, gradMagnitudeThreshold=gradMagnitudeThreshold)
+            inputFeatureVector[indexPoint] = EventLinemodTemplate.ComputeQuantizedGradientOrientation(localPatch, gradMagnitudeThreshold=gradMagnitudeThreshold)
         return inputFeatureVector
 
 
 class EventLinemodTemplateManager(object):
     _templateInfo = None
     
-    def __init__(self, templatePath) -> None:
+    def __init__(self, templateInfo, templateData) -> None:
         '''
         This class handles templates, 
         - extract linemodality, extract mask, sample feature points on the template.
         - handle the scales, viewpoints of the templates.
-        Args: 
-            templatePath: the path to a folder of templates, including *.png and templateInfos.json (camInObjectTransformation).
+        Args:
+            templateData: list of images
+            templateInfo: list of templateId and simulationCamInObjectTransformation
         '''
-        with open(os.path.join(templatePath, 'templateInfos.json'), 'r') as jsonFile:
-            self._templateInfo = json.load(jsonFile)
+
 
         from IPython import embed; print('here!'); embed()
         
