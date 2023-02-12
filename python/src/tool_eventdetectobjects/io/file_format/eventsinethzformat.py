@@ -66,9 +66,9 @@ class EventsInETHZFormat(object):
         xs = numpy.array(xs)
         ys = numpy.array(ys)
         ps = numpy.array(ps)
-        sbn = numpy.zeros((1, *imageSize))
+        sbn = numpy.zeros(imageSize)
         psCentered = numpy.where(ps==0, -1, ps)
-        numpy.add.at(sbn[0, :, :], (ys, xs), psCentered)
+        numpy.add.at(sbn, (ys, xs), psCentered)
         return sbn        
 
     def ResetInputFile(self):

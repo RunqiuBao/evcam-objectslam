@@ -4,7 +4,7 @@ import numpy
 import json
 import queue
 
-from quadtree import Point, Rect, QuadTree
+from .quadtree import Point, Rect, QuadTree
 
 import logging
 logger = logging.getLogger(__name__)
@@ -13,21 +13,38 @@ logger = logging.getLogger(__name__)
 class EventLinemodTemplate(object):
     _image = None
     _simulationCamInObjectTransform = None
+    _templateId = None
     _featureVector = None
     _featurePointsX = None
     _featurePointsY = None
     _imageW = None
     _imageH = None
+    _scaleFactorCache = None
 
-    def __init__(self, image, simulationCamInObjectTransform, resize=1.0):
+    def __init__(self, image, simulationCamInObjectTransform, templateId, resize=0.33):
         simulationCamInObjectTransform[:3, 3] /= resize
         self._simulationCamInObjectTransform = simulationCamInObjectTransform
+        self._templateId = templateId
         self._image = cv2.resize(image.astype('uint8'), dsize=None, fx=resize, fy=resize, interpolation=cv2.INTER_CUBIC)
         self._imageH = image.shape[0]
         self._imageW = image.shape[1]
         templateMask = self._image >= 10
         self._image[~templateMask] = 0
         self._featurePointsX, self._featurePointsY, self._featureVector = EventLinemodTemplate.GetFeatureVector(self._image)
+        self._scaleFactorCache = 1.0
+
+    def RescaleThisTemplate(self, scaleFactor):
+        scaleFactor = scaleFactor / self._scaleFactorCache
+        self._simulationCamInObjectTransform[:3, 3] /= scaleFactor
+        self._image = cv2.resize(self._image.astype('uint8'), dsize=None, fx=scaleFactor, fy=scaleFactor, interpolation=cv2.INTER_CUBIC)
+        self._imageH = self._image.shape[0]
+        self._imageW = self._image.shape[1]
+        self._featurePointsX, self._featurePointsY, self._featureVector = EventLinemodTemplate.GetFeatureVector(self._image)
+        self._scaleFactorCache = scaleFactor
+
+    @property
+    def scaleFactor(self):
+        return self._scaleFactorCache
 
     @staticmethod
     def GetFeatureVector(image, numFeaturePoints=64, maxNumPointsQuadtreeNode=10, gradMagnitudeThreshold=100):
@@ -51,7 +68,7 @@ class EventLinemodTemplate(object):
             featurePoint = Point(coordinateMaskedPoints[1][index], coordinateMaskedPoints[0][index], 1.0)
             qtree.insert(featurePoint)
         # get top N points
-        nodeQueue = EventLinemodTemplate.ReturnDistributedTopScoreNPoints(qtree, N=numFeaturePoints)
+        nodeQueue = EventLinemodTemplate.ReturnDistributedNPoints(qtree, N=numFeaturePoints)
         distributedPointsX, distributedPointsY = [], []
         for i in range(nodeQueue.qsize()):
             thisNode = nodeQueue.get()
@@ -61,15 +78,12 @@ class EventLinemodTemplate(object):
             distributedPointsY.append(foundPointsY[0])
         distributedPointsX, distributedPointsY = numpy.array(distributedPointsX), numpy.array(distributedPointsY)
         # compute feature vector
-        featureVector = numpy.zeros_like(distributedPointsY)
-        for indexPoint, localCenter in enumerate(zip(distributedPointsX, distributedPointsY)):
-            localPatch = imageLaplacianMask[localCenter[0] - 2:localCenter[0] + 3, localCenter[1] - 2:localCenter[1] + 3]
-            featureVector[indexPoint] = EventLinemodTemplate.ComputeQuantizedGradientOrientation(localPatch, gradMagnitudeThreshold=gradMagnitudeThreshold)
+        featureVector = EventLinemodTemplate._ComputeImagePatchFeatureVector(imageLaplacianMask, gradMagnitudeThreshold, distributedPointsX, distributedPointsY)
         return distributedPointsX, distributedPointsX, featureVector
 
     ## BFS
     @staticmethod
-    def ReturnDistributedTopScoreNPoints(rootNode, N=600):
+    def ReturnDistributedNPoints(rootNode, N=600):
         if N > len(rootNode):
             N = len(rootNode)
         nodeQueue = queue.Queue()
@@ -97,6 +111,10 @@ class EventLinemodTemplate(object):
         return nodeQueue
 
     @property
+    def templateId(self):
+        return self._templateId
+
+    @property
     def imageH(self):
         return self._imageH
 
@@ -116,9 +134,10 @@ class EventLinemodTemplate(object):
         # (1) numpy
         gradMagnitude = numpy.linalg.norm(numpy.concatenate([gray_x[:, :, numpy.newaxis], gray_y[:, :, numpy.newaxis]], axis=2), axis=2)
         sectorCenterTangentValues = numpy.tile(numpy.array([0.5 * numpy.pi / numSector, 1.5 * numpy.pi / numSector, 2.5 * numpy.pi / numSector, 3.5 * numpy.pi / numSector, -3.5 * numpy.pi / numSector, -2.5 * numpy.pi / numSector, -1.5 * numpy.pi / numSector, -0.5 * numpy.pi / numSector]), (grad.shape[0], grad.shape[1], 1))
-        response = numpy.argmin(numpy.abs(numpy.repeat(numpy.arctan(grad), 8, axis=2) - sectorCenterTangentValues)) + 1
+        response = numpy.argmin(numpy.abs(numpy.repeat(numpy.arctan(grad)[:, :, numpy.newaxis], 8, axis=2) - sectorCenterTangentValues), axis=2) + 1
         response[numpy.where(gradMagnitude < gradMagnitudeThreshold)] = 0
-        ## (2) nested for loop
+        response[numpy.isnan(grad)] = 0
+        # # (2) nested for loop
         # for px in range(3):
         #     for py in range(3):
         #         if numpy.linalg.norm([gray_x[py, px], gray_y[py, px]]) < gradMagnitudeThreshold:
@@ -140,6 +159,7 @@ class EventLinemodTemplate(object):
         #         elif grad[py, px] > numpy.tan(-numpy.pi / numSector) and grad[py, px] <= 0:
         #             response[py, px] = 8
         binCount = numpy.bincount(response.reshape(9,))
+
         mainScore = numpy.argmax(binCount)
         # print('mainScore: \n', mainScore)
         # if mainScore == 0 and response.sum() > 0:
@@ -149,17 +169,32 @@ class EventLinemodTemplate(object):
         return mainScore
 
     def ComputeImagePatchFeatureVector(self, imagePatch, gradMagnitudeThreshold=100):
-        inputFeatureVector = numpy.zeros_like(self._featureVector)
-        for indexPoint, localCenter in enumerate(zip(self._featurePointsY, self._featurePointsX)):
-            localPatch = imagePatch[localCenter[0] - 2:localCenter[0] + 3, localCenter[1] - 2:localCenter[1] + 3]
+        return EventLinemodTemplate._ComputeImagePatchFeatureVector(imagePatch, gradMagnitudeThreshold, self._featurePointsX, self._featurePointsY)
+
+    @staticmethod
+    def _ComputeImagePatchFeatureVector(imagePatch, gradMagnitudeThreshold, featurePointsX, featurePointsY):
+        inputFeatureVector = numpy.zeros_like(featurePointsY)
+        hh, ww = imagePatch.shape
+        for indexPoint, localCenter in enumerate(zip(featurePointsY, featurePointsX)):
+            localPatch = imagePatch[max(localCenter[0] - 2, 0):min(localCenter[0] + 3, hh), max(localCenter[1] - 2, 0):min(localCenter[1] + 3, ww)]
+            if localPatch.shape != (5, 5):
+                try:
+                    localPatch = numpy.pad(localPatch, ((0, 5 - localPatch.shape[0]), (0, 5 - localPatch.shape[1])), 'edge')
+                except:
+                    from IPython import embed; logger.debug('here!'); embed()
+
             inputFeatureVector[indexPoint] = EventLinemodTemplate.ComputeQuantizedGradientOrientation(localPatch, gradMagnitudeThreshold=gradMagnitudeThreshold)
         return inputFeatureVector
 
 
 class EventLinemodTemplateManager(object):
-    _templateInfo = None
+    _templateList = None
+    _templateIdList = None
+    _scale = None
+    # make this class an iterator
+    _templatePtr = None
     
-    def __init__(self, templateInfo, templateData) -> None:
+    def __init__(self, templateInfos, templateData) -> None:
         '''
         This class handles templates, 
         - extract linemodality, extract mask, sample feature points on the template.
@@ -168,10 +203,41 @@ class EventLinemodTemplateManager(object):
             templateData: list of images
             templateInfo: list of templateId and simulationCamInObjectTransformation
         '''
+        self._templateList = []
+        self._templateIdList = []
+        for templateInfo, templateDatum in zip(templateInfos, templateData):
+            self._templateList.append(EventLinemodTemplate(templateDatum, templateInfo['camInObjectTransformation'], templateInfo['templId']))
+            self._templateIdList.append(templateInfo['templId'])
+        logger.debug("templateManager initialized with %d templates.", len(self._templateIdList))
 
+    @property
+    def scale(self):
+        return self._scale
 
-        from IPython import embed; print('here!'); embed()
+    @scale.setter
+    def scale(self, value):
+        if value < 0:
+            raise ValueError("scale cannot be negative.")
+        self._scale = value
+
+    # make this class an iterator
+    def __iter__(self):
+        self._templatePtr = 0
+        return self
+
+    def __next__(self):
+        if self._templatePtr == len(self._templateList):
+            self._templatePtr = None
+            raise StopIteration()
+        template = self._templateList[self._templatePtr]
+        if template.scaleFactor == self._scale:
+            pass
+        else:
+            template.RescaleThisTemplate(self._scale)
+        self._templatePtr += 1
+        return template
         
+
 
 if __name__ == "__main__":
     aa = EventLinemodTemplateManager('/media/runqiu/data/eventLinemodDatasets/templates/')
