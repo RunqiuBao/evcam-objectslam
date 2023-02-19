@@ -1,7 +1,7 @@
 import numpy
 
 
-def DoNonMaxSuppression(detections, boxes, scores, overlapThreshold=0.3):
+def DoNonMaxSuppression(detections, boxes, scores, overlapThreshold=0.3, isMaxScoreBest=False):
     if len(detections) == 0:
         return []
     
@@ -20,6 +20,8 @@ def DoNonMaxSuppression(detections, boxes, scores, overlapThreshold=0.3):
 
     area = (x2 - x1 + 1) * (y2 - y1 + 1)
     indices = numpy.argsort(scores)
+    if not isMaxScoreBest:
+        indices = indices[::-1]
 
     while len(indices) > 0:
         last = len(indices) - 1

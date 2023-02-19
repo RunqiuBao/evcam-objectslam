@@ -3,6 +3,7 @@ import os
 import numpy
 import json
 import queue
+import copy
 
 from .quadtree import Point, Rect, QuadTree
 
@@ -12,6 +13,7 @@ logger = logging.getLogger(__name__)
 
 class EventLinemodTemplate(object):
     _image = None
+    _sparsity = None
     _simulationCamInObjectTransform = None
     _templateId = None
     _featureVector = None
@@ -26,11 +28,11 @@ class EventLinemodTemplate(object):
         self._simulationCamInObjectTransform = simulationCamInObjectTransform
         self._templateId = templateId
         self._image = cv2.resize(image.astype('uint8'), dsize=None, fx=resize, fy=resize, interpolation=cv2.INTER_CUBIC)
-        self._imageH = image.shape[0]
-        self._imageW = image.shape[1]
+        self._imageH = self._image.shape[0]
+        self._imageW = self._image.shape[1]
         templateMask = self._image >= 10
         self._image[~templateMask] = 0
-        self._featurePointsX, self._featurePointsY, self._featureVector = EventLinemodTemplate.GetFeatureVector(self._image)
+        self._featurePointsX, self._featurePointsY, self._featureVector, self._sparsity = EventLinemodTemplate.GetFeatureVector(self._image)
         self._scaleFactorCache = 1.0
 
     def RescaleThisTemplate(self, scaleFactor):
@@ -39,26 +41,31 @@ class EventLinemodTemplate(object):
         self._image = cv2.resize(self._image.astype('uint8'), dsize=None, fx=scaleFactor, fy=scaleFactor, interpolation=cv2.INTER_CUBIC)
         self._imageH = self._image.shape[0]
         self._imageW = self._image.shape[1]
-        self._featurePointsX, self._featurePointsY, self._featureVector = EventLinemodTemplate.GetFeatureVector(self._image)
+        self._featurePointsX, self._featurePointsY, self._featureVector, self._sparsity = EventLinemodTemplate.GetFeatureVector(self._image)
         self._scaleFactorCache = scaleFactor
+
+    @property
+    def sparsity(self):
+        return self._sparsity
 
     @property
     def scaleFactor(self):
         return self._scaleFactorCache
 
     @staticmethod
-    def GetFeatureVector(image, numFeaturePoints=64, maxNumPointsQuadtreeNode=10, gradMagnitudeThreshold=100):
+    def GetFeatureVector(image, numFeaturePoints=64, maxNumPointsQuadtreeNode=10, gradMagnitudeThreshold=100, isNoiseThreshold=40):
         '''
         Randomized and distributed N feature points forming as a featured vector
         '''
         # sample feature points
         imageLaplacian = cv2.Laplacian(image, cv2.CV_32F, ksize=3)
-        imageLaplacianMask = numpy.where(numpy.abs(imageLaplacian) >= 40, 255, 0)
+        imageLaplacianMask = numpy.where(numpy.abs(imageLaplacian) >= isNoiseThreshold, 255, 0)
         kernels = []
         kernels.append(numpy.ones((3, 3), numpy.uint8))
         imageLaplacianMask = cv2.morphologyEx(imageLaplacianMask.astype('uint8'), cv2.MORPH_CLOSE, kernels[0])
+        templateSparsity = (imageLaplacianMask).sum() / (imageLaplacianMask.shape[0] * imageLaplacianMask.shape[1] * 255)
         # # select n feature points
-        coordinateMaskedPoints = numpy.where(imageLaplacianMask > 0)
+        coordinateMaskedPoints = numpy.where(imageLaplacianMask > 0)        
         indexMaskedPointsRandom = numpy.random.default_rng().choice(coordinateMaskedPoints[0].shape[0], size=coordinateMaskedPoints[0].shape[0], replace=False)
         # build quad tree
         h, w = image.shape
@@ -79,7 +86,7 @@ class EventLinemodTemplate(object):
         distributedPointsX, distributedPointsY = numpy.array(distributedPointsX), numpy.array(distributedPointsY)
         # compute feature vector
         featureVector = EventLinemodTemplate._ComputeImagePatchFeatureVector(imageLaplacianMask, gradMagnitudeThreshold, distributedPointsX, distributedPointsY)
-        return distributedPointsX, distributedPointsX, featureVector
+        return distributedPointsX, distributedPointsY, featureVector, templateSparsity
 
     ## BFS
     @staticmethod
@@ -138,6 +145,7 @@ class EventLinemodTemplate(object):
         response[numpy.where(gradMagnitude < gradMagnitudeThreshold)] = 0
         response[numpy.isnan(grad)] = 0
         # # (2) nested for loop
+        # response = numpy.zeros_like(grad, dtype='int')
         # for px in range(3):
         #     for py in range(3):
         #         if numpy.linalg.norm([gray_x[py, px], gray_y[py, px]]) < gradMagnitudeThreshold:
@@ -168,13 +176,29 @@ class EventLinemodTemplate(object):
         #     mainScore = numpy.argmax(binCount)
         return mainScore
 
-    def ComputeImagePatchFeatureVector(self, imagePatch, gradMagnitudeThreshold=100):
-        return EventLinemodTemplate._ComputeImagePatchFeatureVector(imagePatch, gradMagnitudeThreshold, self._featurePointsX, self._featurePointsY)
+    def ComputeImagePatchFeatureVector(self, imagePatch, gradMagnitudeThreshold=100, debugInfo=None):
+        return EventLinemodTemplate._ComputeImagePatchFeatureVector(imagePatch, gradMagnitudeThreshold, self._featurePointsX, self._featurePointsY, debugInfo)
 
     @staticmethod
-    def _ComputeImagePatchFeatureVector(imagePatch, gradMagnitudeThreshold, featurePointsX, featurePointsY):
+    def _ComputeImagePatchFeatureVector(imagePatch, gradMagnitudeThreshold, featurePointsX, featurePointsY, debugInfo=None):
         inputFeatureVector = numpy.zeros_like(featurePointsY)
         hh, ww = imagePatch.shape
+        if debugInfo is not None:
+            debugInfo['xyFeatures'] = numpy.zeros((featurePointsY.size, 2))
+            debugInfo['displayImage'] = copy.deepcopy(imagePatch)
+            color = (0,)
+            thickness = 1
+            vizGrads = {
+                0: numpy.array([0, 0]),
+                1: numpy.array([1, 5]),
+                2: numpy.array([2, 4]),
+                3: numpy.array([4, 2]),
+                4: numpy.array([5, 1]),
+                5: numpy.array([5, -1]),
+                6: numpy.array([4, -2]),
+                7: numpy.array([2, -4]),
+                8: numpy.array([1, -5])
+            }
         for indexPoint, localCenter in enumerate(zip(featurePointsY, featurePointsX)):
             localPatch = imagePatch[max(localCenter[0] - 2, 0):min(localCenter[0] + 3, hh), max(localCenter[1] - 2, 0):min(localCenter[1] + 3, ww)]
             if localPatch.shape != (5, 5):
@@ -184,6 +208,11 @@ class EventLinemodTemplate(object):
                     from IPython import embed; logger.debug('here!'); embed()
 
             inputFeatureVector[indexPoint] = EventLinemodTemplate.ComputeQuantizedGradientOrientation(localPatch, gradMagnitudeThreshold=gradMagnitudeThreshold)
+            if debugInfo is not None:
+                debugInfo['xyFeatures'][indexPoint, 0] = localCenter[1]
+                debugInfo['xyFeatures'][indexPoint, 1] = localCenter[0]
+                # cv2.circle(debugInfo['displayImage'], (localCenter[1], localCenter[0]), 5, (0, 0, 0), thickness=-1, lineType=cv2.LINE_AA)
+                debugInfo['displayImage'] = cv2.arrowedLine(debugInfo['displayImage'], numpy.array(localCenter)[::-1], numpy.array(localCenter)[::-1] + vizGrads[inputFeatureVector[indexPoint]], color, thickness) 
         return inputFeatureVector
 
 
