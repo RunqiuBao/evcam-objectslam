@@ -34,7 +34,7 @@ public:
     int AddTemplates();
 
     void DetectTemplatesSemiScaleInvariant(
-        const EventLineModality & evmodality,
+        // const EventLineModality & evmodality,
         std::vector<EventLineModDetection> & detections,
         float min_scale = 0.6944444f,
         float max_scale = 1.44f,
