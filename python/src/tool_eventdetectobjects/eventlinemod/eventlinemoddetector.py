@@ -69,7 +69,8 @@ class EventLinemodDetector(object):
                         if responseMat[yy // scanStep, xx // scanStep] <= self._templateResponseThreshold:
                             detectionList.append(EventLinemodDetection(xx, yy, oneTemplate.templateId, responseMat[yy // scanStep, xx // scanStep], currentScale, [xx, yy, xx + oneTemplate.imageW, yy + oneTemplate.imageH]))
                             detectionBBoxes.append([xx, yy, xx + oneTemplate.imageW, yy + oneTemplate.imageH])
-                            detectionScores.append(responseMat[yy // scanStep, xx // scanStep])                
+                            detectionScores.append(responseMat[yy // scanStep, xx // scanStep])
+                    logger.debug("finished one column {}".format(xx))    
                 logger.debug("finished scan templateId %s at scale %f in %f secs, min response: %d", oneTemplate.templateId, currentScale, time.time() - starttime, responseMat.min())
                 # indexMin = numpy.unravel_index(numpy.argmin(responseMat), responseMat.shape)
                 # detectionList.append(EventLinemodDetection(indexMin[1], indexMin[0], oneTemplate.templateId, responseMat.min(), currentScale, [indexMin[1], indexMin[0], indexMin[1] + oneTemplate.imageW, indexMin[0] + oneTemplate.imageH]))

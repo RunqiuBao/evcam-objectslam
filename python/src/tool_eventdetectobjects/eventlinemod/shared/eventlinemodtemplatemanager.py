@@ -67,6 +67,10 @@ class EventLinemodTemplate(object):
         # # select n feature points
         coordinateMaskedPoints = numpy.where(imageLaplacianMask > 0)        
         indexMaskedPointsRandom = numpy.random.default_rng().choice(coordinateMaskedPoints[0].shape[0], size=coordinateMaskedPoints[0].shape[0], replace=False)
+        # adjust numFeaturePoints
+        if indexMaskedPointsRandom.size < numFeaturePoints * maxNumPointsQuadtreeNode:
+            marginFactor = 2
+            maxNumPointsQuadtreeNode = indexMaskedPointsRandom.size // numFeaturePoints // marginFactor
         # build quad tree
         h, w = image.shape
         domain = Rect(w // 2, h // 2, w, h)
@@ -261,7 +265,7 @@ class EventLinemodTemplateManager(object):
         template = self._templateList[self._templatePtr]
         if template.scaleFactor == self._scale:
             pass
-        else:
+        else:            
             template.RescaleThisTemplate(self._scale)
         self._templatePtr += 1
         return template
