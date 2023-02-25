@@ -35,10 +35,10 @@ class EventLinemodTemplate(object):
         self._featurePointsX, self._featurePointsY, self._featureVector, self._sparsity = EventLinemodTemplate.GetFeatureVector(self._image)
         self._scaleFactorCache = 1.0
 
-    def RescaleThisTemplate(self, scaleFactor):
-        scaleFactor = scaleFactor / self._scaleFactorCache
-        self._simulationCamInObjectTransform[:3, 3] /= scaleFactor
-        self._image = cv2.resize(self._image.astype('uint8'), dsize=None, fx=scaleFactor, fy=scaleFactor, interpolation=cv2.INTER_CUBIC)
+    def RescaleThisTemplate(self, scaleFactor):  # scaleFactor is a absolute scale.
+        scaleFactorRelative = scaleFactor / self._scaleFactorCache  # scaleFactorRelative is the relative scale , which we need to perform image transformation.
+        self._simulationCamInObjectTransform[:3, 3] /= scaleFactorRelative
+        self._image = cv2.resize(self._image.astype('uint8'), dsize=None, fx=scaleFactorRelative, fy=scaleFactorRelative, interpolation=cv2.INTER_CUBIC)
         self._imageH = self._image.shape[0]
         self._imageW = self._image.shape[1]
         self._featurePointsX, self._featurePointsY, self._featureVector, self._sparsity = EventLinemodTemplate.GetFeatureVector(self._image)
@@ -71,6 +71,8 @@ class EventLinemodTemplate(object):
         if indexMaskedPointsRandom.size < numFeaturePoints * maxNumPointsQuadtreeNode:
             marginFactor = 2
             maxNumPointsQuadtreeNode = indexMaskedPointsRandom.size // numFeaturePoints // marginFactor
+            if maxNumPointsQuadtreeNode < 1:
+                raise ValueError("template too small and could not extract enough feature points.")
         # build quad tree
         h, w = image.shape
         domain = Rect(w // 2, h // 2, w, h)
@@ -269,7 +271,6 @@ class EventLinemodTemplateManager(object):
             template.RescaleThisTemplate(self._scale)
         self._templatePtr += 1
         return template
-        
 
 
 if __name__ == "__main__":

@@ -77,7 +77,7 @@ class EventLinemodDetector(object):
             currentScale *= scaleMultiplier
         logger.debug("%d raw detections...", len(detectionList))
         detectionListOverlapFree, detectionBBoxesOverlapFree, detectionScoresOverlapFree = DoNonMaxSuppression(detectionList, detectionBBoxes, detectionScores)
-        
+
         if isShow:
             for indexDetection, detectionBBox in enumerate(detectionBBoxesOverlapFree):
                 cv2.rectangle(imageDisplay, (detectionBBox[0], detectionBBox[1]), (detectionBBox[2], detectionBBox[3]), (255, 0, 0), 2)
