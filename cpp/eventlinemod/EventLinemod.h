@@ -2,7 +2,7 @@
 
 #include <vector>
 
-namespace tooldetect{
+namespace tooldetectobject{
 
 struct EventLineModDetection{
 

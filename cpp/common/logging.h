@@ -3,6 +3,15 @@
 
 #include <log4cxx/logger.h>
 #include <log4cxx/basicconfigurator.h>
+#include <log4cxx/rolling/rollingfileappender.h>
+#include <log4cxx/layout.h>
+#include <log4cxx/file.h>
+#include <log4cxx/patternlayout.h>
+#include <log4cxx/consoleappender.h>
+#include <log4cxx/net/syslogappender.h>
+#include <log4cxx/spi/filter.h>
+#include <log4cxx/logmanager.h>
+
 #include <cstring>
 #include <boost/format.hpp>
 
@@ -100,5 +109,11 @@ Logs a message to a specified logger with the FATAL level.
     if (TDO_LOG_CRITICAL_ENABLED) { \
         logger->forcedLog(log4cxx::Level::getFatal(), boost::str(boost::format(fmt)%params), LOG4CXX_LOCATION); }}
 
+
+namespace tooldetectobject{ 
+
+void ConfigureRootLogger(const std::string& level, const std::string &outputformat, const std::string& logFilePath);
+
+} // end of namespace tooldetectobject
 
 #endif
