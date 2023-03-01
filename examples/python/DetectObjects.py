@@ -57,7 +57,3 @@ if __name__ == "__main__":
         mysbn = myEventData.PopOneTimeLimitedSbn(20000, (720, 1280))
         myTemplateDetector.DetectTemplatesSemiScaleInvariant(mysbn, minScale=0.4)
         break
-
-        
-
-    

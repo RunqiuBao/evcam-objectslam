@@ -81,6 +81,22 @@ class EventLinemodDetector(object):
         if isShow:
             for indexDetection, detectionBBox in enumerate(detectionBBoxesOverlapFree):
                 cv2.rectangle(imageDisplay, (detectionBBox[0], detectionBBox[1]), (detectionBBox[2], detectionBBox[3]), (255, 0, 0), 2)
-                cv2.putText(imageDisplay, str(detectionListOverlapFree[indexDetection]._scale), (detectionBBox[0] + 10, detectionBBox[1] + 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+                cv2.putText(imageDisplay, str(detectionListOverlapFree[indexDetection]._score), (detectionBBox[0] + 10, detectionBBox[1] + 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
         logger.debug("======== detection finished in {} secs, totally {} overlap-free detections ========".format(time.time() - starttime, len(detectionListOverlapFree)))
+        
+    
+        
         from IPython import embed; print('here!'); embed()
+
+    def ValidateObjecctInStereoPair(self, leftDetections, stereoCalib):
+        pass
+
+    def ValidateObjectByEarthPlane(self, detections, cameraHeight, cameraPitchAngle, ghostThreshold):
+        '''
+        Args:
+            detections:
+            cameraHeight: a rough height of the camera from ground
+            cameraPitchAngle: a rough pitch angle of the camera.
+            ghostThreshold: allowed distance of the object from ground surface.
+        '''
+        pass
