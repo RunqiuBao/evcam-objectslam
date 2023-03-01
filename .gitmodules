@@ -1,3 +1,6 @@
 [submodule "3rdparty/log4cxx"]
 	path = 3rdparty/log4cxx
 	url = git@github.com:RunqiuBao/log4cxx.git
+[submodule "3rdparty/opencv"]
+	path = 3rdparty/opencv
+	url = https://github.com/opencv/opencv.git
