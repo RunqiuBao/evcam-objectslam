@@ -36,7 +36,7 @@ class EventsInETHZFormat(object):
         event = {'time': float(lineList[0]), 'x': int(lineList[1]), 'y': int(lineList[2]), 'polarity': int(lineList[3])}
         return event  # timestamp, x, y, polarity(0, 1)
 
-    def PopOneTimeLimitedSbn(self, maxEventNumberPerFrame, imageSize, timeLimit=0.1):
+    def PopOneTimeLimitedSbn(self, maxEventNumberPerFrame, imageSizeH, imageSizeW, timeLimit=0.1):
         ts = []
         xs = []
         ys = []
