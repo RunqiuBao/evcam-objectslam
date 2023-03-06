@@ -1,4 +1,4 @@
-add_library(tdocommon SHARED logging.cpp)
+add_library(tdocommon SHARED logging.cpp argparser.cpp)
 
 target_include_directories(tdocommon INTERFACE ${CMAKE_CURRENT_SOURCE_DIR} 
                                         PRIVATE $<TARGET_PROPERTY:log4cxx,INTERFACE_INCLUDE_DIRECTORIES>)
