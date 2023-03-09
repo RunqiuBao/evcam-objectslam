@@ -30,3 +30,16 @@ set(LOG4CXX_CONFIGURATION "${CMAKE_CURRENT_SOURCE_DIR}/log4cxx.properties")
 add_subdirectory(cpp)
 add_subdirectory(examples)
 
+
+# install
+execute_process(
+    COMMAND bash -c "python3 -m pip uninstall tool_eventdetectobjects"
+    OUTPUT_VARIABLE outVar
+)
+message("uninstall tool_eventdetectobjects python package:\n${outVar}")
+execute_process(
+    COMMAND bash -c "cd ${CMAKE_CURRENT_SOURCE_DIR}/python && python3 -m build && cd dist/ && python3 -m pip install tool_eventdetectobjects-0.0.1-py3-none-any.whl"
+    OUTPUT_VARIABLE outVar
+)
+message("install tool_eventdetectobjects python package:\n${outVar}")
+

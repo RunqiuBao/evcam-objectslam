@@ -6,6 +6,7 @@
 #include <string>
 #include <algorithm>
 
+#include "logging.h"
 
 class ArgumentParser {
 

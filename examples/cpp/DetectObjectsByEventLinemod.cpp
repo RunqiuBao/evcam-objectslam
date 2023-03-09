@@ -6,20 +6,20 @@ TDO_LOGGER("examples.DetectObjectsByEventLinemod")
 
 
 int main(int argc, char** argv){
+
+    tooldetectobject::ConfigureRootLogger("DEBUG", "", "./detector.log");  // need to execute at the beginning before any logging call.
     /**
      *  argv:
      *    - inputdata: path to the event database
-     *    - eventdatabaseformat: format of the event database
      *    - templatepath: path to the template images
      **/
     std::vector<std::string> options{
+        "executable",
         "inputdata",
-        "eventdatabaseformat",
         "templatepath"
     };
     ArgumentParser argparser(argc, argv, options);
     // log4cxx::BasicConfigurator::configure();
-    tooldetectobject::ConfigureRootLogger("DEBUG", "", "./detector.log");
 
     TDO_LOG_DEBUG("-------- start of the detector! --------");
     PyObject *myModuleName, *myModule, *myDict, *myPythonClass, *myPythonObject, *dataPathPy;
@@ -75,7 +75,7 @@ int main(int argc, char** argv){
     );
     for (int indexFrame=0; indexFrame < 100; indexFrame++){
         PyObject* mysbn = PyObject_CallMethodObjArgs(myPythonObject, functionAName, 20000, 720, 1280);
-
+        TDO_LOG_DEBUG_FORMAT("mysbn shape: h %d, w %w", mysbn->shape(0)%mysbn->shape(1));
     }
 
     Py_Finalize();

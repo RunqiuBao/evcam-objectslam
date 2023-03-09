@@ -1,12 +1,12 @@
 #include "argparser.h"
-#include "logging.h"
+
 TDO_LOGGER("tdo.common.argparser")
 
 
 ArgumentParser::ArgumentParser(int& argc, char** argv, const std::vector<std::string> optionLabels){
     TDO_LOG_INFO("Arguments: \n");
-    for (int i=1; i < argc; i++){
-        TDO_LOG_INFO_FORMAT("%*%s: %s", 4%optionLabels[i]%std::string(argv[i]));
+    for (int i=0; i < argc; i++){
+        TDO_LOG_INFO_FORMAT("%s: %s", optionLabels[i]%std::string(argv[i]));
         this->tokens.push_back(std::string(argv[i]));
     }
 }
