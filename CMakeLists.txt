@@ -27,6 +27,9 @@ set(CMAKE_PREFIX_PATH "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/log4cxx/install/" ${
 find_package(log4cxx REQUIRED)
 set(LOG4CXX_CONFIGURATION "${CMAKE_CURRENT_SOURCE_DIR}/log4cxx.properties")
 
+# include pybind11
+include_directories("${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/pybind11/include/")
+
 add_subdirectory(cpp)
 add_subdirectory(examples)
 
