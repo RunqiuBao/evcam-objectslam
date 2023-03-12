@@ -28,15 +28,17 @@ find_package(log4cxx REQUIRED)
 set(LOG4CXX_CONFIGURATION "${CMAKE_CURRENT_SOURCE_DIR}/log4cxx.properties")
 
 # include pybind11
+message("pybind11 include path: ${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/pybind11/include/")
 include_directories("${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/pybind11/include/")
+message("include pybind11 success!")
 
 add_subdirectory(cpp)
 add_subdirectory(examples)
 
-
 # install
+message("install start!")
 execute_process(
-    COMMAND bash -c "python3 -m pip uninstall tool_eventdetectobjects"
+    COMMAND bash -c "yes Y | python3 -m pip uninstall tool_eventdetectobjects"
     OUTPUT_VARIABLE outVar
 )
 message("uninstall tool_eventdetectobjects python package:\n${outVar}")
