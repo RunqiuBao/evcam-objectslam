@@ -55,5 +55,5 @@ if __name__ == "__main__":
     myEventData = EventsInETHZFormat(args.inputdata)
     for i in range(100):
         mysbn = myEventData.PopOneTimeLimitedSbn(20000, 720, 1280)
-        myTemplateDetector.DetectTemplatesSemiScaleInvariant(mysbn, minScale=0.4)
+        myTemplateDetector.DetectTemplatesSemiScaleInvariant(mysbn, minScale=1.0, maxScale=1.0)
         break
