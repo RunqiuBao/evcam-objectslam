@@ -1,5 +1,8 @@
 #include <Python.h>
+#include <Eigen/Core>
+
 #include <argparser.h>
+#include <pybindcommon.h>
 
 #include <logging.h>
 TDO_LOGGER("examples.DetectObjectsByEventLinemod")
@@ -60,14 +63,14 @@ int main(int argc, char** argv){
     // Py_DECREF(myDict);
 
     // create an instance of the class
-    if (PyCallable_Check(myPythonClass)){
-        myPythonObject = PyObject_CallObject(myPythonClass, dataPathPy);
-        // Py_DECREF(myPythonClass);
-    } else {
-        TDO_LOG_ERROR("Can not instantiate the python class");
-        // Py_DECREF(myPythonClass);
-        return 0;
-    }
+    // if (PyCallable_Check(myPythonClass)){
+    //     myPythonObject = PyObject_CallObject(myPythonClass, dataPathPy);
+    //     // Py_DECREF(myPythonClass);
+    // } else {
+    //     TDO_LOG_ERROR("Can not instantiate the python class");
+    //     // Py_DECREF(myPythonClass);
+    //     return 0;
+    // }
 
     PyObject *functionAName;
     functionAName = PyUnicode_FromString(
@@ -75,7 +78,8 @@ int main(int argc, char** argv){
     );
     for (int indexFrame=0; indexFrame < 100; indexFrame++){
         PyObject* mysbn = PyObject_CallMethodObjArgs(myPythonObject, functionAName, 20000, 720, 1280);
-        TDO_LOG_DEBUG_FORMAT("mysbn shape: h %d, w %w", mysbn->shape(0)%mysbn->shape(1));
+        Eigen::MatrixXf mMysbn = pybindutils::GetEigenMatrixFromPyObject(py::reinterpret_borrow<py::object>(mysbn));
+        TDO_LOG_INFO_FORMAT("mMysbn shape: h %d x w %d", mMysbn.rows()%mMysbn.cols());
     }
 
     Py_Finalize();

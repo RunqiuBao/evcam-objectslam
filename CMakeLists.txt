@@ -1,5 +1,7 @@
 cmake_minimum_required(VERSION 3.16)
 
+set(CMAKE_BUILD_TYPE Debug)
+
 if(UNIX AND NOT APPLE)
     execute_process(COMMAND uname -p
         OUTPUT_VARIABLE PROCESSOR_ARCH
@@ -27,10 +29,17 @@ set(CMAKE_PREFIX_PATH "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/log4cxx/install/" ${
 find_package(log4cxx REQUIRED)
 set(LOG4CXX_CONFIGURATION "${CMAKE_CURRENT_SOURCE_DIR}/log4cxx.properties")
 
+# include Eigen
+set(Eigen3_DIR ${CMAKE_CURRENT_SOURCE_DIR}/eigen/cmake/)
+find_package (Eigen3 REQUIRED NO_MODULE)
+
 # include pybind11
 message("pybind11 include path: ${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/pybind11/include/")
-include_directories("${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/pybind11/include/")
-message("include pybind11 success!")
+find_package(pybind11 CONFIG REQUIRED)
+# include_directories("${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/pybind11/build/pybind11install/include/")
+message(STATUS "Found pybind11 v${pybind11_VERSION}: ${pybind11_INCLUDE_DIRS}")
+
+# add_subdirectory(3rdparty)
 
 add_subdirectory(cpp)
 add_subdirectory(examples)
@@ -47,4 +56,3 @@ execute_process(
     OUTPUT_VARIABLE outVar
 )
 message("install tool_eventdetectobjects python package:\n${outVar}")
-
