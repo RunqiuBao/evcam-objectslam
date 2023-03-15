@@ -1,7 +1,10 @@
 #!/bin/bash
 
+# install python dev headers
+sudo apt-get install python3-dev
+
 # install deps
-pip install -r requirements.txt
+pip install -r requirementspy.txt
 
 cd python
 
