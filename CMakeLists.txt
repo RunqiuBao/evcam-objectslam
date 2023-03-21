@@ -1,6 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
 
-set(CMAKE_BUILD_TYPE Debug)
 
 if(UNIX AND NOT APPLE)
     execute_process(COMMAND uname -p
@@ -34,25 +33,29 @@ set(Eigen3_DIR ${CMAKE_CURRENT_SOURCE_DIR}/eigen/cmake/)
 find_package (Eigen3 REQUIRED NO_MODULE)
 
 # include pybind11
-message("pybind11 include path: ${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/pybind11/include/")
-find_package(pybind11 CONFIG REQUIRED)
+set(pybind11_DIR "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/pybind11/build/pybind11install/share/cmake/pybind11/")
+message("pybind11 path: ${pybind11_DIR}")
+find_package(pybind11 REQUIRED)
 # include_directories("${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/pybind11/build/pybind11install/include/")
 message(STATUS "Found pybind11 v${pybind11_VERSION}: ${pybind11_INCLUDE_DIRS}")
 
-# add_subdirectory(3rdparty)
+set(TDO_INSTALL_PATH "${CMAKE_CURRENT_BINARY_DIR}/tdoinstall")
+set(CMAKE_INSTALL_PREFIX "${TDO_INSTALL_PATH}")
 
+# add_subdirectory(3rdparty)
 add_subdirectory(cpp)
 add_subdirectory(examples)
 
-# install
-message("install start!")
-execute_process(
-    COMMAND bash -c "yes Y | python3 -m pip uninstall tool_eventdetectobjects"
-    OUTPUT_VARIABLE outVar
-)
-message("uninstall tool_eventdetectobjects python package:\n${outVar}")
-execute_process(
-    COMMAND bash -c "cd ${CMAKE_CURRENT_SOURCE_DIR}/python && python3 -m build && cd dist/ && python3 -m pip install tool_eventdetectobjects-0.0.1-py3-none-any.whl"
-    OUTPUT_VARIABLE outVar
-)
-message("install tool_eventdetectobjects python package:\n${outVar}")
+# install python
+# message("install start!")
+# execute_process(
+#     COMMAND bash -c "yes Y | python3 -m pip uninstall tool_eventdetectobjects"
+#     OUTPUT_VARIABLE outVar
+# )
+# message("uninstall tool_eventdetectobjects python package:\n${outVar}")
+# execute_process(
+#     COMMAND bash -c "cd ${CMAKE_CURRENT_SOURCE_DIR}/python && python3 -m build && cd dist/ && python3 -m pip install tool_eventdetectobjects-0.0.1-py3-none-any.whl"
+#     OUTPUT_VARIABLE outVar
+# )
+# message("install tool_eventdetectobjects python package:\n${outVar}")
+
