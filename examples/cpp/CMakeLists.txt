@@ -3,7 +3,12 @@
 message("${CMAKE_CURRENT_SOURCE_DIR}/../../cpp/common")
 add_executable(detectorRunner DetectObjectsByEventLinemod.cpp)
 
-find_package (Python REQUIRED COMPONENTS Interpreter Development)
+set(PYBIND11_CPP_STANDARD -std=c++17)
+set(PYBIND11_PYTHON_VERSION 3.8)
+
+find_package (Python 3.8 REQUIRED COMPONENTS Interpreter Development)
+message("PYTHON_FOUND: ${PYTHON_FOUND}")
+find_package(pybind11 REQUIRED)
 
 message("Python3_INCLUDE_DIRS ${Python_INCLUDE_DIRS}")
 message("Python2_INCLUDE_DIRS ${Python2_INCLUDE_DIRS}")
