@@ -32,6 +32,7 @@ int main(int argc, char** argv){
     std::string modulename = "tool_eventdetectobjects.io.file_format.eventsinethzformat";
     std::string classname = "EventsInETHZFormat";
     py::object dataloaderclass = py::module::import(modulename.c_str()).attr(classname.c_str());
+    TDO_LOG_DEBUG_FORMAT("inputdata: %s", argparser.getCmdOption("inputdata"));
     py::object dataloader = dataloaderclass(py::cast(argparser.getCmdOption("inputdata")));
 
     for (int indexFrame=0; indexFrame < 100; indexFrame++){

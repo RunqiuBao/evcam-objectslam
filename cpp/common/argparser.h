@@ -18,11 +18,12 @@ public:
     const int getCmdOptionIndex(const std::string& option) const;
 
     bool cmdOptionExists(const std::string &option) const {
-        return std::find(this->tokens.begin(), this->tokens.end(), option) != this->tokens.end();
+        return std::find(this->_keys.begin(), this->_keys.end(), option) != this->_keys.end();
     }
 
 private:
-    std::vector<std::string> tokens;
+    std::vector<std::string> _values;
+    std::vector<std::string> _keys;
 };
 
 #endif
