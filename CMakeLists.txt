@@ -40,6 +40,10 @@ find_package(pybind11 REQUIRED)
 # include_directories("${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/pybind11/build/pybind11install/include/")
 message(STATUS "Found pybind11 v${pybind11_VERSION}: ${pybind11_INCLUDE_DIRS}")
 
+# include opencv
+find_package( OpenCV REQUIRED )
+include_directories( ${OpenCV_INCLUDE_DIRS} )
+
 set(TDO_INSTALL_PATH "${CMAKE_CURRENT_BINARY_DIR}/tdoinstall")
 set(CMAKE_INSTALL_PREFIX "${TDO_INSTALL_PATH}")
 

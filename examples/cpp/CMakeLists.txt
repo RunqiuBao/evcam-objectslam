@@ -25,7 +25,7 @@ endif()
 
 # add_library( libtdopybind SHARED IMPORTED )  # same error as linking tdopybind
 # set_target_properties( libtdopybind PROPERTIES IMPORTED_LOCATION ${TDO_INSTALL_PATH}/lib/libtdopybind.so )
-target_link_libraries(detectorRunner PRIVATE tdocommon ${Python_LIBRARIES} Eigen3::Eigen pybind11::module tdopybind)
+target_link_libraries(detectorRunner PRIVATE tdocommon ${Python_LIBRARIES} Eigen3::Eigen pybind11::module tdopybind ${OpenCV_LIBS})
 
 install(TARGETS detectorRunner 
         RUNTIME DESTINATION bin

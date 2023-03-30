@@ -1,4 +1,5 @@
 #include <Python.h>
+#include <opencv2/opencv.hpp>
 
 #include <argparser.h>
 #include <pybindcommon.h>
@@ -37,12 +38,21 @@ int main(int argc, char** argv){
 
     for (int indexFrame=0; indexFrame < 100; indexFrame++){
         py::object mysbnPy = dataloader.attr("PopOneTimeLimitedSbn")(20000, 720, 1280);
-        py::buffer_info mysbnPyBuffer = py::cast<py::array_t<float, py::array::c_style | py::array::forcecast>>(*const_cast<py::object*>(&mysbnPy)).request(false);
-        float* mysbnData = static_cast<float*>(mysbnPyBuffer.ptr);
+        py::buffer_info mysbnPyBuffer = py::cast<py::array_t<int, py::array::c_style | py::array::forcecast>>(*const_cast<py::object*>(&mysbnPy)).request(false);
+        int* mysbnData = static_cast<int*>(mysbnPyBuffer.ptr);
         std::vector<ssize_t> mysbnShape = mysbnPyBuffer.shape;
-        Eigen::MatrixXf mMysbn;
-        mMysbn = Eigen::Map<Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>>(mysbnData, mysbnShape[0], mysbnShape[1]);
-        TDO_LOG_INFO_FORMAT("mMysbn shape: h %d x w %d", mMysbn.rows()%mMysbn.cols());
+        Eigen::MatrixXi mMysbn;
+        mMysbn = Eigen::Map<Eigen::Matrix<int, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>>(mysbnData, mysbnShape[0], mysbnShape[1]);
+        mMysbn = mMysbn.array() - mMysbn.minCoeff();
+        cv::Mat mysbnMat(mMysbn.rows(), mMysbn.cols(), CV_32S, mMysbn.data());
+        cv::Mat mysbnFloat;
+        mysbnMat.convertTo(mysbnFloat, CV_32F);
+        mysbnFloat = mysbnFloat / mMysbn.maxCoeff();
+        mysbnFloat = mysbnFloat * 255;
+        cv::Mat mysbnUint;
+        mysbnFloat.convertTo(mysbnUint, CV_8U);
+        cv::imwrite("/home/runqiu/tmptmp/" + std::to_string(indexFrame) + ".png" , mysbnUint);
+        TDO_LOG_INFO_FORMAT("mMysbn shape: h %d x w %d, min %d, max %d", mMysbn.rows() % mMysbn.cols() % mMysbn.minCoeff() % mMysbn.maxCoeff());
     }
     return 0;
 }
