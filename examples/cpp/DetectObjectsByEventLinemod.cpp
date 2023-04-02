@@ -26,7 +26,6 @@ int main(int argc, char** argv){
         "templatepath"
     };
     ArgumentParser argparser(argc, argv, options);
-    // log4cxx::BasicConfigurator::configure();
 
     TDO_LOG_DEBUG("-------- start of the detector! --------");
 
