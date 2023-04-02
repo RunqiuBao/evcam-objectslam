@@ -41,18 +41,24 @@ int main(int argc, char** argv){
         py::buffer_info mysbnPyBuffer = py::cast<py::array_t<int, py::array::c_style | py::array::forcecast>>(*const_cast<py::object*>(&mysbnPy)).request(false);
         int* mysbnData = static_cast<int*>(mysbnPyBuffer.ptr);
         std::vector<ssize_t> mysbnShape = mysbnPyBuffer.shape;
-        Eigen::MatrixXi mMysbn;
-        mMysbn = Eigen::Map<Eigen::Matrix<int, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>>(mysbnData, mysbnShape[0], mysbnShape[1]);
-        mMysbn = mMysbn.array() - mMysbn.minCoeff();
-        cv::Mat mysbnMat(mMysbn.rows(), mMysbn.cols(), CV_32S, mMysbn.data());
+        // Eigen::MatrixXi mMysbn;
+        // mMysbn = Eigen::Map<Eigen::Matrix<int, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>>(mysbnData, mysbnShape[0], mysbnShape[1]);
+        // Eigen::MatrixXf mMysbnFloat = mMysbn.cast<float>();
+        // mMysbnFloat = mMysbnFloat.array() - mMysbnFloat.minCoeff();
+        // mMysbnFloat = mMysbnFloat / mMysbnFloat.maxCoeff() * 255.0;
+        cv::Mat mysbnMat(mysbnShape[0], mysbnShape[1], CV_32SC1, mysbnData);
         cv::Mat mysbnFloat;
-        mysbnMat.convertTo(mysbnFloat, CV_32F);
-        mysbnFloat = mysbnFloat / mMysbn.maxCoeff();
-        mysbnFloat = mysbnFloat * 255;
+        mysbnMat.convertTo(mysbnFloat, CV_32FC1);
+        double minVal, maxVal;
+        cv::minMaxLoc(mysbnFloat, &minVal, &maxVal);
+        TDO_LOG_DEBUG_FORMAT("mysbnFloat max min values: %f, %f", maxVal % minVal);
+        mysbnFloat = mysbnFloat - minVal;
+        cv::minMaxLoc(mysbnFloat, &minVal, &maxVal);
+        mysbnFloat = mysbnFloat / maxVal * 255.0;
         cv::Mat mysbnUint;
-        mysbnFloat.convertTo(mysbnUint, CV_8U);
+        mysbnFloat.convertTo(mysbnUint, CV_8UC1);
         cv::imwrite("/home/runqiu/tmptmp/" + std::to_string(indexFrame) + ".png" , mysbnUint);
-        TDO_LOG_INFO_FORMAT("mMysbn shape: h %d x w %d, min %d, max %d", mMysbn.rows() % mMysbn.cols() % mMysbn.minCoeff() % mMysbn.maxCoeff());
     }
+
     return 0;
 }

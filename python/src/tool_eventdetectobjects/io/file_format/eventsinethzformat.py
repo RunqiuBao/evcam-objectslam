@@ -2,6 +2,7 @@ import numpy
 import time
 from os.path import exists, join
 from os import makedirs
+import cv2
 
 from commonutils.ioutils import LmdbWriter
 
@@ -69,7 +70,7 @@ class EventsInETHZFormat(object):
         sbn = numpy.zeros((imageSizeH, imageSizeW), dtype='int')
         psCentered = numpy.where(ps==0, -1, ps)
         numpy.add.at(sbn, (ys, xs), psCentered)
-        return sbn        
+        return sbn
 
     def ResetInputFile(self):
         self._textFile.seek(0, 0)
