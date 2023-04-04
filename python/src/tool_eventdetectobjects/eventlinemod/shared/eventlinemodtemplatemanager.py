@@ -45,6 +45,10 @@ class EventLinemodTemplate(object):
         self._scaleFactorCache = scaleFactor
 
     @property
+    def simulationCamInObjectTransform(self):
+        return self._simulationCamInObjectTransform
+
+    @property
     def sparsity(self):
         return self._sparsity
 
@@ -244,6 +248,14 @@ class EventLinemodTemplateManager(object):
             self._templateList.append(EventLinemodTemplate(templateDatum, templateInfo['camInObjectTransformation'], templateInfo['templId']))
             self._templateIdList.append(templateInfo['templId'])
         logger.debug("templateManager initialized with %d templates.", len(self._templateIdList))
+
+    def GetObjectDistance(self, templateId, scale, extraFactor):
+        thisTemplate = self._templateManager._templateList[templateId]
+        templateScaleCache = thisTemplate.scaleFactor
+        thisTemplate.RescaleThisTemplate(scale)
+        objectDistance = numpy.linalg.norm(thisTemplate.simulationCamInObjectTransform[:3, 3]) / extraFactor
+        thisTemplate.RescaleThisTemplate(templateScaleCache)
+        return objectDistance
 
     @property
     def scale(self):

@@ -76,12 +76,17 @@ class EventLinemodDetector(object):
                 # detectionList.append(EventLinemodDetection(indexMin[1], indexMin[0], oneTemplate.templateId, responseMat.min(), currentScale, [indexMin[1], indexMin[0], indexMin[1] + oneTemplate.imageW, indexMin[0] + oneTemplate.imageH]))
             currentScale *= scaleMultiplier
         logger.debug("%d raw detections...", len(detectionList))
-        detectionListOverlapFree, detectionBBoxesOverlapFree, detectionScoresOverlapFree = DoNonMaxSuppression(detectionList, detectionBBoxes, detectionScores)
+        detectionListOverlapFree, detectionBBoxesOverlapFree, detectionScoresOverlapFree = DoNonMaxSuppression(detectionList, detectionBBoxes, detectionScores, overlapThreshold=0.3)
 
         if isShow:
+            imageDisplayForSave = cv2.cvtColor(copy.deepcopy(uncenteredSceneImage).astype('uint8'), cv2.COLOR_GRAY2RGB).astype('float')
+            imageDisplayForSave = (imageDisplayForSave * 255 / imageDisplayForSave.max()).astype('uint8')
             for indexDetection, detectionBBox in enumerate(detectionBBoxesOverlapFree):
+                # imageName: indexDetection_score_distanceFromScale
+                distanceFromScale = 15.0 / 5.0 / detectionListOverlapFree[indexDetection]._scale # 5 is a factor for color cone model
+                cv2.imwrite('/home/runqiu/tmptmp/detections/' + str(indexDetection).zfill(6) + '_' + str(detectionListOverlapFree[indexDetection]._score) + '_' + "{:.2f}".format(distanceFromScale) + '.png', imageDisplayForSave[detectionBBox[1]:detectionBBox[3], detectionBBox[0]:detectionBBox[2]])
                 cv2.rectangle(imageDisplay, (detectionBBox[0], detectionBBox[1]), (detectionBBox[2], detectionBBox[3]), (255, 0, 0), 2)
-                cv2.putText(imageDisplay, str(detectionListOverlapFree[indexDetection]._score), (detectionBBox[0] + 10, detectionBBox[1] + 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+                cv2.putText(imageDisplay, str(detectionListOverlapFree[indexDetection]._score) + '_' + "{:.2f}".format(distanceFromScale), (detectionBBox[0] + 10, detectionBBox[1] + 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
         logger.debug("======== detection finished in {} secs, totally {} overlap-free detections ========".format(time.time() - starttime, len(detectionListOverlapFree)))
         
         from IPython import embed; print('here!'); embed()

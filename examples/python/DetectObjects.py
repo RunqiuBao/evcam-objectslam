@@ -49,11 +49,11 @@ if __name__ == "__main__":
     # prepare templates
     templateInfos, templateData = ReadFromTemplateFolder(args.templatepath)
     myTemplateManager = EventLinemodTemplateManager(templateInfos, templateData)
-    myTemplateDetector = EventLinemodDetector(myTemplateManager, templateResponseThreshold=350)
+    myTemplateDetector = EventLinemodDetector(myTemplateManager, templateResponseThreshold=400)
 
     # start detection
     myEventData = EventsInETHZFormat(args.inputdata)
     for i in range(100):
         mysbn = myEventData.PopOneTimeLimitedSbn(20000, 720, 1280)
-        myTemplateDetector.DetectTemplatesSemiScaleInvariant(mysbn, minScale=1.0, maxScale=1.0)
+        myTemplateDetector.DetectTemplatesSemiScaleInvariant(mysbn, minScale=0.4, maxScale=1.2, scaleMultiplier=1.2)
         break

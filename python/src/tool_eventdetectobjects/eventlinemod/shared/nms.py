@@ -43,3 +43,21 @@ def DoNonMaxSuppression(detections, boxes, scores, overlapThreshold=0.3, isMaxSc
         indices = numpy.delete(indices, numpy.concatenate(([last], numpy.where(overlap > overlapThreshold)[0])))
 
     return pickedDetections, pickedBoxes, pickedScores
+
+
+def DoFilterByScore(detections, boxes, scores, scoreThreshold=350):
+    if len(detections) == 0:
+        return []
+    
+    pickedBoxes = []
+    pickedDetections = []
+    pickedScores = []
+
+    for indexDetection in range(len(detections)):
+        if scores[indexDetection] > scoreThreshold:
+            continue
+        else:
+            pickedBoxes.append(boxes[indexDetection])
+            pickedDetections.append(detections[indexDetection])
+            pickedScores.append(scores[indexDetection])
+    return pickedDetections, pickedBoxes, pickedScores
