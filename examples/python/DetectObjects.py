@@ -55,5 +55,5 @@ if __name__ == "__main__":
     myEventData = EventsInETHZFormat(args.inputdata)
     for i in range(100):
         mysbn = myEventData.PopOneTimeLimitedSbn(20000, 720, 1280)
-        myTemplateDetector.DetectTemplatesSemiScaleInvariant(mysbn, minScale=0.4, maxScale=1.2, scaleMultiplier=1.2)
+        myTemplateDetector.DetectTemplatesSemiScaleInvariant(mysbn, minScale=0.4, maxScale=1.2, scaleMultiplier=1.2, debugPathRoot='/home/runqiu/tmptmp/debugEventLinemod/')
         break

@@ -2,6 +2,9 @@ import numpy
 import time
 import copy
 import cv2
+import os
+import pickle
+from datetime import datetime
 
 from .shared.nms import DoNonMaxSuppression
 
@@ -20,6 +23,22 @@ class EventLinemodDetection():
     def __init__(self, x, y, templateId, score, scale, bbox) -> None:
         self._x, self._y, self._templateId, self._score, self._scale, self._bbox = x, y, templateId, score, scale, bbox
 
+    @property
+    def templateId(self):
+        return self._templateId
+
+    @property
+    def score(self):
+        return self._score
+
+    @property
+    def scale(self):
+        return self._scale
+
+    @property
+    def bbox(self):
+        return self._bbox
+
 
 class EventLinemodDetector(object):
     _templateManager = None
@@ -29,7 +48,7 @@ class EventLinemodDetector(object):
         self._templateManager = templateManager
         self._templateResponseThreshold = templateResponseThreshold
 
-    def DetectTemplatesSemiScaleInvariant(self, inputFrame, minScale=0.6944, maxScale=1.44, scaleMultiplier=1.2, scanStep=4, isTooSparseThreshold=0.5, isShow=False):
+    def DetectTemplatesSemiScaleInvariant(self, inputFrame, minScale=0.6944, maxScale=1.44, scaleMultiplier=1.2, scanStep=4, isTooSparseThreshold=0.5, isShow=False, debugPathRoot=None):
         starttime = time.time()
         logger.debug("======== detection function start ========")
         # detect search
@@ -88,8 +107,10 @@ class EventLinemodDetector(object):
                 cv2.rectangle(imageDisplay, (detectionBBox[0], detectionBBox[1]), (detectionBBox[2], detectionBBox[3]), (255, 0, 0), 2)
                 cv2.putText(imageDisplay, str(detectionListOverlapFree[indexDetection]._score) + '_' + "{:.2f}".format(distanceFromScale), (detectionBBox[0] + 10, detectionBBox[1] + 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
         logger.debug("======== detection finished in {} secs, totally {} overlap-free detections ========".format(time.time() - starttime, len(detectionListOverlapFree)))
-        
+
         from IPython import embed; print('here!'); embed()
+        self.LogResultState(detectionListOverlapFree, inputFrame, imageDisplay, debugPathRoot)
+
 
     def ValidateObjecctInStereoPair(self, leftDetections, stereoCalib):
         pass
@@ -103,3 +124,28 @@ class EventLinemodDetector(object):
             ghostThreshold: allowed distance of the object from ground surface.
         '''
         pass
+
+    def LogResultState(self, detections, inputFrame, imageDisplay, debugPathRoot):
+        logDict = {
+            'detections': [],
+            'inputFrame': inputFrame,
+            'imageDisplay': imageDisplay
+        }
+        for detection in detections:
+            logDict['detections'].append(EventLinemodDetector.ConvertDetectionToDict(detection))
+        now = datetime.now()
+        now = now.strftime("%Y/%m/%d, %H:%M:%S - ")
+        os.makedirs(os.join(debugPathRoot, now), exist_ok=True)
+        with open(os.path.join(debugPathRoot, now, 'detectionResults.pkl'), 'wb') as f:
+            pickle.dump(logDict, f)
+
+    @staticmethod
+    def ConvertDetectionToDict(detection, detectionId):
+        detectionDict = {
+            'detectionId': detectionId,
+            'templateId': detection.templateId,
+            'score': detection.score,
+            'scale': detection.scale,
+            'bbox': detection.bbox
+        }
+        return detectionDict
