@@ -1,6 +1,10 @@
 #pragma once
 
 #include <vector>
+#include <opencv2/opencv.hpp>
+#include <Eigen/Core>
+
+#include "eventlinemodtemplatemanager.h"
 
 namespace tooldetectobject{
 
@@ -24,8 +28,8 @@ class EventLineModDetection{
 
 public:
     /** \brief Constructor. */
-    EventLineModDetection(const int x, const int y, const int templateIndex, const float score, const float scale) 
-    : _x(x), _y(y), _templateIndex(templateIndex), _score(score), _scale(scale) 
+    EventLineModDetection(const int x, const int y, const int templateIndex, const float score, const float scale, const BBox bbox) 
+    : _x(x), _y(y), _templateIndex(templateIndex), _score(score), _scale(scale), _bbox(bbox)
     {}
 
 private:
@@ -39,6 +43,7 @@ private:
     float _score;
     /** \brief scale at which the template was detected. */
     float _scale;
+    BBox _bbox;
 
 };
 
@@ -46,7 +51,7 @@ class EventLineModDetector{
 
 public:
     /** \brief Constructor */
-    EventLineModDetector (const TemplateManager& templateManager, const float templateResponseThreshold)
+    EventLineModDetector (const EventLineModTemplateManager& templateManager, const float templateResponseThreshold)
     : _templateManager(templateManager), _templateResponseThreshold(templateResponseThreshold)
     {}
 
@@ -74,7 +79,7 @@ public:
 
 
 private:
-    TemplateManager _templateManager;
+    EventLineModTemplateManager _templateManager;
     float _templateResponseThreshold;
 
 };

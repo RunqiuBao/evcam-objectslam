@@ -1,9 +1,9 @@
-add_library(EventLinemod SHARED EventLinemod.cpp)
+add_library(EventLinemod SHARED eventlinemod.cpp eventlinemodtemplatemanager.cpp)
 
-target_include_directories(EventLinemod INTERFACE ${CMAKE_CURRENT_SOURCE_DIR} 
-                                        PRIVATE $<TARGET_PROPERTY:log4cxx,INTERFACE_INCLUDE_DIRECTORIES>)
+target_include_directories(EventLinemod PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 
-target_link_libraries(EventLinemod log4cxx)
+message("baodebug: ${CMAKE_SOURCE_DIR}/cpp/common/logging.h")
+target_link_libraries(EventLinemod PRIVATE log4cxx ${OpenCV_LIBS} Eigen3::Eigen)
 
 install(TARGETS EventLinemod
         RUNTIME DESTINATION lib)
@@ -11,5 +11,5 @@ install(TARGETS EventLinemod
 set(TDO_EVENTLINEMOD_HEADER_FILES
     EventLinemod.h
 )
-    
+
 install(FILES ${TDO_EVENTLINEMOD_HEADER_FILES} DESTINATION include)

@@ -53,7 +53,12 @@ if __name__ == "__main__":
 
     # start detection
     myEventData = EventsInETHZFormat(args.inputdata)
+    frameCount = 0
     for i in range(100):
         mysbn = myEventData.PopOneTimeLimitedSbn(20000, 720, 1280)
-        myTemplateDetector.DetectTemplatesSemiScaleInvariant(mysbn, minScale=0.4, maxScale=1.2, scaleMultiplier=1.2, debugPathRoot='/home/runqiu/tmptmp/debugEventLinemod/')
-        break
+        if (i % 10) != 0:
+            continue
+        myTemplateDetector.DetectTemplatesSemiScaleInvariant(mysbn, minScale=0.4, maxScale=1.2, scaleMultiplier=1.2, debugPathRoot='/home/runqiu/tmptmp/debugEventLinemod/', dataSaveRoot='/media/runqiu/data/eventLinemodDatasets/validatorTraining', frameIndex=frameCount)
+        frameCount += 1
+        if frameCount >= 20:
+            break

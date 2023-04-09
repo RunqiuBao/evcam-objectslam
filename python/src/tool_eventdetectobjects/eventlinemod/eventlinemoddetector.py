@@ -5,8 +5,11 @@ import cv2
 import os
 import pickle
 from datetime import datetime
+import json
 
 from .shared.nms import DoNonMaxSuppression
+from ..commonutils.ioutils import LmdbWriter
+from ..commonutils.datatypeutils import MyJsonEncoder, MyJsonDecoder
 
 import logging
 logger = logging.getLogger(__name__)
@@ -48,7 +51,7 @@ class EventLinemodDetector(object):
         self._templateManager = templateManager
         self._templateResponseThreshold = templateResponseThreshold
 
-    def DetectTemplatesSemiScaleInvariant(self, inputFrame, minScale=0.6944, maxScale=1.44, scaleMultiplier=1.2, scanStep=4, isTooSparseThreshold=0.5, isShow=False, debugPathRoot=None):
+    def DetectTemplatesSemiScaleInvariant(self, inputFrame, minScale=0.6944, maxScale=1.44, scaleMultiplier=1.2, scanStep=4, isTooSparseThreshold=0.5, isShow=False, debugPathRoot=None, dataSaveRoot=None, frameIndex=0):
         starttime = time.time()
         logger.debug("======== detection function start ========")
         # detect search
@@ -64,6 +67,12 @@ class EventLinemodDetector(object):
             imageDisplay = cv2.cvtColor(copy.deepcopy(uncenteredSceneImage).astype('uint8'), cv2.COLOR_GRAY2RGB).astype('float')
             imageDisplay = (imageDisplay * 255 / imageDisplay.max()).astype('uint8')
         currentScale = minScale
+
+        # save training data
+        dataWriters = []
+        for indexTemplate in range(self._templateManager.length):
+            os.makedirs(os.path.join(dataSaveRoot, 'template_' + str(indexTemplate)), exist_ok=True)
+            dataWriters.append(LmdbWriter(os.path.join(dataSaveRoot, 'template_' + str(indexTemplate))))
         while currentScale <= maxScale:
             self._templateManager.scale = currentScale
             for oneTemplate in self._templateManager:
@@ -98,21 +107,46 @@ class EventLinemodDetector(object):
         detectionListOverlapFree, detectionBBoxesOverlapFree, detectionScoresOverlapFree = DoNonMaxSuppression(detectionList, detectionBBoxes, detectionScores, overlapThreshold=0.3)
 
         if isShow:
-            imageDisplayForSave = cv2.cvtColor(copy.deepcopy(uncenteredSceneImage).astype('uint8'), cv2.COLOR_GRAY2RGB).astype('float')
-            imageDisplayForSave = (imageDisplayForSave * 255 / imageDisplayForSave.max()).astype('uint8')
-            for indexDetection, detectionBBox in enumerate(detectionBBoxesOverlapFree):
-                # imageName: indexDetection_score_distanceFromScale
-                distanceFromScale = 15.0 / 5.0 / detectionListOverlapFree[indexDetection]._scale # 5 is a factor for color cone model
-                cv2.imwrite('/home/runqiu/tmptmp/detections/' + str(indexDetection).zfill(6) + '_' + str(detectionListOverlapFree[indexDetection]._score) + '_' + "{:.2f}".format(distanceFromScale) + '.png', imageDisplayForSave[detectionBBox[1]:detectionBBox[3], detectionBBox[0]:detectionBBox[2]])
-                cv2.rectangle(imageDisplay, (detectionBBox[0], detectionBBox[1]), (detectionBBox[2], detectionBBox[3]), (255, 0, 0), 2)
-                cv2.putText(imageDisplay, str(detectionListOverlapFree[indexDetection]._score) + '_' + "{:.2f}".format(distanceFromScale), (detectionBBox[0] + 10, detectionBBox[1] + 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+            try:
+                imageDisplayForSave = cv2.cvtColor(copy.deepcopy(uncenteredSceneImage).astype('uint8'), cv2.COLOR_GRAY2RGB).astype('float')
+                imageDisplayForSave = (imageDisplayForSave * 255 / imageDisplayForSave.max()).astype('uint8')
+                countTemplates = [0 for indexTemplate in range(len(self._templateManager._templateList))]
+                for indexDetection, detectionBBox in enumerate(detectionBBoxesOverlapFree):
+                    # save training data
+                    code = '%06d_%06d' % (frameIndex, indexDetection)
+                    code = code.encode()
+                    dataWriters[detectionListOverlapFree[indexDetection].templateId].write(code, uncenteredSceneImage[detectionBBox[1]:detectionBBox[3], detectionBBox[0]:detectionBBox[2]].astype('uint8'))
+                    countTemplates[detectionListOverlapFree[indexDetection].templateId] += 1
+                    # imageName: indexDetection_score_distanceFromScale
+                    distanceFromScale = 15.0 / 5.0 / detectionListOverlapFree[indexDetection]._scale # 5 is a factor for color cone model
+                    cv2.imwrite('/home/runqiu/tmptmp/detections/' + str(indexDetection).zfill(6) + '_' + str(detectionListOverlapFree[indexDetection]._score) + '_' + "{:.2f}".format(distanceFromScale) + '.png', imageDisplayForSave[detectionBBox[1]:detectionBBox[3], detectionBBox[0]:detectionBBox[2]])
+                    cv2.rectangle(imageDisplay, (detectionBBox[0], detectionBBox[1]), (detectionBBox[2], detectionBBox[3]), (255, 0, 0), 2)
+                    cv2.putText(imageDisplay, str(detectionListOverlapFree[indexDetection]._score) + '_' + "{:.2f}".format(distanceFromScale), (detectionBBox[0] + 10, detectionBBox[1] + 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+                for dataWriter in dataWriters:
+                    dataWriter.commitchange()
+                    dataWriter.endwriting()
+                dataInfosPath = os.path.join(dataSaveRoot, 'dataInfos.json')
+                if os.path.exists(dataInfosPath):
+                    with open(dataInfosPath, 'r') as cacheFile:
+                        dataInfos = json.load(cacheFile, cls=MyJsonDecoder)
+                else:
+                    dataInfos = []
+                dataInfos.append({
+                    frameIndex: {
+                        'numDetections': len(detectionBBoxesOverlapFree),
+                        'numDetectionsEachTemplates': countTemplates
+                    }
+                })
+                with open(os.path.join(dataSaveRoot, 'dataInfos.json'), 'w') as outfile:
+                    json.dump(dataInfos, outfile, cls=MyJsonEncoder)
+            except:
+                from IPython import embed; print('here!'); embed()
+                
         logger.debug("======== detection finished in {} secs, totally {} overlap-free detections ========".format(time.time() - starttime, len(detectionListOverlapFree)))
 
-        from IPython import embed; print('here!'); embed()
         self.LogResultState(detectionListOverlapFree, inputFrame, imageDisplay, debugPathRoot)
 
-
-    def ValidateObjecctInStereoPair(self, leftDetections, stereoCalib):
+    def ValidateObjectInStereoPair(self, leftDetections, stereoCalib):
         pass
 
     def ValidateObjectByEarthPlane(self, detections, cameraHeight, cameraPitchAngle, ghostThreshold):
@@ -131,8 +165,8 @@ class EventLinemodDetector(object):
             'inputFrame': inputFrame,
             'imageDisplay': imageDisplay
         }
-        for detection in detections:
-            logDict['detections'].append(EventLinemodDetector.ConvertDetectionToDict(detection))
+        for indexDetection, detection in detections:
+            logDict['detections'].append(EventLinemodDetector.ConvertDetectionToDict(detection, indexDetection))
         now = datetime.now()
         now = now.strftime("%Y/%m/%d, %H:%M:%S - ")
         os.makedirs(os.join(debugPathRoot, now), exist_ok=True)

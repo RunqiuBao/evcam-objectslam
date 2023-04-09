@@ -33,7 +33,7 @@ class EventLinemodTemplate(object):
         templateMask = self._image >= 10
         self._image[~templateMask] = 0
         self._featurePointsX, self._featurePointsY, self._featureVector, self._sparsity = EventLinemodTemplate.GetFeatureVector(self._image)
-        self._scaleFactorCache = 1.0
+        self._scaleFactorCache = resize
 
     def RescaleThisTemplate(self, scaleFactor):  # scaleFactor is a absolute scale.
         scaleFactorRelative = scaleFactor / self._scaleFactorCache  # scaleFactorRelative is the relative scale , which we need to perform image transformation.
@@ -63,6 +63,16 @@ class EventLinemodTemplate(object):
         '''
         # sample feature points
         imageLaplacian = cv2.Laplacian(image, cv2.CV_32F, ksize=3)
+        # ## save plt fig in image (without axis and margin, only contents)
+        # import matplotlib.pyplot as plt
+        # fig = plt.figure(frameon=False)
+        # fig.set_size_inches(184, 331)
+        # ax = plt.Axes(fig, [0., 0., 1., 1.])
+        # ax.set_axis_off()
+        # fig.add_axes(ax)
+        # ax.imshow(imageLaplacian, cmap='gray', aspect='auto')
+        # plt.savefig('/media/runqiu/data/eventLinemodDatasets/templatesInLaplacian/{}.png'.format(str(countTemplate).zfill(6)), dpi=1)
+
         imageLaplacianMask = numpy.where(numpy.abs(imageLaplacian) >= isNoiseThreshold, 255, 0)
         kernels = []
         kernels.append(numpy.ones((3, 3), numpy.uint8))
@@ -260,6 +270,10 @@ class EventLinemodTemplateManager(object):
     @property
     def scale(self):
         return self._scale
+
+    @property
+    def length(self):
+        return len(self._templateList)
 
     @scale.setter
     def scale(self, value):
