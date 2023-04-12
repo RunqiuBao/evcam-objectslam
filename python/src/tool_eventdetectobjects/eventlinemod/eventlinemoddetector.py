@@ -144,7 +144,11 @@ class EventLinemodDetector(object):
                 
         logger.debug("======== detection finished in {} secs, totally {} overlap-free detections ========".format(time.time() - starttime, len(detectionListOverlapFree)))
 
-        self.LogResultState(detectionListOverlapFree, inputFrame, imageDisplay, debugPathRoot)
+        try:
+            self.LogResultState(detectionListOverlapFree, inputFrame, imageDisplay, debugPathRoot)
+        except:
+            from IPython import embed; print('here!'); embed()
+
 
     def ValidateObjectInStereoPair(self, leftDetections, stereoCalib):
         pass
@@ -165,12 +169,12 @@ class EventLinemodDetector(object):
             'inputFrame': inputFrame,
             'imageDisplay': imageDisplay
         }
-        for indexDetection, detection in detections:
+        for indexDetection, detection in enumerate(detections):
             logDict['detections'].append(EventLinemodDetector.ConvertDetectionToDict(detection, indexDetection))
         now = datetime.now()
-        now = now.strftime("%Y/%m/%d, %H:%M:%S - ")
-        os.makedirs(os.join(debugPathRoot, now), exist_ok=True)
-        with open(os.path.join(debugPathRoot, now, 'detectionResults.pkl'), 'wb') as f:
+        now = now.strftime("%Y_%m_%dT%H-%M-%S_")
+        os.makedirs(os.path.join(debugPathRoot, now), exist_ok=True)
+        with open(os.path.join(debugPathRoot, now + 'detectionResults.pkl'), 'wb') as f:
             pickle.dump(logDict, f)
 
     @staticmethod
