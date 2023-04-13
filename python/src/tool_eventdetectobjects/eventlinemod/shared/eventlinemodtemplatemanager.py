@@ -45,6 +45,14 @@ class EventLinemodTemplate(object):
         self._scaleFactorCache = scaleFactor
 
     @property
+    def originalH(self):
+        return self._image.shape[0]
+
+    @property
+    def originalW(self):
+        return self._image.shape[1]
+
+    @property
     def simulationCamInObjectTransform(self):
         return self._simulationCamInObjectTransform
 
@@ -266,6 +274,9 @@ class EventLinemodTemplateManager(object):
         objectDistance = numpy.linalg.norm(thisTemplate.simulationCamInObjectTransform[:3, 3]) / extraFactor
         thisTemplate.RescaleThisTemplate(templateScaleCache)
         return objectDistance
+
+    def GetTemplate(self, templateId):
+        return self._templateList[self._templateIdList.index(templateId)]
 
     @property
     def scale(self):

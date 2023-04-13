@@ -9,7 +9,8 @@ install(TARGETS EventLinemod
         RUNTIME DESTINATION lib)
 
 set(TDO_EVENTLINEMOD_HEADER_FILES
-    EventLinemod.h
+    eventlinemod.h
+    eventlinemodtemplatemanager.h
 )
 
 install(FILES ${TDO_EVENTLINEMOD_HEADER_FILES} DESTINATION include)

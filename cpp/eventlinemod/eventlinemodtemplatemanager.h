@@ -10,11 +10,9 @@ namespace tooldetectobject{
 class EventLineModTemplate{
 
 public:
-    EventLineModTemplate(const cv::Mat image, const Eigen::Matrix4f simulationCamInObjectTransform, const int templateId, float resize=0.33)
-    : _image(image), _simulationCamInObjectTransform(simulationCamInObjectTransform), _templateId(templateId)
-    {
-        _simulationCamInObjectTransform.block(0, 3, 3, 1) /= resize;
-    }
+    EventLineModTemplate(const cv::Mat image, const Eigen::Matrix4f simulationCamInObjectTransform, const int templateId, float resize=0.33, int intensityThreshold=10);
+
+    GetFeatureVector();
 
 private:
     cv::Mat _image;

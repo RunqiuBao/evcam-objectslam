@@ -15,6 +15,10 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+def RescaleImage(inputImage, targetH, targetW):
+    return cv2.resize(inputImage, dsize=(targetW, targetH))
+
+
 class EventLinemodDetection():
     _x = None
     _y = None
@@ -113,13 +117,14 @@ class EventLinemodDetector(object):
                 countTemplates = [0 for indexTemplate in range(len(self._templateManager._templateList))]
                 for indexDetection, detectionBBox in enumerate(detectionBBoxesOverlapFree):
                     # save training data
+                    thisTemplate = self._templateManager.GetTemplate(detectionListOverlapFree[indexDetection].templateId)
                     code = '%06d_%06d' % (frameIndex, indexDetection)
                     code = code.encode()
-                    dataWriters[detectionListOverlapFree[indexDetection].templateId].write(code, uncenteredSceneImage[detectionBBox[1]:detectionBBox[3], detectionBBox[0]:detectionBBox[2]].astype('uint8'))
+                    dataWriters[detectionListOverlapFree[indexDetection].templateId].write(code, RescaleImage(uncenteredSceneImage[detectionBBox[1]:detectionBBox[3], detectionBBox[0]:detectionBBox[2]].astype('uint8'), thisTemplate.originalH, thisTemplate.originalW))
                     countTemplates[detectionListOverlapFree[indexDetection].templateId] += 1
                     # imageName: indexDetection_score_distanceFromScale
                     distanceFromScale = 15.0 / 5.0 / detectionListOverlapFree[indexDetection]._scale # 5 is a factor for color cone model
-                    cv2.imwrite('/home/runqiu/tmptmp/detections/' + str(indexDetection).zfill(6) + '_' + str(detectionListOverlapFree[indexDetection]._score) + '_' + "{:.2f}".format(distanceFromScale) + '.png', imageDisplayForSave[detectionBBox[1]:detectionBBox[3], detectionBBox[0]:detectionBBox[2]])
+                    cv2.imwrite('/home/runqiu/tmptmp/detections/frame{}_'.format(frameIndex) + str(indexDetection).zfill(6) + '_' + str(detectionListOverlapFree[indexDetection]._score) + '_' + "{:.2f}".format(distanceFromScale) + '.png', RescaleImage(imageDisplayForSave[detectionBBox[1]:detectionBBox[3], detectionBBox[0]:detectionBBox[2]], thisTemplate.originalH, thisTemplate.originalW))
                     cv2.rectangle(imageDisplay, (detectionBBox[0], detectionBBox[1]), (detectionBBox[2], detectionBBox[3]), (255, 0, 0), 2)
                     cv2.putText(imageDisplay, str(detectionListOverlapFree[indexDetection]._score) + '_' + "{:.2f}".format(distanceFromScale), (detectionBBox[0] + 10, detectionBBox[1] + 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
                 for dataWriter in dataWriters:
@@ -141,14 +146,13 @@ class EventLinemodDetector(object):
                     json.dump(dataInfos, outfile, cls=MyJsonEncoder)
             except:
                 from IPython import embed; print('here!'); embed()
-                
+
         logger.debug("======== detection finished in {} secs, totally {} overlap-free detections ========".format(time.time() - starttime, len(detectionListOverlapFree)))
 
         try:
             self.LogResultState(detectionListOverlapFree, inputFrame, imageDisplay, debugPathRoot)
         except:
             from IPython import embed; print('here!'); embed()
-
 
     def ValidateObjectInStereoPair(self, leftDetections, stereoCalib):
         pass
@@ -172,10 +176,11 @@ class EventLinemodDetector(object):
         for indexDetection, detection in enumerate(detections):
             logDict['detections'].append(EventLinemodDetector.ConvertDetectionToDict(detection, indexDetection))
         now = datetime.now()
-        now = now.strftime("%Y_%m_%dT%H-%M-%S_")
+        now = now.strftime("%Y_%m_%dT%H-%M-%S")
         os.makedirs(os.path.join(debugPathRoot, now), exist_ok=True)
-        with open(os.path.join(debugPathRoot, now + 'detectionResults.pkl'), 'wb') as f:
+        with open(os.path.join(debugPathRoot, now, 'detectionResults.pkl'), 'wb') as f:
             pickle.dump(logDict, f)
+        cv2.imwrite(os.path.join(debugPathRoot, now, 'imageDisplay.png'), imageDisplay)
 
     @staticmethod
     def ConvertDetectionToDict(detection, detectionId):
