@@ -108,12 +108,13 @@ class EventLinemodTemplate(object):
         for i in range(nodeQueue.qsize()):
             thisNode = nodeQueue.get()
             foundPointsX, foundPointsY, foundPointsScore = [], [], []
-            foundPointsX, foundPointsY = thisNode.getAllPoints(foundPointsX, foundPointsY, foundPointsScore)[:2]
+            # foundPointsX, foundPointsY = thisNode.getAllPoints(foundPointsX, foundPointsY, foundPointsScore)[:2]
+            foundPointsX, foundPointsY = thisNode.getTopPoint(foundPointsX, foundPointsY, foundPointsScore)[:2]
             distributedPointsX.append(foundPointsX[0])
             distributedPointsY.append(foundPointsY[0])
         distributedPointsX, distributedPointsY = numpy.array(distributedPointsX), numpy.array(distributedPointsY)
         # compute feature vector
-        featureVector = EventLinemodTemplate._ComputeImagePatchFeatureVector(imageLaplacianMask, gradMagnitudeThreshold, distributedPointsX, distributedPointsY)
+        featureVector = EventLinemodTemplate._ComputeImagePatchFeatureVector(imageLaplacian, gradMagnitudeThreshold, distributedPointsX, distributedPointsY)
         return distributedPointsX, distributedPointsY, featureVector, templateSparsity
 
     ## BFS

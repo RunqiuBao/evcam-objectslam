@@ -204,6 +204,12 @@ class QuadTree:
             found_points_x, found_points_y, found_points_score = self.se.getAllPoints(found_points_x, found_points_y, found_points_score)
             found_points_x, found_points_y, found_points_score = self.sw.getAllPoints(found_points_x, found_points_y, found_points_score)
         return found_points_x, found_points_y, found_points_score
+
+    def getTopPoint(self, found_points_x, found_points_y, found_points_score):
+        found_points_x.append(self.points[0].x)
+        found_points_y.append(self.points[0].y)
+        found_points_score.append(self.points[0].score)
+        return found_points_x, found_points_y, found_points_score
         
     def queryLeafNode(self, count=0):
         if self.divided:
