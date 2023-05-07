@@ -11,6 +11,9 @@ install(TARGETS EventLinemod
 set(TDO_EVENTLINEMOD_HEADER_FILES
     eventlinemod.h
     eventlinemodtemplatemanager.h
+    Box.h
+    Quadtree.h
+    Vector2.h
 )
 
 install(FILES ${TDO_EVENTLINEMOD_HEADER_FILES} DESTINATION include)

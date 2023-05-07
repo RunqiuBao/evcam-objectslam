@@ -39,13 +39,12 @@ int main(int argc, char** argv){
         py::object mysbnPy = dataloader.attr("PopOneTimeLimitedSbn")(20000, 720, 1280);
         py::buffer_info mysbnPyBuffer = py::cast<py::array_t<int, py::array::c_style | py::array::forcecast>>(*const_cast<py::object*>(&mysbnPy)).request(false);
         int* mysbnData = static_cast<int*>(mysbnPyBuffer.ptr);
-        std::vector<ssize_t> mysbnShape = mysbnPyBuffer.shape;
         // Eigen::MatrixXi mMysbn;
         // mMysbn = Eigen::Map<Eigen::Matrix<int, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>>(mysbnData, mysbnShape[0], mysbnShape[1]);
         // Eigen::MatrixXf mMysbnFloat = mMysbn.cast<float>();
         // mMysbnFloat = mMysbnFloat.array() - mMysbnFloat.minCoeff();
         // mMysbnFloat = mMysbnFloat / mMysbnFloat.maxCoeff() * 255.0;
-        cv::Mat mysbnMat(mysbnShape[0], mysbnShape[1], CV_32SC1, mysbnData);
+        cv::Mat mysbnMat(mysbnPyBuffer.shape[0], mysbnPyBuffer.shape[1], CV_32SC1, mysbnData);
         cv::Mat mysbnFloat;
         mysbnMat.convertTo(mysbnFloat, CV_32FC1);
         double minVal, maxVal;
