@@ -2,13 +2,19 @@
 layout: default
 ---
 
-Text can be **bold**, _italic_, or ~~strikethrough~~.
+**Event camera** captures spatial-temporal gradients of light intensity. The appearance of its output looks like this:
+<br>
+Denoting $L(x,y,t)$ as the light intensity at pixel $(x,y)$ and time $t$, instead of recording the light intensity, event cameras record the abrupt change in $L$. An event $e_i=(x_i, y_i, p_i, t_i)$ for pixel $(x_i, y_i)$ is triggered when
+$$
+    |\log{{L(x_i,y_i.t_i)}-\log{L(x_i,y_i,t_{i-1})}}|\geq C,
+$$
+where C is the constant for threshold. And $p_i$ is the sign of log brightness change. 
+$$
+p_i = {\rm sign}(\log{{L(x_i,y_i.t_i)}-\log{L(x_i,y_i,t_{i-1})}}).
+$$
 
-[Link to another page](./another-page.html).
+<!-- [Link to another page](./another-page.html). -->
 
-There should be whitespace between paragraphs.
-
-There should be whitespace between paragraphs. We recommend including a README, or a file with information about your project.
 
 # Header 1
 
