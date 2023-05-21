@@ -24,12 +24,13 @@
 
         <nav>
             <ul>
+                <li><a href="/">Home</a></li>
                 <li><a href="/contact/">Contact</a></li>
                 <li><a href="/citation/">Citation</a></li>
             </ul>
         </nav>
 
-        <!-- <style>
+        <style>
             nav ul {
                 display: flex;
                 list-style: none;
@@ -41,7 +42,10 @@
                 text-decoration: none;
                 color: green;
             }
-        </style> -->
+            nav ul li a:hover {
+                text-decoration: underline;
+            }
+        </style>
 
         <section id="downloads" class="clearfix">
           {% if site.show_downloads %}
