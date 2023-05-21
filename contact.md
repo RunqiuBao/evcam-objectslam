@@ -1,6 +1,6 @@
 ---
 layout: default
-permalink: /contact/
+permalink: /tool_detectobjects/contact/
 ---
 
 # Contact

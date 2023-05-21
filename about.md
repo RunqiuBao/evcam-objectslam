@@ -1,6 +1,6 @@
 ---
 layout: default
-permalink: /about/
+permalink: /tool_detectobjects/about/
 ---
 
 # About

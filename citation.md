@@ -1,6 +1,6 @@
 ---
 layout: default
-permalink: /citation/
+permalink: /tool_detectobjects/citation/
 ---
 
 # Citation
