@@ -22,31 +22,6 @@
           <h1>{{ page.title | default: site.title | default: site.github.repository_name }}</h1>
         </header>
 
-        <nav>
-            <ul>
-                <li><a href="/">Home</a></li>
-                <li><a href="/contact/">Contact</a></li>
-                <li><a href="/citation/">Citation</a></li>
-            </ul>
-        </nav>
-
-        <style>
-            nav ul {
-                display: flex;
-                list-style: none;
-            }
-            nav ul li{
-                margin-right: 10px;
-            }
-            nav ul li a{
-                text-decoration: none;
-                color: green;
-            }
-            nav ul li a:hover {
-                text-decoration: underline;
-            }
-        </style>
-
         <section id="downloads" class="clearfix">
           {% if site.show_downloads %}
           <a href="{{ site.github.zip_url }}" id="download-zip" class="button"><span>Download .zip</span></a>
@@ -62,7 +37,32 @@
         </section>
         <hr>
         <section id="main_content">
+            <nav>
+                <ul>
+                    <li><a href="/">Home</a></li>
+                    <li><a href="/contact/">Contact</a></li>
+                    <li><a href="/citation/">Citation</a></li>
+                </ul>
+            </nav>
+    
           {{ content }}
+
+            <style>
+                nav ul {
+                    display: flex;
+                    list-style: none;
+                }
+                nav ul li{
+                    margin-right: 10px;
+                }
+                nav ul li a{
+                    text-decoration: none;
+                    color: green;
+                }
+                nav ul li a:hover {
+                    text-decoration: underline;
+                }
+            </style>
         </section>
 
         <footer>
