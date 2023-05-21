@@ -1,10 +1,8 @@
 ---
 layout: default
-permalink: /citation/
+permalink: https://runqiubao.github.io/tool_detectobjects/citation/
 ---
 
 ## Citation
 
 _yay_
-
-[back](./)
