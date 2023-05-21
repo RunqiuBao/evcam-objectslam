@@ -22,15 +22,17 @@
           <h1>{{ page.title | default: site.title | default: site.github.repository_name }}</h1>
         </header>
 
-        <section>
+        <section id="nav_bar"">
+            <h2>
             <nav>
                 <ul>
                     <li><a href="/contact/">Contact</a></li>
                     <li><a href="/citation/">Citation</a></li>
                 </ul>
             </nav>
+            </h2>
 
-            <style>
+            <!-- <style>
                 nav ul {
                     display: flex;
                     list-style: none;
@@ -42,7 +44,7 @@
                     text-decoration: none;
                     color: green;
                 }
-            </style>
+            </style> -->
         </section>
 
         <section id="downloads" class="clearfix">
