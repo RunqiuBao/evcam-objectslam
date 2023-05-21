@@ -18,6 +18,27 @@
     <div id="container">
       <div class="inner">
 
+        <nav>
+            <ul>
+                <li><a href="/contact/">Contact</a></li>
+                <li><a href="/citation/">Citation</a></li>
+            </ul>
+        </nav>
+
+        <style>
+            nav ul {
+                display: flex;
+                list-style: none;
+            }
+            nav ul li{
+                margin-right: 10px;
+            }
+            nav ul li a{
+                text-decoration: none;
+                color: green;
+            }
+        </style>
+
         <header>
           <h1>{{ page.title | default: site.title | default: site.github.repository_name }}</h1>
         </header>
