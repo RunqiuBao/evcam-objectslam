@@ -51,8 +51,8 @@ class EventLineModDetector{
 
 public:
     /** \brief Constructor */
-    EventLineModDetector (const EventLineModTemplateManager& templateManager, const float templateResponseThreshold)
-    : _templateManager(templateManager), _templateResponseThreshold(templateResponseThreshold)
+    EventLineModDetector (const std::string templatePath, const float templateResponseThreshold)
+    : _templateManager(EventLineModTemplateManager(templatePath)), _templateResponseThreshold(templateResponseThreshold)
     {}
 
     /**

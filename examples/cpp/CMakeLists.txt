@@ -12,7 +12,7 @@ find_package(pybind11 REQUIRED)
 
 message("Python3_INCLUDE_DIRS ${Python_INCLUDE_DIRS}")
 message("Python2_INCLUDE_DIRS ${Python2_INCLUDE_DIRS}")
-target_include_directories(detectorRunner PRIVATE $<TARGET_PROPERTY:log4cxx,INTERFACE_INCLUDE_DIRECTORIES> ${Python_INCLUDE_DIRS} ${CMAKE_CURRENT_SOURCE_DIR}/../../cpp/pybind/)
+target_include_directories(detectorRunner PRIVATE $<TARGET_PROPERTY:log4cxx,INTERFACE_INCLUDE_DIRECTORIES> ${Python_INCLUDE_DIRS} ${CMAKE_CURRENT_SOURCE_DIR}/../../cpp/pybind/ ${CMAKE_CURRENT_SOURCE_DIR}/../../cpp/eventlinemod/)
 
 get_target_property(tdocommon_type tdocommon TYPE)
 get_target_property(tdopybind_type tdopybind TYPE)
@@ -25,7 +25,7 @@ endif()
 
 # add_library( libtdopybind SHARED IMPORTED )  # same error as linking tdopybind
 # set_target_properties( libtdopybind PROPERTIES IMPORTED_LOCATION ${TDO_INSTALL_PATH}/lib/libtdopybind.so )
-target_link_libraries(detectorRunner PRIVATE tdocommon ${Python_LIBRARIES} Eigen3::Eigen pybind11::module tdopybind ${OpenCV_LIBS})
+target_link_libraries(detectorRunner PRIVATE EventLinemod tdocommon ${Python_LIBRARIES} Eigen3::Eigen pybind11::module tdopybind ${OpenCV_LIBS})
 
 install(TARGETS detectorRunner 
         RUNTIME DESTINATION bin

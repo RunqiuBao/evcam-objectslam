@@ -27,7 +27,7 @@ set(CMAKE_BUILD_TYPE "Debug")
 # list(APPEND PATH "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/log4cxx/install/lib/cmake")
 set(CMAKE_PREFIX_PATH "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/log4cxx/install/" ${CMAKE_PREFIX_PATH})
 find_package(log4cxx REQUIRED)
-set(LOG4CXX_CONFIGURATION "${CMAKE_CURRENT_SOURCE_DIR}/log4cxx.properties")
+# set(LOG4CXX_CONFIGURATION "${CMAKE_CURRENT_SOURCE_DIR}/log4cxx.properties")
 
 # include Eigen
 set(Eigen3_DIR ${CMAKE_CURRENT_SOURCE_DIR}/eigen/cmake/)
@@ -43,6 +43,10 @@ message(STATUS "Found pybind11 v${pybind11_VERSION}: ${pybind11_INCLUDE_DIRS}")
 # include opencv
 find_package( OpenCV REQUIRED )
 include_directories( ${OpenCV_INCLUDE_DIRS} )
+
+# include rapidjson
+set(CMAKE_PREFIX_PATH "${CMAKE_SOURCE_DIR}/3rdparty/rapidjson/build/rapidjsoninstall/")
+find_package(RapidJSON)
 
 set(TDO_INSTALL_PATH "${CMAKE_CURRENT_BINARY_DIR}/tdoinstall")
 set(CMAKE_INSTALL_PREFIX "${TDO_INSTALL_PATH}")

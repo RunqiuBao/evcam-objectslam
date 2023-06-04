@@ -78,6 +78,26 @@ static int _ComputeQuantizedGradientOrientation(
     return maxLoc.y;
 }
 
+static Eigen::MatrixXi _ComputeImagePatchFeatureVector(
+    const cv::Mat& inputImage,
+    const float gradMagnitudeThreshold,
+    const Eigen::MatrixXi& keyPointsX,
+    const Eigen::MatrixXi& keyPointsY
+){
+    Eigen::Matrix<int, 1, Eigen::Dynamic> inputImageFeatureVector(1, keyPointsX.cols());
+    size_t imageH = inputImage.rows;
+    size_t imageW = inputImage.cols;
+    for (size_t indexKeyPoint = 0; indexKeyPoint < keyPointsX.cols(); indexKeyPoint++){
+        int keyPointX = keyPointsX(0, indexKeyPoint);
+        int keyPointY = keyPointsY(0, indexKeyPoint);
+        cv::Rect localPatchRoi(std::max(keyPointX - 2, 0), std::max(keyPointY - 2, 0), 5, 5);  // Note: if the patch too close to image border, it may be moved a little bit to make sure the patch can be complete.
+        cv::Mat localPatch = inputImage(localPatchRoi);
+        const int binNumberOfThisPatch = _ComputeQuantizedGradientOrientation(localPatch, gradMagnitudeThreshold);
+        inputImageFeatureVector(0, indexKeyPoint) = binNumberOfThisPatch;
+    }
+    return inputImageFeatureVector;
+}
+
 tooldetectobject::EventLineModTemplate::EventLineModTemplate(
     const cv::Mat image,
     const Eigen::Matrix4f simulationCamInObjectTransform,
@@ -182,23 +202,23 @@ void tooldetectobject::EventLineModTemplate::GetFeatureVector(
     return;
 }
 
-Eigen::MatrixXi _ComputeImagePatchFeatureVector(
-    const cv::Mat& inputImage,
-    const float gradMagnitudeThreshold,
-    const Eigen::MatrixXi& keyPointsX,
-    const Eigen::MatrixXi& keyPointsY
-){
-    Eigen::Matrix<int, 1, Eigen::Dynamic> inputImageFeatureVector(1, keyPointsX.cols());
-    size_t imageH = inputImage.rows;
-    size_t imageW = inputImage.cols;
-    for (size_t indexKeyPoint = 0; indexKeyPoint < keyPointsX.cols(); indexKeyPoint++){
-        int keyPointX = keyPointsX(0, indexKeyPoint);
-        int keyPointY = keyPointsY(0, indexKeyPoint);
-        cv::Rect localPatchRoi(std::max(keyPointX - 2, 0), std::max(keyPointY - 2, 0), 5, 5);  // Note: if the patch too close to image border, it may be moved a little bit to make sure the patch can be complete.
-        cv::Mat localPatch = inputImage(localPatchRoi);
-        const int binNumberOfThisPatch = _ComputeQuantizedGradientOrientation(localPatch, gradMagnitudeThreshold);
-        inputImageFeatureVector(0, indexKeyPoint) = binNumberOfThisPatch;
+tooldetectobject::EventLineModTemplateManager::EventLineModTemplateManager(const std::string templatePath){
+    std::filesystem::path rootPath = templatePath;
+    std::filesystem::path templateInfoFilePath = "templateInfos.json";
+    FILE* file = fopen((rootPath / templateInfoFilePath).string().c_str(), "rb");
+    if (file == nullptr) {
+        // Handle file opening error
+        throw std::runtime_error(std::string("Fail to open templateInfo file."));
     }
-    return inputImageFeatureVector;
-}
+    char buffer[65536];  // 128 KB
+    rapidjson::FileReadStream inputStream(file, buffer, sizeof(buffer));
+    rapidjson::Document templateInfosJson;
+    templateInfosJson.ParseStream(inputStream);
+    fclose(file);
+    const rapidjson::Value& templateInfosList = templateInfosJson.GetArray();
+    
+    for (size_t indexTemplate=0;  indexTemplate < templateInfosList.Size(); indexTemplate++){
+        templateInfosList[indexTemplate];
+    }
 
+}

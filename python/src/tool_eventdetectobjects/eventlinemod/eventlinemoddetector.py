@@ -67,9 +67,6 @@ class EventLinemodDetector(object):
         detectionBBoxes = []
         detectionScores = []
         isShow = True
-        if isShow:
-            imageDisplay = cv2.cvtColor(copy.deepcopy(uncenteredSceneImage).astype('uint8'), cv2.COLOR_GRAY2RGB).astype('float')
-            imageDisplay = (imageDisplay * 255 / imageDisplay.max()).astype('uint8')
         currentScale = minScale
 
         # save training data
@@ -108,9 +105,12 @@ class EventLinemodDetector(object):
                 # detectionList.append(EventLinemodDetection(indexMin[1], indexMin[0], oneTemplate.templateId, responseMat.min(), currentScale, [indexMin[1], indexMin[0], indexMin[1] + oneTemplate.imageW, indexMin[0] + oneTemplate.imageH]))
             currentScale *= scaleMultiplier
         logger.debug("%d raw detections...", len(detectionList))
-        detectionListOverlapFree, detectionBBoxesOverlapFree, detectionScoresOverlapFree = DoNonMaxSuppression(detectionList, detectionBBoxes, detectionScores, overlapThreshold=0.3)
+
+        detectionListOverlapFree, detectionBBoxesOverlapFree, detectionScoresOverlapFree = detectionList, detectionBBoxes, detectionScores #DoNonMaxSuppression(detectionList, detectionBBoxes, detectionScores, overlapThreshold=0.3)
 
         if isShow:
+            imageDisplay = cv2.cvtColor(copy.deepcopy(uncenteredSceneImage).astype('uint8'), cv2.COLOR_GRAY2RGB).astype('float')
+            imageDisplay = (imageDisplay * 255 / imageDisplay.max()).astype('uint8')
             try:
                 imageDisplayForSave = cv2.cvtColor(copy.deepcopy(uncenteredSceneImage).astype('uint8'), cv2.COLOR_GRAY2RGB).astype('float')
                 imageDisplayForSave = (imageDisplayForSave * 255 / imageDisplayForSave.max()).astype('uint8')
@@ -118,9 +118,9 @@ class EventLinemodDetector(object):
                 for indexDetection, detectionBBox in enumerate(detectionBBoxesOverlapFree):
                     # save training data
                     thisTemplate = self._templateManager.GetTemplate(detectionListOverlapFree[indexDetection].templateId)
-                    code = '%06d_%06d' % (frameIndex, indexDetection)
-                    code = code.encode()
-                    dataWriters[detectionListOverlapFree[indexDetection].templateId].write(code, RescaleImage(uncenteredSceneImage[detectionBBox[1]:detectionBBox[3], detectionBBox[0]:detectionBBox[2]].astype('uint8'), thisTemplate.originalH, thisTemplate.originalW))
+                    # code = '%06d_%06d' % (frameIndex, indexDetection)
+                    # code = code.encode()
+                    # dataWriters[detectionListOverlapFree[indexDetection].templateId].write(code, RescaleImage(uncenteredSceneImage[detectionBBox[1]:detectionBBox[3], detectionBBox[0]:detectionBBox[2]].astype('uint8'), thisTemplate.originalH, thisTemplate.originalW))
                     countTemplates[detectionListOverlapFree[indexDetection].templateId] += 1
                     # imageName: indexDetection_score_distanceFromScale
                     distanceFromScale = 15.0 / 5.0 / detectionListOverlapFree[indexDetection]._scale # 5 is a factor for color cone model
@@ -153,6 +153,8 @@ class EventLinemodDetector(object):
             self.LogResultState(detectionListOverlapFree, inputFrame, imageDisplay, debugPathRoot)
         except:
             from IPython import embed; print('here!'); embed()
+
+        from IPython import embed; print('here!'); embed()
 
     def ValidateObjectInStereoPair(self, leftDetections, stereoCalib):
         pass

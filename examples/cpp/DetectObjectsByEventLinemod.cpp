@@ -3,6 +3,8 @@
 
 #include <argparser.h>
 #include <pybindcommon.h>
+#include <eventlinemod.h>
+
 
 #include <logging.h>
 TDO_LOGGER("examples.DetectObjectsByEventLinemod")
@@ -34,6 +36,8 @@ int main(int argc, char** argv){
     py::object dataloaderclass = py::module::import(modulename.c_str()).attr(classname.c_str());
     TDO_LOG_DEBUG_FORMAT("inputdata: %s", argparser.getCmdOption("inputdata"));
     py::object dataloader = dataloaderclass(py::cast(argparser.getCmdOption("inputdata")));
+    float scoreThreshold = 400.0;
+    tooldetectobject::EventLineModDetector myDetector(argparser.getCmdOption("templatepath"), scoreThreshold);
 
     for (int indexFrame=0; indexFrame < 100; indexFrame++){
         py::object mysbnPy = dataloader.attr("PopOneTimeLimitedSbn")(20000, 720, 1280);

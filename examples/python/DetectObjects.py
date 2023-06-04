@@ -3,6 +3,9 @@
 
 import sys
 import os
+import cv2
+import time
+import numpy
 file_path = os.path.realpath(__file__)
 sys.path.append(os.path.join(file_path[:len(file_path) - len(file_path.split('/')[-1])], '../../', 'python/src/'))
 
@@ -42,14 +45,14 @@ if __name__ == "__main__":
 
     # make sure output path exists
     os.makedirs(args.outputpath, exist_ok=True)
-    
+
     # config logger
     commonlogging.ConfigureRootLogger(os.path.join(args.outputpath, 'mylog.txt'), level=args.loglevel)
 
     # prepare templates
     templateInfos, templateData = ReadFromTemplateFolder(args.templatepath)
     myTemplateManager = EventLinemodTemplateManager(templateInfos, templateData)
-    myTemplateDetector = EventLinemodDetector(myTemplateManager, templateResponseThreshold=400)
+    myTemplateDetector = EventLinemodDetector(myTemplateManager, templateResponseThreshold=350)
 
     # start detection
     myEventData = EventsInETHZFormat(args.inputdata)
@@ -58,7 +61,15 @@ if __name__ == "__main__":
         mysbn = myEventData.PopOneTimeLimitedSbn(20000, 720, 1280)
         if (i % 10) != 0:
             continue
-        myTemplateDetector.DetectTemplatesSemiScaleInvariant(mysbn, minScale=0.4, maxScale=1.2, scaleMultiplier=1.2, debugPathRoot='/home/runqiu/tmptmp/debugEventLinemod/', dataSaveRoot='/media/runqiu/data/eventLinemodDatasets/validatorTraining', frameIndex=frameCount)
-        frameCount += 1
-        if frameCount >= 20:
-            break
+        aa = numpy.abs(mysbn)
+        maxNonZero = cv2.findNonZero(aa)
+        bb = aa[maxNonZero[:, 0, 1], maxNonZero[:, 0, 0]]
+        mildMaxValue = numpy.mean(bb) + numpy.std(bb) * 3
+        cc = mysbn * 127 / mildMaxValue
+        cc = numpy.clip(cc + 127, 0, 255).astype('uint8')
+
+        cv2.imwrite(os.path.join('/home/runqiu/tmptmp/eventobjectdetect-yolo-dataset/testsam', str(i).zfill(6) + '.png'), cc.astype('uint8'))
+        # myTemplateDetector.DetectTemplatesSemiScaleInvariant(mysbn, minScale=0.2, maxScale=0.42, scaleMultiplier=1.2, debugPathRoot='/home/runqiu/tmptmp/debugEventLinemod/', dataSaveRoot='/media/runqiu/data/eventLinemodDatasets/validatorTraining', frameIndex=frameCount)
+        # frameCount += 1
+        # if frameCount >= 20:
+        #     break
