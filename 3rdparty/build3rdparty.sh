@@ -1,5 +1,14 @@
+# build rapidjson
+cd rapidjson
+rm -r build/
+mkdir -p build && cd build
+mkdir -p rapidjsoninstall
+cmake -DCMAKE_BUILD_TYPE=RELEASE -DCMAKE_INSTALL_PREFIX=${PWD}/rapidjsoninstall/ -DRAPIDJSON_BUILD_DOC=OFF -DRAPIDJSON_BUILD_EXAMPLES=OFF -DRAPIDJSON_BUILD_TESTS=OFF ..
+make
+make install
+
 # build opencv
-cd opencv
+cd ../../opencv
 mkdir -p build && cd build
 cmake -DCMAKE_BUILD_TYPE=RELEASE -DCMAKE_INSTALL_PREFIX=./opencvinstall/ -DWITH_TBB=ON -DBUILD_NEW_PYTHON_SUPPORT=ON -DWITH_V4L=ON -DWITH_OPENGL=ON -DENABLE_FAST_MATH=1 -DCUDA_FAST_MATH=0 -DWITH_CUBLAS=0 -DBUILD_TIFF=ON ..  
 make -j8
