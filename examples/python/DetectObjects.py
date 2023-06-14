@@ -6,8 +6,6 @@ import os
 import cv2
 import time
 import numpy
-file_path = os.path.realpath(__file__)
-sys.path.append(os.path.join(file_path[:len(file_path) - len(file_path.split('/')[-1])], '../../', 'python/src/'))
 
 import tool_eventdetectobjects.logger.commonlogging as commonlogging
 from tool_eventdetectobjects.io.file_format.eventsinethzformat import EventsInETHZFormat
@@ -57,10 +55,8 @@ if __name__ == "__main__":
     # start detection
     myEventData = EventsInETHZFormat(args.inputdata)
     frameCount = 0
-    for i in range(100):
+    for i in range(1000000):
         mysbn = myEventData.PopOneTimeLimitedSbn(20000, 720, 1280)
-        if (i % 10) != 0:
-            continue
         aa = numpy.abs(mysbn)
         maxNonZero = cv2.findNonZero(aa)
         bb = aa[maxNonZero[:, 0, 1], maxNonZero[:, 0, 0]]
@@ -68,7 +64,7 @@ if __name__ == "__main__":
         cc = mysbn * 127 / mildMaxValue
         cc = numpy.clip(cc + 127, 0, 255).astype('uint8')
 
-        cv2.imwrite(os.path.join('/home/runqiu/tmptmp/eventobjectdetect-yolo-dataset/testsam', str(i).zfill(6) + '.png'), cc.astype('uint8'))
+        cv2.imwrite(os.path.join('/home/runqiu/tmptmp/eventobjectdetect-stereo-dataset/leftcam', str(i).zfill(6) + '.png'), cc.astype('uint8'))
         # myTemplateDetector.DetectTemplatesSemiScaleInvariant(mysbn, minScale=0.2, maxScale=0.42, scaleMultiplier=1.2, debugPathRoot='/home/runqiu/tmptmp/debugEventLinemod/', dataSaveRoot='/media/runqiu/data/eventLinemodDatasets/validatorTraining', frameIndex=frameCount)
         # frameCount += 1
         # if frameCount >= 20:
