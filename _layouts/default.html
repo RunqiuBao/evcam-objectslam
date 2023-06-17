@@ -39,7 +39,7 @@
         <hr>
         <section id="main_content">
             <nav>
-                <ul style="list-style: none;">
+                <ul>
                     {% for item in site.data.menu %}
                     <li><a class="{% if page.url == item.link %}active{% endif %}
                     " href = "{{item.link}}">{{item.title}}</a></li>
@@ -51,7 +51,7 @@
             <style>
                 nav ul {
                     display: flex;
-                    list-style: square;
+                    list-style: none;
                 }
                 /* nav ul li{
                     margin-right: 10px;
