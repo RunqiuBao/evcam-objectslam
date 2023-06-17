@@ -2,128 +2,28 @@
 layout: default
 ---
 
-**Event camera** captures spatial-temporal gradients of light intensity. The appearance of its output looks like this:
+**Event camera** captures spatial-temporal gradients of light intensity. A normal RGB image looks like this: <br>
+<img src="./assets/images/rgb-example.png" alt="RGB image sample." width="300" height="180" title="RGB image sample">
 <br>
-Denoting $L(x,y,t)$ as the light intensity at pixel $(x,y)$ and time $t$, instead of recording the light intensity, event cameras record the abrupt change in $L$. An event $e_i=(x_i, y_i, p_i, t_i)$ for pixel $(x_i, y_i)$ is triggered when
+, while output of an event camera looks like this:
+<br>
+<img src="./assets/images/event-example.png" alt="event data sample." width="300" height="180" title="Event data sample">
+<br>
+
+Denoting $`L(x,y,t)`$ as the light intensity at pixel $`(x,y)`$ and time $`t`$, instead of recording the light intensity, event cameras record the abrupt change in $`L`$. An event $`e_i=(x_i, y_i, p_i, t_i)`$ for pixel $`(x_i, y_i)`$ is triggered when
+<br>
 $$
     |\log{L(x_i, y_i, t_i)} - \log{L(x_i, y_i, t_{i-1})}| \geq C,
 $$
-where C is the constant for threshold. And $p_i$ is the sign of log brightness change. 
+<br>
+where C is the constant for threshold. And $`p_i`$ is the sign of log brightness change.
+<br>
 $$
 p_i = {\rm sign}(\log{L(x_i, y_i, t_i)}-\log{L(x_i, y_i, t_{i-1})}).
 $$
+<br>
 
+```
+Because event camera captures temporal gradients of light field intensity, it is much faster than normal integration-based camera!
+```
 <!-- [Link to another page](./another-page.html). -->
-
-
-# Header 1
-
-This is a normal paragraph following a header. GitHub is a code hosting platform for version control and collaboration. It lets you and others work together on projects from anywhere.
-
-## Header 2
-
-> This is a blockquote following a header.
->
-> When something is important enough, you do it even if the odds are not in your favor.
-
-### Header 3
-
-```js
-// Javascript code with syntax highlighting.
-var fun = function lang(l) {
-  dateformat.i18n = require('./lang/' + l)
-  return true;
-}
-```
-
-```ruby
-# Ruby code with syntax highlighting
-GitHubPages::Dependencies.gems.each do |gem, version|
-  s.add_dependency(gem, "= #{version}")
-end
-```
-
-#### Header 4
-
-*   This is an unordered list following a header.
-*   This is an unordered list following a header.
-*   This is an unordered list following a header.
-
-##### Header 5
-
-1.  This is an ordered list following a header.
-2.  This is an ordered list following a header.
-3.  This is an ordered list following a header.
-
-###### Header 6
-
-| head1        | head two          | three |
-|:-------------|:------------------|:------|
-| ok           | good swedish fish | nice  |
-| out of stock | good and plenty   | nice  |
-| ok           | good `oreos`      | hmm   |
-| ok           | good `zoute` drop | yumm  |
-
-### There's a horizontal rule below this.
-
-* * *
-
-### Here is an unordered list:
-
-*   Item foo
-*   Item bar
-*   Item baz
-*   Item zip
-
-### And an ordered list:
-
-1.  Item one
-1.  Item two
-1.  Item three
-1.  Item four
-
-### And a nested list:
-
-- level 1 item
-  - level 2 item
-  - level 2 item
-    - level 3 item
-    - level 3 item
-- level 1 item
-  - level 2 item
-  - level 2 item
-  - level 2 item
-- level 1 item
-  - level 2 item
-  - level 2 item
-- level 1 item
-
-### Small image
-
-![Octocat](https://github.githubassets.com/images/icons/emoji/octocat.png)
-
-### Large image
-
-![Branching](https://guides.github.com/activities/hello-world/branching.png)
-
-
-### Definition lists can be used with HTML syntax.
-
-<dl>
-<dt>Name</dt>
-<dd>Godzilla</dd>
-<dt>Born</dt>
-<dd>1952</dd>
-<dt>Birthplace</dt>
-<dd>Japan</dd>
-<dt>Color</dt>
-<dd>Green</dd>
-</dl>
-
-```
-Long, single-line code blocks should not wrap. They should horizontally scroll if they are too long. This line should be long enough to demonstrate this.
-```
-
-```
-The final element.
-```

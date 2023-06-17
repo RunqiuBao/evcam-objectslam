@@ -1,8 +1,8 @@
 - title: Home
-  link: /tool_detectobjects/
+  link: /tool_eventbasedobjectslam/
 
 - title: Contact
-  link: /tool_detectobjects/contact/
+  link: /tool_eventbasedobjectslam/contact/
 
 - title: Citation
-  link: /tool_detectobjects/citation/
+  link: /tool_eventbasedobjectslam/citation/

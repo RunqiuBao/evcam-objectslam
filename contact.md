@@ -5,4 +5,4 @@ permalink: /contact/
 
 ## Contact
 
-_yay_
+not yet.
