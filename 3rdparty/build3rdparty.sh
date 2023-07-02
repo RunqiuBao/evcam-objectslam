@@ -1,5 +1,25 @@
+git submodule update
+
+# build log4cxx
+(cd log4cxx && mkdir build
+# install apr1
+sudo apt install libapr1 libaprutil1 libapr1-dev libaprutil1-dev -y
+cd build
+cmake -DCMAKE_INSTALL_PREFIX:STRING=/home/runqiu/code/event_camera_repo/tools/tool_detectobjects/3rdparty/log4cxx/install/ ..
+make -j8
+make install)
+
+# build rapidjson
+cd rapidjson
+rm -r build/
+mkdir -p build && cd build
+mkdir -p rapidjsoninstall
+cmake -DCMAKE_BUILD_TYPE=RELEASE -DCMAKE_INSTALL_PREFIX=${PWD}/rapidjsoninstall/ -DRAPIDJSON_BUILD_DOC=OFF -DRAPIDJSON_BUILD_EXAMPLES=OFF -DRAPIDJSON_BUILD_TESTS=OFF ..
+make
+make install
+
 # build opencv
-cd opencv
+cd ../../opencv
 mkdir -p build && cd build
 cmake -DCMAKE_BUILD_TYPE=RELEASE -DCMAKE_INSTALL_PREFIX=./opencvinstall/ -DWITH_TBB=ON -DBUILD_NEW_PYTHON_SUPPORT=ON -DWITH_V4L=ON -DWITH_OPENGL=ON -DENABLE_FAST_MATH=1 -DCUDA_FAST_MATH=0 -DWITH_CUBLAS=0 -DBUILD_TIFF=ON ..  
 make -j8

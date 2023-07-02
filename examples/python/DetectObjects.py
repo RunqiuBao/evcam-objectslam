@@ -313,7 +313,7 @@ if __name__ == "__main__":
 
     # make sure output path exists
     os.makedirs(args.outputpath, exist_ok=True)
-    
+
     # config logger
     commonlogging.ConfigureRootLogger(os.path.join(args.outputpath, 'mylog.txt'), level=args.loglevel)
 

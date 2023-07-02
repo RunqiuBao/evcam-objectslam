@@ -5,8 +5,11 @@
 #include <numeric>
 #include <random>
 #include <cmath>
+#include <filesystem>
 #include <stdexcept>
 
+#include <rapidjson/document.h>
+#include <rapidjson/filereadstream.h>
 #include <opencv2/opencv.hpp>
 #include <opencv2/imgproc.hpp>
 #include <Eigen/Core>
@@ -20,6 +23,18 @@ namespace tooldetectobject{
 struct Valid2DPoint{
     quadtree::Box<float> zeroSizeBox;
     std::size_t id;
+};
+
+class TemplateInfo{
+
+public:
+    TemplateInfo(const size_t templId, const Eigen::Matrix4f camInObjectTransformation)
+    :_templId(templId), _camInObjectTransformation(camInObjectTransformation)
+    {}
+
+    size_t _templId;
+    Eigen::Matrix4f _camInObjectTransformation;
+
 };
 
 
@@ -58,26 +73,13 @@ private:
     int _imageH;
     float _scaleFactorCache;
 
-    static Eigen::MatrixXi _ComputeImagePatchFeatureVector(
-        const cv::Mat& inputImage,
-        const float gradMagnitudeThreshold,
-        const Eigen::MatrixXi& keyPointsX,
-        const Eigen::MatrixXi& keyPointsY
-    );
-
-    static const int _ComputeQuantizedGradientOrientation(
-        const cv::Mat imagePatch,
-        const int gradMagnitudeThreshold=100,
-        const int numSector=8
-    );
-
 };
 
 
 class EventLineModTemplateManager{
 
 public:
-    EventLineModTemplateManager(){}
+    EventLineModTemplateManager(const std::string templatePath);
 
 private:
     std::vector<EventLineModTemplate> _templateList;

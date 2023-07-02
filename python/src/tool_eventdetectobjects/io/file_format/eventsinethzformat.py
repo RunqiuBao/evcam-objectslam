@@ -19,7 +19,7 @@ class EventsInETHZFormat(object):
         if exists(filePath):
             self._filePath = filePath
         else:
-            raise FileNotFoundError("data file does not exit: %s", filePath)
+            raise FileNotFoundError("data file does not exist: %s", filePath)
         
         self._textFile = open(self._filePath, "r")
         lineString, self._textFile = self._ReadUntilFirstDataLine(self._textFile)  # throw away one line
