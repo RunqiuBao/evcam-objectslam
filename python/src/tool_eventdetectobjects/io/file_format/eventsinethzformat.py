@@ -37,14 +37,47 @@ class EventsInETHZFormat(object):
         event = {'time': float(lineList[0]), 'x': int(lineList[1]), 'y': int(lineList[2]), 'polarity': int(lineList[3])}
         return event  # timestamp, x, y, polarity(0, 1)
 
-    def PopOneTimeLimitedSbn(self, maxEventNumberPerFrame, imageSizeH, imageSizeW, timeLimit=0.1):
+    @staticmethod
+    def PopOneTimeLimitedSbn(
+        newevent=None,
+        indexEvent=None,
+        timeStampStart=None,
+        maxEventNumberPerFrame=None,
+        timeStampLimit=None,
+        timeLimit=None
+    ):
+        if timeStampLimit is not None:
+            if float(newevent[0]) >= timeStampLimit:
+                return True
+        else:
+            if (float(newevent[0]) - timeStampStart) >= timeLimit:
+                logger.error("Event stacking has overpassed time limit %.6f sec.", timeLimit)
+                return True
+            elif indexEvent >= maxEventNumberPerFrame:
+                return True
+        return False
+
+    @staticmethod
+    def PopOneSbt(
+        newevent=None,
+        indexEvent=None,
+        timeStampStart=None,
+        maxEventNumberPerFrame=None,
+        timeStampLimit=None,
+        timeLimit=None
+    ):
+        if (float(newevent[0]) - timeStampStart) >= timeLimit:
+            return True
+        return False
+
+    def StackOneFrame(self, funcBreak, imageSizeH, imageSizeW, maxEventNumberPerFrame=None, timeLimit=None, timeStampLimit=None):
         ts = []
         xs = []
         ys = []
         ps = []
         indexEvent = 0
         timeStampStart = None
-        while indexEvent < maxEventNumberPerFrame:
+        while True:
             lineString = self._textFile.readline()
             if lineString == '':
                 self._isEndOfFile = True
@@ -52,8 +85,7 @@ class EventsInETHZFormat(object):
             newevent = lineString.split(' ')  # (ts, x, y, p)
             if timeStampStart is None:
                 timeStampStart = float(newevent[0])
-            if (float(newevent[0]) - timeStampStart) >= timeLimit:
-                logger.error("Event stacking has overpassed time limit %.6f sec.", timeLimit)
+            if funcBreak(newevent=newevent, indexEvent=indexEvent, timeStampStart=timeStampStart, maxEventNumberPerFrame=maxEventNumberPerFrame, timeStampLimit=timeStampLimit, timeLimit=timeLimit):
                 break
             ts.append(float(newevent[0]))
             xs.append(int(newevent[1]))
@@ -69,8 +101,9 @@ class EventsInETHZFormat(object):
         ps = numpy.array(ps)
         sbn = numpy.zeros((imageSizeH, imageSizeW), dtype='int')
         psCentered = numpy.where(ps==0, -1, ps)
-        numpy.add.at(sbn, (ys, xs), psCentered)
-        return sbn
+        if ts.size > 0:
+            numpy.add.at(sbn, (ys, xs), psCentered)
+        return sbn, float(newevent[0])
 
     def ResetInputFile(self):
         self._textFile.seek(0, 0)

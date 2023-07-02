@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 
 class EventLinemodTemplate(object):
     _image = None
+    _imageLaplacian = None
     _sparsity = None
     _simulationCamInObjectTransform = None
     _templateId = None
@@ -32,7 +33,7 @@ class EventLinemodTemplate(object):
         self._imageW = self._image.shape[1]
         templateMask = self._image >= 10
         self._image[~templateMask] = 0
-        self._featurePointsX, self._featurePointsY, self._featureVector, self._sparsity = EventLinemodTemplate.GetFeatureVector(self._image)
+        self._featurePointsX, self._featurePointsY, self._featureVector, self._sparsity, self._imageLaplacian = EventLinemodTemplate.GetFeatureVector(self._image)
         self._scaleFactorCache = resize
 
     def RescaleThisTemplate(self, scaleFactor):  # scaleFactor is a absolute scale.
@@ -41,15 +42,15 @@ class EventLinemodTemplate(object):
         self._image = cv2.resize(self._image.astype('uint8'), dsize=None, fx=scaleFactorRelative, fy=scaleFactorRelative, interpolation=cv2.INTER_CUBIC)
         self._imageH = self._image.shape[0]
         self._imageW = self._image.shape[1]
-        self._featurePointsX, self._featurePointsY, self._featureVector, self._sparsity = EventLinemodTemplate.GetFeatureVector(self._image)
+        self._featurePointsX, self._featurePointsY, self._featureVector, self._sparsity, self._imageLaplacian = EventLinemodTemplate.GetFeatureVector(self._image)
         self._scaleFactorCache = scaleFactor
 
     @property
-    def originalH(self):
+    def templateH(self):
         return self._image.shape[0]
 
     @property
-    def originalW(self):
+    def templateW(self):
         return self._image.shape[1]
 
     @property
@@ -115,7 +116,7 @@ class EventLinemodTemplate(object):
         distributedPointsX, distributedPointsY = numpy.array(distributedPointsX), numpy.array(distributedPointsY)
         # compute feature vector
         featureVector = EventLinemodTemplate._ComputeImagePatchFeatureVector(imageLaplacian, gradMagnitudeThreshold, distributedPointsX, distributedPointsY)
-        return distributedPointsX, distributedPointsY, featureVector, templateSparsity
+        return distributedPointsX, distributedPointsY, featureVector, templateSparsity, imageLaplacian
 
     ## BFS
     @staticmethod
@@ -163,7 +164,11 @@ class EventLinemodTemplate(object):
         return self._featureVector
 
     @staticmethod
-    def ComputeQuantizedGradientOrientation(imagePatch, numSector=8, gradMagnitudeThreshold=100):
+    def ComputeQuantizedGradientOrientation(
+        imagePatch,
+        numSector=8,
+        gradMagnitudeThreshold=100
+    ):
         gray_x = cv2.Sobel(imagePatch, cv2.CV_32F, 1, 0, ksize=3)[1:-1, 1:-1]
         gray_y = cv2.Sobel(imagePatch, cv2.CV_32F, 0, 1, ksize=3)[1:-1, 1:-1]
         grad = gray_y / gray_x
@@ -220,12 +225,12 @@ class EventLinemodTemplate(object):
             vizGrads = {
                 0: numpy.array([0, 0]),
                 1: numpy.array([1, 5]),
-                2: numpy.array([2, 4]),
-                3: numpy.array([4, 2]),
+                2: numpy.array([3, 4]),
+                3: numpy.array([4, 3]),
                 4: numpy.array([5, 1]),
                 5: numpy.array([5, -1]),
-                6: numpy.array([4, -2]),
-                7: numpy.array([2, -4]),
+                6: numpy.array([4, -3]),
+                7: numpy.array([3, -4]),
                 8: numpy.array([1, -5])
             }
         for indexPoint, localCenter in enumerate(zip(featurePointsY, featurePointsX)):
@@ -244,11 +249,44 @@ class EventLinemodTemplate(object):
                 debugInfo['displayImage'] = cv2.arrowedLine(debugInfo['displayImage'], numpy.array(localCenter)[::-1], numpy.array(localCenter)[::-1] + vizGrads[inputFeatureVector[indexPoint]], color, thickness) 
         return inputFeatureVector
 
+    @staticmethod
+    def _ComputeDenseLinemod(
+        imagePatch,
+        gradMagnitudeThreshold
+    ):
+        gradX = cv2.Sobel(imagePatch, cv2.CV_32F, 1, 0, ksize=-1)
+        gradY = cv2.Sobel(imagePatch, cv2.CV_32F, 0, 1, ksize=-1)
+        grad = gradY / gradX
+        gradMagnitude = numpy.linalg.norm(numpy.concatenate([gradX[:, :, numpy.newaxis], gradY[:, :, numpy.newaxis]], axis=2), axis=2)
+        numSector = 8
+        sectorCenterTangentValues = numpy.tile(
+            numpy.array([
+                0.5 * numpy.pi / numSector,
+                1.5 * numpy.pi / numSector,
+                2.5 * numpy.pi / numSector,
+                3.5 * numpy.pi / numSector,
+                -3.5 * numpy.pi / numSector,
+                -2.5 * numpy.pi / numSector,
+                -1.5 * numpy.pi / numSector,
+                -0.5 * numpy.pi / numSector
+            ]),
+            (grad.shape[0], grad.shape[1], 1)
+        )
+        linemodMap = numpy.argmin(
+            numpy.abs(
+                numpy.repeat(numpy.arctan(grad)[:, :, numpy.newaxis], 8, axis=2) - sectorCenterTangentValues
+            ),
+            axis=2
+        ) + 4
+        linemodMap = numpy.where(linemodMap > 8, linemodMap - 8, linemodMap)
+        linemodMap[numpy.where(gradMagnitude < gradMagnitudeThreshold)] = 0
+        linemodMap[numpy.isnan(grad)] = 0
+        return linemodMap
+
 
 class EventLinemodTemplateManager(object):
     _templateList = None
     _templateIdList = None
-    _scale = None
     # make this class an iterator
     _templatePtr = None
     
@@ -280,18 +318,8 @@ class EventLinemodTemplateManager(object):
         return self._templateList[self._templateIdList.index(templateId)]
 
     @property
-    def scale(self):
-        return self._scale
-
-    @property
     def length(self):
         return len(self._templateList)
-
-    @scale.setter
-    def scale(self, value):
-        if value < 0:
-            raise ValueError("scale cannot be negative.")
-        self._scale = value
 
     # make this class an iterator
     def __iter__(self):
@@ -303,10 +331,6 @@ class EventLinemodTemplateManager(object):
             self._templatePtr = None
             raise StopIteration()
         template = self._templateList[self._templatePtr]
-        if template.scaleFactor == self._scale:
-            pass
-        else:            
-            template.RescaleThisTemplate(self._scale)
         self._templatePtr += 1
         return template
 
