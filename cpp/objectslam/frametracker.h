@@ -1,3 +1,5 @@
+#include "camera.h"
+
 namespace eventobjectslam{
 
 // tracker state
@@ -9,13 +11,17 @@ enum class Tracker_Status {
 };
 
 
-class Tracker {
+class FrameTracker {
 
 public:
     // constructor
-    Tracker(system* system, )
+    FrameTracker(camera::base* camera);
+
+
+private:
+    const camera::base* _camera;
 
 };
 
 
-}
+};  // end of namespace eventobjectslam

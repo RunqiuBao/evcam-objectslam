@@ -3,3 +3,4 @@ include_directories($<TARGET_PROPERTY:log4cxx,INTERFACE_INCLUDE_DIRECTORIES> "${
 add_subdirectory(common)
 add_subdirectory(pybind)
 add_subdirectory(eventlinemod)
+add_subdirectory(objectslam)
