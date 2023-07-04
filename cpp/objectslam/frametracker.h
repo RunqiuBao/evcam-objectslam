@@ -1,6 +1,7 @@
 #ifndef EVENTOBJECTSLAM_FRAMETRACKER_H
 #define EVENTOBJECTSLAM_FRAMETRACKER_H
 
+#include "objectslam.h"
 #include "camera.h"
 
 namespace eventobjectslam{
@@ -20,6 +21,7 @@ public:
     // constructor
     FrameTracker(camera::CameraBase* camera);
 
+    bool DoBruteForceMatchBasedTrack(frame& currentFrame, const frame& lastFrame, const Mat44_t& velocity) const;
 
 private:
     const camera::CameraBase* _camera; 

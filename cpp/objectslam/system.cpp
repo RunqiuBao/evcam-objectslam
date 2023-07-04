@@ -8,10 +8,9 @@ namespace eventobjectslam {
 
 void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
     // the dataset dir includes `leftcam` and `rightcam` and `colorconeInfo.json`
-    // in each cam folder, it includes `*.png`, `detectionId*/(yolos, including linemod based template selection)`, `semanticDescriptorRules.json`
-    // `semanticDescriptorRules.json` can be: 
-    // (1) cone: left, right, front side, each have range and accuracy definition; distance to start; distance to light source. 
-    // (2) light source: left right front side.
+    // in each cam folder, it includes `*.png`, `detectionId*/(yolos, including linemod based template selection)`
+    
+    // relocalization: when relocalization happens, assume it always see old objects.
     filesystem::path stereoSequencePath = sStereoSequencePath;
     for (const auto& oneFilePath : filesystem::directory_iterator(stereoSequencePath)) {
         if (filesystem::is_regular_file(oneFilePath) && oneFilePath.extension() == '.png') {
