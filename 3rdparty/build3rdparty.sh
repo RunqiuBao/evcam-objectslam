@@ -1,4 +1,5 @@
-git submodule update
+(cd ..
+git submodule update --init --recursive)
 
 # build log4cxx
 (cd log4cxx && mkdir build

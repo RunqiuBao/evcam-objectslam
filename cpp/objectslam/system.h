@@ -9,35 +9,31 @@ namespace eventobjectslam {
 class SystemConfig {
 public:
     //! Constructor
-    SystemConfig(const std::string& configFilePath){
-        _configFilePath = configFilePath;
-        // Open the JSON file.
-        rapidjson::FileReadStream fstream(_configFilePath);
-        _jsonConfigNode.ParseStream(fstream);
-    }
+    SystemConfig(const std::string& configFilePath);
+    SystemConfig(const SystemConfig& config);
 
     //! Destructor
-    ~SystemConfig();
+    ~SystemConfig(){};
 
     //! path to config file
-    const std::string _configFilePath;
+    std::string _configFilePath;
 
     //! json node
-    const rapidjson::Document _jsonConfigNode;
+    rapidjson::Document _jsonConfigNode;
 };
 
 class SLAMSystem {
 
 public:
-    const std::shared_ptr<SystemConfig> _cfg;
+    std::shared_ptr<SystemConfig> _cfg;
 
-    SLAMSystem(const std::shared_ptr<SystemConfig>& cfg);
+    SLAMSystem(const std::shared_ptr<SystemConfig>& cfg)
+    :_cfg(cfg)
+    {}
 
-    ~SLAMSystem();
+    ~SLAMSystem(){};
 
-    void TestTrackStereoSequence(
-        const std::string stereoSequencePath
-    );
+    void TestTrackStereoSequence(const std::string stereoSequencePath);
 };
 
 }

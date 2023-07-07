@@ -57,7 +57,7 @@ function parse_args() {
                 LOG4CXX_LIB_PATH="$2"
                 shift 2
                 ;;
-            -s|--addpaths)
+            -a|--addpaths)
                 isAddPaths=true
                 shift 1  # only need to shift by 1 as this is a store_true arguments.
                 ;;

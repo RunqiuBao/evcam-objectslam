@@ -3,6 +3,7 @@
 
 #include "objectslam.h"
 #include "camera.h"
+#include "frame.h"
 
 namespace eventobjectslam{
 
