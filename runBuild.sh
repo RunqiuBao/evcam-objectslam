@@ -8,6 +8,7 @@ INSTALL_PATH="/home/runqiu/code/event_camera_repo/tools/tool_detectobjects/tdoin
 LOG4CXX_LIB_PATH="/home/runqiu/code/event_camera_repo/tools/tool_detectobjects/3rdparty/log4cxx/install/lib"
 PYTHONPACKAGE_SRC_PATH="/home/runqiu/code/event_camera_repo/tools/tool_detectobjects/python/src"
 isAddPaths=false
+isInstallPythonPackage=false
 
 # ================================================================================================================================================== #
 # ================================================================= Displays usage ================================================================= #
@@ -22,11 +23,14 @@ function display_help() {
     echo "-i,    --installpath              Define the path to install the library. By default is '/home/runqiu/code/event_camera_repo/tools/tool_detectobjects/tdoinstall'"
     echo "-l,    --log4cxxlibpath           Define the path to the installed lib path of log4cxx. By default is '/home/runqiu/code/event_camera_repo/tools/tool_detectobjects/3rdparty/log4cxx/install/lib'"
     echo "-p,    --pypackagepath            Define the path to the python package source dir. By default is '/home/runqiu/code/event_camera_repo/tools/tool_detectobjects/python/src'"
+    echo "-P,   --installpythonpackage     Whether to install the python package or not. By default False."
     echo "-a,    --addpaths                 Add shared library paths to LD_LIBRARY_PATH. By default is false."
     echo
     echo -e "${GREEN}Example usages: ${NC}"
-    echo -e "${GREEN}  source runBuild.sh -a -i /home/runqiu/code/event_camera_repo/tools/tool_detectobjects/tdoinstall ${NC}"
-    echo -e "${GREEN}  Note: source runBuild.sh to make change public, -a to add shared libs paths to LD_LIBRARY_PATH ${NC}"
+    echo -e "${GREEN}  source runBuild.sh -a -i -P /home/runqiu/code/event_camera_repo/tools/tool_detectobjects/tdoinstall ${NC}"
+    echo -e "${GREEN}  Note: source runBuild.sh at the first build to make addPaths global; -a to add shared libs paths to LD_LIBRARY_PATH ${NC}"
+    echo -e "${GREEN}  Note: If you want to run executable in one terminal, need to source this script in that terminal. ${NC}"
+
 }
 
 # ================================================================================================================================================== #
@@ -53,12 +57,20 @@ function parse_args() {
                 INSTALL_PATH="$2"
                 shift 2
                 ;;
+            -a|--addpaths)
+                isAddPaths=true
+                shift 1  # only need to shift by 1 as this is a store_true arguments.
+                ;;
             -l|--log4cxxlibpath)
                 LOG4CXX_LIB_PATH="$2"
                 shift 2
                 ;;
-            -a|--addpaths)
-                isAddPaths=true
+            -p|--pypackagepath)
+                PYTHONPACKAGE_SRC_PATH="$2"
+                shift 2
+                ;;
+            -P|--installpythonpackage)
+                isInstallPythonPackage=true
                 shift 1  # only need to shift by 1 as this is a store_true arguments.
                 ;;
             --)
@@ -81,8 +93,9 @@ sudo apt-get install python3-dev
 # install deps
 pip install -r requirementspy.txt
 
-read -p "DO you want to install the python package 'tool_eventdetectobjects' with pip?(y/n)" answer
-if [[ "$answer" == [yY] ]]; then
+# read -p "DO you want to install the python package 'tool_eventdetectobjects' with pip?(y/n)" answer
+# if [[ "$answer" == [yY] ]]; then
+if $isInstallPythonPackage; then
   (cd python
   python3 -m build
   cd dist/
@@ -90,10 +103,10 @@ if [[ "$answer" == [yY] ]]; then
       echo 'delete existing one'
       python3 -m pip uninstall tool_eventdetectobjects
   fi
-  echo 'installing tool_eventdetectobjects...'
+  echo '[Install python package] installing tool_eventdetectobjects...'
   python3 -m pip install tool_eventdetectobjects-0.0.1-py3-none-any.whl)
 else
-  echo 'skipping pip install 'tool_eventdetectobjects''
+  echo '[Install python package] skipping pip install 'tool_eventdetectobjects''
 fi
 
 
@@ -101,11 +114,11 @@ fi
 if $isAddPaths; then
     export LD_LIBRARY_PATH=${INSTALL_PATH}/lib:${LD_LIBRARY_PATH}
     export LD_LIBRARY_PATH=${LOG4CXX_LIB_PATH}:${LD_LIBRARY_PATH}
-    echo -e "LD_LIBRARY_PATH: ${LD_LIBRARY_PATH}"
+    echo -e "[Add lib path & python src path] LD_LIBRARY_PATH: ${LD_LIBRARY_PATH}"
     # add paths for python packages
     export PYTHONPATH="${PYTHONPACKAGE_SRC_PATH}:$PYTHONPATH"
 else
-    echo -e "Skipping source paths"
+    echo -e "[Add lib path & python src path] Skipping add paths."
 fi
 
 (mkdir -p build/ && cd build
