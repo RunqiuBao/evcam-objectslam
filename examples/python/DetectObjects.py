@@ -1,6 +1,7 @@
 # import tool_eventdetectobjects.logger.commonlogging as commonlogging
 # author: bao@robot.u-tokyo.ac.jp
 
+from cgitb import small
 import sys
 import os
 from urllib import response
@@ -88,53 +89,6 @@ def ResizeBBoxAccordingToTemplate(bbox, oneTemplate):
     ]
     return newbbox, scaleFactor
 
-
-def SelectTemplateByEventLinemod(sceneImage, bbox, myTemplateManager, sceneImageShape):
-    smallestScore = sys.float_info.max
-    indexSmallestScore = 0
-    debugInfo = {}
-    for indexTemplate in range(myTemplateManager.length):
-        oneTemplate = copy.deepcopy(myTemplateManager.GetTemplate(indexTemplate))
-        # use eventlinemod to select template
-        newbbox, additionalScaleFactorForTemplate = ResizeBBoxAccordingToTemplate(bbox, oneTemplate)
-        oneTemplate.RescaleThisTemplate(oneTemplate.scaleFactor * additionalScaleFactorForTemplate)
-        templateH, templateW = oneTemplate.templateH, oneTemplate.templateW
-        minY = round(newbbox[1] - templateH * 0.5)
-        maxY = minY + templateH
-        minX = round(newbbox[0] - templateW * 0.5)
-        maxX = minX + templateW
-        if maxY > sceneImageShape[0]:
-            biaxY = maxY - sceneImageShape[0]
-            minY -= biaxY
-            maxY -= biaxY
-        if minY < 0:
-            biaxY = 0 - minY
-            minY += biaxY
-            maxY += biaxY
-        if maxX > sceneImageShape[1]:
-            biaxX = maxX - sceneImageShape[1]
-            minX -= biaxX
-            maxX -= biaxX
-        if minX < 0:
-            biaxX = 0 - minX
-            minX += biaxX
-            maxX +=biaxX
-        scanWindow = sceneImage[minY:maxY, minX:maxX]
-        windowFeatureVector = oneTemplate.ComputeImagePatchFeatureVector(scanWindow, gradMagnitudeThreshold=5, debugInfo=debugInfo)
-        pixelResponse = numpy.zeros_like(windowFeatureVector)
-        zeroMask = numpy.zeros_like(windowFeatureVector)
-        zeroMask[numpy.where(windowFeatureVector == 0)] = 1
-        zeroMask = zeroMask.astype('bool')
-        pixelResponse[zeroMask] = 8
-        pixelResponse[~zeroMask] = numpy.abs(windowFeatureVector[~zeroMask] - oneTemplate.featureVector[~zeroMask])
-        if pixelResponse.sum() < smallestScore:
-            smallestScore = pixelResponse.sum()
-            indexSmallestScore = indexTemplate
-            debugInfo['bestTemplateDebug'] = debugInfo['displayImage']
-        # print("indexTemplate {}, linemod score: {}".format(indexTemplate, pixelResponse.sum()))
-    return indexSmallestScore, smallestScore, debugInfo
-
-
 def SelectTemplateByCCTM(sceneImagePreprocessed, bbox, myTemplateManager, sceneImageShape):
     largestScore = 0
     indexLargestScore = 0
@@ -184,21 +138,70 @@ def SelectTemplateByCCTM(sceneImagePreprocessed, bbox, myTemplateManager, sceneI
     return indexLargestScore, largestScore, debugInfo
 
 
-def DoTemplateRecognitionForDetections(detections, image, myTemplateManager, debugDir=None, imageName=None):
+def SelectTemplateByEventLinemod(sceneImage, bbox, myTemplateManager, sceneImageShape):
+    smallestScore = sys.float_info.max
+    indexSmallestScore = 0
+    debugInfo = {}
+    for indexTemplate in range(myTemplateManager.length):
+        oneTemplate = copy.deepcopy(myTemplateManager.GetTemplate(indexTemplate))
+        # use eventlinemod to select template
+        newbbox, additionalScaleFactorForTemplate = ResizeBBoxAccordingToTemplate(bbox, oneTemplate)
+        oneTemplate.RescaleThisTemplate(oneTemplate.scaleFactor * additionalScaleFactorForTemplate)
+        templateH, templateW = oneTemplate.templateH, oneTemplate.templateW
+        minY = round(newbbox[1] - templateH * 0.5)
+        maxY = minY + templateH
+        minX = round(newbbox[0] - templateW * 0.5)
+        maxX = minX + templateW
+        if maxY > sceneImageShape[0]:
+            biaxY = maxY - sceneImageShape[0]
+            minY -= biaxY
+            maxY -= biaxY
+        if minY < 0:
+            biaxY = 0 - minY
+            minY += biaxY
+            maxY += biaxY
+        if maxX > sceneImageShape[1]:
+            biaxX = maxX - sceneImageShape[1]
+            minX -= biaxX
+            maxX -= biaxX
+        if minX < 0:
+            biaxX = 0 - minX
+            minX += biaxX
+            maxX +=biaxX
+        scanWindow = sceneImage[minY:maxY, minX:maxX]
+        windowFeatureVector = oneTemplate.ComputeImagePatchFeatureVector(scanWindow, gradMagnitudeThreshold=5, debugInfo=debugInfo)
+        pixelResponse = numpy.zeros_like(windowFeatureVector)
+        zeroMask = numpy.zeros_like(windowFeatureVector)
+        zeroMask[numpy.where(windowFeatureVector == 0)] = 1
+        zeroMask = zeroMask.astype('bool')
+        pixelResponse[zeroMask] = 8
+        pixelResponse[~zeroMask] = numpy.abs(windowFeatureVector[~zeroMask] - oneTemplate.featureVector[~zeroMask])
+        if pixelResponse.sum() < smallestScore:
+            smallestScore = pixelResponse.sum()
+            indexSmallestScore = indexTemplate
+            debugInfo['bestTemplateDebug'] = debugInfo['displayImage']
+        # print("indexTemplate {}, linemod score: {}".format(indexTemplate, pixelResponse.sum()))
+    return indexSmallestScore, smallestScore, debugInfo
+
+
+def DoTemplateRecognitionForDetections(detections, image, myTemplateManager, debugDir=None, imageName=None, scoreThreshold=300):
     imageHeight, imageWidth = image.shape
     imageForDebug = copy.deepcopy(image)
     templatedDetections = []
     image = cv2.GaussianBlur(image, (3, 3), 0)
-    imageLineMod = DoDenseLineMod(image, gradMagnitudeThreshold=20)
-    imageForDebug2 = (copy.deepcopy(imageLineMod) * 31).astype('uint8')  # for visualization
-    # TODO: 
-    # 1. 利用地面把所有歪了的检测拉直
-    # 2. 利用语意（侧面还是正面，离起点大概多少距离）匹配桩
-    # 3. 假设小车的速度模型进行tracking
+    isUseCCTM = False
+    if isUseCCTM:
+        imageLineMod = DoDenseLineMod(image, gradMagnitudeThreshold=20)
+        imageForDebug2 = (copy.deepcopy(imageLineMod) * 31).astype('uint8')  # for visualization
+    else:
+        imageForDebug2 = copy.deepcopy(image)
+
     for indexDetection, detectionOrigin in enumerate(detections):
         detection = detectionOrigin.split(' ')
+        isNewLineAtEnd = False
         if detection[-1][-1] == '\n':
             detection[-1] = detection[-1][:-1]
+            isNewLineAtEnd = True
         bboxWidth = float(detection[3]) * imageWidth
         bboxHeight = float(detection[4]) * imageHeight
         bbox = [
@@ -209,7 +212,9 @@ def DoTemplateRecognitionForDetections(detections, image, myTemplateManager, deb
             float(detection[1]) * imageWidth + 0.5 * bboxWidth,
             float(detection[2]) * imageHeight + 0.5 * bboxHeight
         ]
-        indexSmallestShapeDifference, smallestScore, debugInfo = SelectTemplateByCCTM(imageLineMod, bbox, myTemplateManager, imageLineMod.shape)
+        indexSmallestShapeDifference, smallestScore, debugInfo = SelectTemplateByEventLinemod(imageLineMod if isUseCCTM else image, bbox, myTemplateManager, image.shape)
+        if smallestScore > scoreThreshold:
+            continue
         bestTemplate = copy.deepcopy(myTemplateManager.GetTemplate(indexSmallestShapeDifference))
         newbbox, additionalScaleFactorForTemplate = ResizeBBoxAccordingToTemplate(bbox, bestTemplate)
         bestTemplate.RescaleThisTemplate(bestTemplate.scaleFactor * additionalScaleFactorForTemplate)
@@ -254,6 +259,22 @@ def DoTemplateRecognitionForDetections(detections, image, myTemplateManager, deb
             templatedDetections.append(detectionOrigin[:-1] + " " + str(indexSmallestShapeDifference) + "\n")
         else:
             templatedDetections.append(detectionOrigin + " " + str(indexSmallestShapeDifference))
+
+        # write template index to yolo results
+        pathTemplateIndexWithYoloResults = os.path.join(debugDir, '..', 'detectionID0', imageName + '.txt')
+        if os.path.isfile(pathTemplateIndexWithYoloResults):
+            with open(pathTemplateIndexWithYoloResults, 'a') as f:
+                detection.append(str(indexSmallestShapeDifference))
+                if isNewLineAtEnd:
+                    detection[-1] = detection[-1] + '\n'
+                f.write(' '.join(detection))
+        else:
+            with open(pathTemplateIndexWithYoloResults, 'w') as f:
+                detection.append(str(indexSmallestShapeDifference))
+                if isNewLineAtEnd:
+                    detection[-1] = detection[-1] + '\n'
+                f.write(' '.join(detection))
+
     if debugDir is not None:
         cv2.imwrite(os.path.join(debugDir, imageName + '.png'), imageForDebug)
         cv2.imwrite(os.path.join(debugDir, imageName + '_linemod.png'), imageForDebug2)
@@ -279,10 +300,6 @@ def SaveSbn_ForLoopRoutine(i, myEventData, lastTimeStampRight):
 def DoEventlinemodDetection_ForLoopRoutine(myTemplateDetector, mysbn, frameCount):
     myTemplateDetector.DetectTemplatesSemiScaleInvariant(mysbn, minScale=0.4, maxScale=1.2, scaleMultiplier=1.2, debugPathRoot='/home/runqiu/tmptmp/debugEventLinemod/', dataSaveRoot='/media/runqiu/data/eventLinemodDatasets/validatorTraining', frameIndex=frameCount)
     frameCount += 1
-
-
-def DoTemplateRecognitionOnYoloResults_ForLoopRoutine():
-    pass
 
 
 if __name__ == "__main__":
@@ -329,12 +346,12 @@ if __name__ == "__main__":
     # load yolo detection results
     imageNames = glob.glob(os.path.join(args.yoloresultpath, 'leftcam', '*.png'))
     imageNames.sort()
-    for imageName in imageNames:
+    for indexImage, imageName in enumerate(imageNames):
         starttime = time.time()
         imageName = os.path.basename(imageName)
         if not (os.path.isfile(os.path.join(args.yoloresultpath, 'leftcam', 'labelsYolo', imageName.split('.png')[0] + '.txt')) and os.path.isfile(os.path.join(args.yoloresultpath, 'rightcam', 'labelsYolo', imageName.split('.png')[0] + '.txt'))):
             continue
-        
+
         leftCamImage = cv2.imread(os.path.join(args.yoloresultpath, 'leftcam', imageName), cv2.IMREAD_GRAYSCALE)
         rightCamImage = cv2.imread(os.path.join(args.yoloresultpath, 'rightcam', imageName), cv2.IMREAD_GRAYSCALE)
         with open(os.path.join(args.yoloresultpath, 'leftcam', 'labelsYolo', imageName.split('.png')[0] + '.txt'), 'r') as f:

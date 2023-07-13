@@ -66,7 +66,16 @@ class EventLinemodTemplate(object):
         return self._scaleFactorCache
 
     @staticmethod
-    def GetFeatureVector(image, numFeaturePoints=64, maxNumPointsQuadtreeNode=10, gradMagnitudeThreshold=100, isNoiseThreshold=40):
+    def ComputeImageSparsity(image, isNoiseThreshold):
+        imageMask = numpy.where(numpy.abs(image) >= isNoiseThreshold, 255, 0)
+        kernels = []
+        kernels.append(numpy.ones((3, 3), numpy.uint8))
+        imageMask = cv2.morphologyEx(imageMask.astype('uint8'), cv2.MORPH_CLOSE, kernels[0])
+        imageSparsity = (imageMask).sum() / (imageMask.shape[0] * imageMask.shape[1] * 255)
+        return imageSparsity
+
+    @staticmethod
+    def GetFeatureVector(image, numFeaturePoints=64, maxNumPointsQuadtreeNode=6, gradMagnitudeThreshold=100, isNoiseThreshold=40):
         '''
         Randomized and distributed N feature points forming as a featured vector
         '''
@@ -83,10 +92,6 @@ class EventLinemodTemplate(object):
         # plt.savefig('/media/runqiu/data/eventLinemodDatasets/templatesInLaplacian/{}.png'.format(str(countTemplate).zfill(6)), dpi=1)
 
         imageLaplacianMask = numpy.where(numpy.abs(imageLaplacian) >= isNoiseThreshold, 255, 0)
-        kernels = []
-        kernels.append(numpy.ones((3, 3), numpy.uint8))
-        imageLaplacianMask = cv2.morphologyEx(imageLaplacianMask.astype('uint8'), cv2.MORPH_CLOSE, kernels[0])
-        templateSparsity = (imageLaplacianMask).sum() / (imageLaplacianMask.shape[0] * imageLaplacianMask.shape[1] * 255)
         # # select n feature points
         coordinateMaskedPoints = numpy.where(imageLaplacianMask > 0)        
         indexMaskedPointsRandom = numpy.random.default_rng().choice(coordinateMaskedPoints[0].shape[0], size=coordinateMaskedPoints[0].shape[0], replace=False)
@@ -116,7 +121,7 @@ class EventLinemodTemplate(object):
         distributedPointsX, distributedPointsY = numpy.array(distributedPointsX), numpy.array(distributedPointsY)
         # compute feature vector
         featureVector = EventLinemodTemplate._ComputeImagePatchFeatureVector(imageLaplacian, gradMagnitudeThreshold, distributedPointsX, distributedPointsY)
-        return distributedPointsX, distributedPointsY, featureVector, templateSparsity, imageLaplacian
+        return distributedPointsX, distributedPointsY, featureVector, EventLinemodTemplate.ComputeImageSparsity(imageLaplacian, isNoiseThreshold), imageLaplacian
 
     ## BFS
     @staticmethod
@@ -125,26 +130,37 @@ class EventLinemodTemplate(object):
             N = len(rootNode)
         nodeQueue = queue.Queue()
         nodeQueue.put(rootNode)
+        numUndividedNodeThreshold = 10  # firstNode being undivided for more than certain times, means entered end-less loop with all undivided nodes.
+        numUndividedNode = 0
         while nodeQueue.qsize() < N:
     #         if nodeQueue.qsize() == 1214:
     #             import pdb; pdb.set_trace()
+            if numUndividedNode > numUndividedNodeThreshold:
+                logger.error("entered end-less loop.\nnodeQueue only got {} nodes, N={}, len(firstNode)={}.".format(nodeQueue.qsize(), N, len(firstNode)))
+                break
             firstNode = nodeQueue.get()
             if firstNode.divided:
                 if len(firstNode.nw) != 0:
                     nodeQueue.put(firstNode.nw)
+                    numUndividedNode = 0
                 if len(firstNode.ne) != 0:
                     nodeQueue.put(firstNode.ne)
+                    numUndividedNode = 0
                     if nodeQueue.qsize() >= N:
                         break
                 if len(firstNode.se) != 0:
                     nodeQueue.put(firstNode.se)
+                    numUndividedNode = 0
                     if nodeQueue.qsize() >= N:
                         break
                 if len(firstNode.sw) != 0:
                     nodeQueue.put(firstNode.sw)
+                    numUndividedNode = 0
             else:
                 if len(firstNode) != 0:
                     nodeQueue.put(firstNode)
+                    numUndividedNode += 1
+
         return nodeQueue
 
     @property
