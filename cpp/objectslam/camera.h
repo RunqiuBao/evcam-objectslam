@@ -11,19 +11,20 @@ class CameraBase {
 
 public:
     //! width of image
-    const unsigned int _cols;
+    unsigned int _cols;
     //! height of image
-    const unsigned int _rows;
-    const Eigen::Matrix3f _kk;
+    unsigned int _rows;
+    Eigen::Matrix3f _kk;
+    float _baseline;
 
     CameraBase(
         const unsigned int cols,
         const unsigned int rows,
-        const Eigen::Matrix3f kk
+        const Eigen::Matrix3f kk,
+        const float baseline
     )
-    : _cols(cols), _rows(rows), _kk(kk)
+    : _cols(cols), _rows(rows), _kk(kk), _baseline(baseline)
     {}
-
 
 };
 
