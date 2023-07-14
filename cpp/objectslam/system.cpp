@@ -1,5 +1,6 @@
 #include "system.h"
 #include "camera.h"
+#include "object.h"
 #include <filesystem>
 
 #include <logging.h>
@@ -61,6 +62,10 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
     }
     std::sort(filenames.begin(), filenames.end());
 
+    std::filesystem::path templateInfoPath = sStereoSequencePath;
+    templateInfoPath.append("templates/").append("templateInfos.json");
+    object::ObjectBase colorcone(templateInfoPath.string());
+
     for(const std::string& filename : filenames){
         TDO_LOG_DEBUG(filename);
 
@@ -68,8 +73,8 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
         // ransac based plane estimation
         // at the same time, ground plane based detection filtering
         // object 3d bounding box detection and ground plane based pose correction
-
         // input the correct detections to frameTracker, get pose return from frameTracker and print.
+
     }
 }
 
