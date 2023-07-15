@@ -1,8 +1,10 @@
 #ifndef EVENTOBJECTSLAM_SYSTEM_H
 #define EVENTOBJECTSLAM_SYSTEM_H
 
+#include "objectslam.h"
 #include <rapidjson/document.h>
 #include <rapidjson/filereadstream.h>
+
 
 namespace eventobjectslam {
 

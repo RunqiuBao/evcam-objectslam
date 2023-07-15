@@ -10,10 +10,10 @@ namespace object{
 class ObjectTemplate {
 
 public:
-    uint16_t _templID;
+    size_t _templID;
     Mat44_t _simulationCameraInObjectTransform;
 
-    ObjectTemplate(const uint16_t templID, const Mat44_t simulationCameraInObjectTransform)
+    ObjectTemplate(const size_t templID, const Mat44_t simulationCameraInObjectTransform)
     :_templID(templID), _simulationCameraInObjectTransform(simulationCameraInObjectTransform)
     {}
 
@@ -25,8 +25,9 @@ public:
     std::string _objectName;
     ObjectExtents _objectExtents;
     std::vector<ObjectTemplate> _templates;
+    std::vector<size_t> indicesInTemplatesArray;  // Note: input templateID, output index in _templates.
 
-    ObjectBase(const std::string sTemplateInfoPath);
+    ObjectBase(const std::string sTemplatesPath);
 
 };
 
