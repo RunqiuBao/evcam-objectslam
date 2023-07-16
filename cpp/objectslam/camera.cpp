@@ -22,7 +22,6 @@ float camera::CameraBase::TriangulateDepthInStereoCamera(const float disparity){
     return _baseline * _kk(0, 0) / disparity;
 }
 
-
 void camera::CameraBase::MatchStereoBBoxes(
     std::vector<TwoDBoundingBox>& leftCamDetections,
     std::vector<TwoDBoundingBox>& rightCamDetections,
@@ -111,7 +110,6 @@ void camera::CameraBase::ProjectPoints(
     const Eigen::Ref<const Eigen::Matrix<float, 3, Eigen::Dynamic>, 0, Eigen::Stride<3, 1>> points,  // Note: stride<3, 1> is verified correct by getting toprows(3) from a 4*5 matrix.
     Eigen::Ref<Eigen::Matrix<float, 2, Eigen::Dynamic>, 0, Eigen::Stride<2, 1> > dstPoints
 ){
-    TDO_LOG_DEBUG("points: \n" << points);
     const size_t N = points.cols();
     // Allocate dstPoints if it is not preallocated
     if (dstPoints.cols() != N) {
@@ -126,7 +124,6 @@ void camera::CameraBase::ProjectPoints(
     if ( dstPoints.data() != reinterpret_cast<float*>(cvDst.data) ) {
         dstPoints = Eigen::Map<Eigen::Matrix<float, 2, Eigen::Dynamic>, 0, Eigen::Stride<2, 1> >(reinterpret_cast<float*>(cvDst.data), 2, N);
     }
-    TDO_LOG_DEBUG("dstPoints: \n" << dstPoints);
 }
 
 

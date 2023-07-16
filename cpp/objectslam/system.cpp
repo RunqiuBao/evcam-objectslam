@@ -10,6 +10,7 @@
 #include <boost/lexical_cast.hpp>
 #include <opencv2/opencv.hpp>
 #include <Eigen/Core>
+#include <Eigen/Dense>
 #include <cassert>
 
 #include <logging.h>
@@ -59,6 +60,36 @@ void LoadDetections(const std::vector<std::string>& sDetections, std::vector<Two
         detections.push_back(TwoDBoundingBox(x, y, bWidth, bHeight, templateID, templateScale));
         TDO_LOG_DEBUG_FORMAT("one detection: %f, %f, template No. %d, at scale %f", x % y % templateID % templateScale);
     }
+}
+
+static std::vector<cv::Point> ProjectPoints3DToPoints2D(Eigen::MatrixXf& mPoints3D, camera::CameraBase& camera){
+    Eigen::Matrix<float, 2, Eigen::Dynamic> mPoints2D = Eigen::Matrix<float, 2, Eigen::Dynamic>::Zero(2, mPoints3D.cols());
+    // TDO_LOG_DEBUG_FORMAT("mPoints3D rows: %d, mPoints3D cols: %d", mPoints3D.rows() % mPoints3D.cols());
+    camera.ProjectPoints(
+        mPoints3D,
+        mPoints2D
+    );
+    std::vector<cv::Point> points2DCV;
+    for (size_t indexPoint = 0; indexPoint < mPoints2D.cols(); indexPoint++){
+        points2DCV.push_back(cv::Point(static_cast<int32_t>(mPoints2D(0, indexPoint)), static_cast<int32_t>(mPoints2D(1, indexPoint))));
+    }
+    return points2DCV;
+}
+
+static cv::Mat Draw2DHullMaskFrom2DPointsSet(const std::vector<cv::Point>& points2DCV, const size_t imageH, const size_t imageW){
+    cv::Mat hullMask = cv::Mat::zeros(imageH, imageW, CV_8UC1);
+    std::vector<cv::Point> hullPoints2DCV;
+    cv::convexHull(points2DCV, hullPoints2DCV);
+    std::vector<std::vector<cv::Point>> vHullPoints2DCV;
+    vHullPoints2DCV.push_back(hullPoints2DCV);
+    cv::drawContours(hullMask, vHullPoints2DCV, -1, cv::Scalar(1), cv::FILLED);
+    return hullMask;
+}
+
+Eigen::MatrixXf TransformPoints(const Eigen::MatrixXf mPoints, const Eigen::Matrix4f hTransform){
+    Eigen::MatrixXf hMPoints = Eigen::Map<Eigen::Matrix<float, 3, Eigen::Dynamic>>(const_cast<float *>(mPoints.data()), 3, mPoints.cols());
+    Eigen::MatrixXf transformedPoints = hTransform * hMPoints.colwise().homogeneous();
+    return transformedPoints.colwise().hnormalized();
 }
 
 void Draw3DBoundingBox(
@@ -117,6 +148,26 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
     templatesPath.append("templates/");
     object::ObjectBase colorcone(templatesPath.string());
 
+    std::vector<Mat44_t> cameraPoses;
+    std::vector<ThreeDDetection> landmarks;
+    Mat44_t cameraInWorldTransform = Eigen::Matrix4f::Identity();
+    Mat44_t nextFrameInCameraTransform = Eigen::Matrix4f::Identity();
+    Eigen::Quaternionf q;
+    q.x() = -0.49999999999999956;
+    q.y() = 0.5000000218556936;
+    q.z() = 0.49999999999999956;
+    q.w() = -0.49999997814430636; 
+    Eigen::Matrix3f rWorldToRealWorld = q.toRotationMatrix();
+    Mat44_t worldInReadlWorld = Eigen::Matrix4f::Identity();
+    worldInReadlWorld.block(0, 0, 3, 3) = rWorldToRealWorld;
+    Eigen::Vector3f tWorldToRealWorld(-9.255331993103027, 7.211221218109131, 2.187476634979248);
+    worldInReadlWorld.block(0, 3, 3, 1) = tWorldToRealWorld;
+    worldInReadlWorld.block(0, 2, 3, 1) *= -1;
+
+    std::filesystem::path trackResultPath = sStereoSequencePath;
+    trackResultPath.append("cameraTrack.txt");
+    std::ofstream outputFile(trackResultPath.string());
+    int frameCount = 0;
     for(const std::string& filename : filenames){
         TDO_LOG_DEBUG(filename);
 
@@ -154,6 +205,7 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
         // // stereo triangulation and template scale based filtering
         std::vector<std::shared_ptr<TwoDBoundingBox>> matchedLeftCamDetections, matchedRightCamDetections;
         myStereoCamera.MatchStereoBBoxes(leftCamDetections, rightCamDetections, colorcone, matchedLeftCamDetections, matchedRightCamDetections);
+        // // object 3d bounding box detection and ground plane based pose correction
         std::vector<ThreeDDetection> threeDDetections;
         myStereoCamera.CreateThreeDDetections(matchedLeftCamDetections, matchedRightCamDetections, colorcone, threeDDetections);
 
@@ -169,12 +221,145 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
         debug3DDetectionPath.append("debug3DDetection/").append(filename + ".png");
         cv::imwrite(debug3DDetectionPath.string() , display3DDetections);
 
-        // // ransac base plane estimation
+        // // ransac based plane estimation
            // at the same time, ground plane based detection filtering
-        // // object 3d bounding box detection and ground plane based pose correction
+
         // // input the correct detections to frameTracker, get pose return from frameTracker and print.
 
+
+        if (filename == "000000"){
+            cameraPoses.push_back(cameraInWorldTransform);
+            for (ThreeDDetection oneDetection : threeDDetections){
+                landmarks.push_back(oneDetection);
+            }
+        }
+        else{
+            // project 3d landmarks and 3d detections to current camera pose and find correspondences.
+            size_t countLandmark = 0;
+            std::vector<size_t> indicesCorrespondingDetecton;
+            indicesCorrespondingDetecton.reserve(landmarks.size());
+            size_t minOverlapAreaToReject = 400;
+            cv::Mat displayLandmarks(myStereoCamera._rows, myStereoCamera._cols, CV_8UC1, cv::Scalar(0));
+            cv::Mat displayDetections(myStereoCamera._rows, myStereoCamera._cols, CV_8UC1, cv::Scalar(0));
+            for (ThreeDDetection landmark : landmarks){
+                Eigen::MatrixXf transformedVertices = TransformPoints(landmark._vertices3DInCamera, (nextFrameInCameraTransform * cameraInWorldTransform).inverse());
+                std::vector<cv::Point> points2DCV = ProjectPoints3DToPoints2D(transformedVertices, myStereoCamera);
+                cv::Mat landmarkPoseMask = Draw2DHullMaskFrom2DPointsSet(points2DCV, myStereoCamera._rows, myStereoCamera._cols);
+                int landmarkPoseMaskDataType = landmarkPoseMask.type();
+                int displayLandmarksDataType = displayLandmarks.type();
+                cv::bitwise_or(landmarkPoseMask, displayLandmarks, displayLandmarks);
+                size_t countDetection = 0;
+                int indexLargestOverlap = -1;
+                int largestOverlapArea = 0;
+                for (ThreeDDetection currentDetection : threeDDetections){
+                    std::vector<cv::Point> points2DCV = ProjectPoints3DToPoints2D(currentDetection._vertices3DInCamera, myStereoCamera);
+                    cv::Mat currentDetectionPoseMask = Draw2DHullMaskFrom2DPointsSet(points2DCV, myStereoCamera._rows, myStereoCamera._cols);
+                    cv::Mat overlaps;
+                    cv::bitwise_and(landmarkPoseMask, currentDetectionPoseMask, overlaps);
+                    cv::Scalar sum = cv::sum(overlaps);
+                    if (sum[0] > largestOverlapArea && sum[0] > minOverlapAreaToReject){
+                        indexLargestOverlap = countDetection;
+                    }
+                    // TDO_LOG_DEBUG_FORMAT("Landmark No.%d, detection No.%d, overlapping area: %d", countLandmark % countDetection % sum[0]);
+                    countDetection++;
+                }
+                if (indexLargestOverlap >= 0){
+                    indicesCorrespondingDetecton.push_back(indexLargestOverlap);
+                    std::vector<cv::Point> points2DCV = ProjectPoints3DToPoints2D(threeDDetections[indexLargestOverlap]._vertices3DInCamera, myStereoCamera);
+                    cv::Mat detectionPoseMask = Draw2DHullMaskFrom2DPointsSet(points2DCV, myStereoCamera._rows, myStereoCamera._cols);
+                    cv::bitwise_or(detectionPoseMask, displayDetections, displayDetections);
+                }
+                countLandmark++;
+            }
+            std::vector<cv::Mat> channels;
+            cv::Mat zeroChannel(myStereoCamera._rows, myStereoCamera._cols, CV_8UC1, cv::Scalar(0));
+            cv::Scalar sum = cv::sum(displayLandmarks);
+            cv::Scalar sum2 = cv::sum(displayDetections);
+            TDO_LOG_DEBUG("displayLandmarks sum: " << sum[0]);
+            TDO_LOG_DEBUG("displayDetections sum: " << sum2[0]);
+            channels.push_back(displayLandmarks * 255);
+            channels.push_back(zeroChannel * 255);
+            channels.push_back(displayDetections * 255);
+            cv::Mat debugTracking;
+            cv::merge(channels, debugTracking);
+            std::filesystem::path debugTrackingPath = sStereoSequencePath;
+            debugTrackingPath.append("debugTracking/").append(filename + ".png");
+            cv::imwrite(debugTrackingPath.string() , debugTracking);
+            // 3D object points in world coordinates
+            std::vector<cv::Point3f> objectPoints;
+            // Populate objectPoints with the corresponding 3D coordinates of the object
+            // 2D image points in image coordinates
+            std::vector<cv::Point2f> imagePoints;
+            // Populate imagePoints with the corresponding 2D coordinates of the object in the image
+            size_t indexLandmark = 0;
+            for (size_t indexCorrespondingDetection : indicesCorrespondingDetecton){
+                cv::Point3f point3D(
+                    landmarks[indexLandmark]._objectInCameraTransform(0, 3),
+                    landmarks[indexLandmark]._objectInCameraTransform(1, 3),
+                    landmarks[indexLandmark]._objectInCameraTransform(2, 3)
+                );
+                objectPoints.push_back(point3D);
+                cv::Point2f point2D(
+                    (*matchedLeftCamDetections[indexCorrespondingDetection])._centerX,
+                    (*matchedLeftCamDetections[indexCorrespondingDetection])._centerY
+                );
+                imagePoints.push_back(point2D);
+                indexLandmark++;
+            }
+            // Camera intrinsic matrix (3x3)
+            cv::Mat cameraMatrix = cv::Mat::eye(3, 3, CV_64F);
+            cameraMatrix.at<double>(0, 0) = static_cast<double>(myStereoCamera._kk(0, 0));
+            cameraMatrix.at<double>(0, 2) = static_cast<double>(myStereoCamera._kk(0, 2));
+            cameraMatrix.at<double>(1, 1) = static_cast<double>(myStereoCamera._kk(1, 1));
+            cameraMatrix.at<double>(1, 2) = static_cast<double>(myStereoCamera._kk(1, 2));
+            // Set the appropriate values for the cameraMatrix
+            // Distortion coefficients
+            cv::Mat distCoeffs = cv::Mat::zeros(5, 1, CV_64F);
+            // Set the appropriate values for the distCoeffs
+            // Rotation vector and translation vector
+            cv::Mat rvec, tvec;
+            // Estimate camera pose using PnP
+            cv::solvePnP(objectPoints, imagePoints, cameraMatrix, distCoeffs, rvec, tvec);
+            cv::Mat rotationMatrix;
+            cv::Rodrigues(rvec, rotationMatrix);
+            TDO_LOG_DEBUG("rvec: " << rvec << ", tvec: " << tvec);
+            Mat44_t worldInCurrentCamera = Eigen::Matrix4f::Identity();
+            for (int i=0; i < 3; i++){
+                for (int j=0; j<3; j++){
+                    worldInCurrentCamera(i, j) = rotationMatrix.at<double>(i, j);
+                }
+            }
+            worldInCurrentCamera(0, 3) = tvec.at<double>(0);
+            worldInCurrentCamera(1, 3) = tvec.at<double>(1);
+            worldInCurrentCamera(2, 3) = tvec.at<double>(2);
+            Mat44_t currentCameraInWorld = worldInCurrentCamera.inverse();
+            TDO_LOG_DEBUG("currentCameraInWorld: \n" << currentCameraInWorld);
+            if (currentCameraInWorld(2, 3) < -1.0 || currentCameraInWorld(2, 3) > 1.0){
+                // track failed
+                nextFrameInCameraTransform = Eigen::Matrix4f::Identity();
+                // not updating cameraInWorld
+            }
+            else{
+                nextFrameInCameraTransform(0, 3) = currentCameraInWorld(0, 3) - cameraInWorldTransform(0, 3);
+                nextFrameInCameraTransform(1, 3) = currentCameraInWorld(1, 3) - cameraInWorldTransform(1, 3);
+                nextFrameInCameraTransform(2, 3) = currentCameraInWorld(2, 3) - cameraInWorldTransform(2, 3);
+                cameraInWorldTransform(0, 3) = currentCameraInWorld(0, 3);
+                cameraInWorldTransform(1, 3) = currentCameraInWorld(1, 3);
+                cameraInWorldTransform(2, 3) = currentCameraInWorld(2, 3);
+            }
+
+        }
+        TDO_LOG_DEBUG("------------- End of one frame ------------");
+        Mat44_t cameraInRealWorld = worldInReadlWorld * cameraInWorldTransform;
+        Eigen::Quaternionf myQuaternion(cameraInRealWorld.block<3, 3>(0, 0));
+        outputFile << std::to_string(frameCount) << " " << cameraInRealWorld(0, 3) << " " << cameraInRealWorld(1, 3) << " " << cameraInRealWorld(2, 3) << " " << myQuaternion.x() << " " << myQuaternion.y() << " " << myQuaternion.z() << " " << myQuaternion.w() << std::endl;
+        TDO_LOG_DEBUG("cameraInRealWorld: \n" << cameraInRealWorld);
+        frameCount++;
+        // if (filename == "000006"){
+        //     break;
+        // }
     }
+    outputFile.close();
 }
 
 }

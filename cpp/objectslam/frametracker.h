@@ -22,10 +22,12 @@ public:
     // constructor
     FrameTracker(camera::CameraBase* camera);
 
-    bool DoBruteForceMatchBasedTrack(frame& currentFrame, const frame& lastFrame, const Mat44_t& velocity) const;
+    bool DoBruteForceMatchBasedTrack(frame& currentFrame, const frame& lastFrame, const Mat44_t& velocity);
+
+    bool DoMotionBasedTrack(frame& currentFrame, const frame& lastFrame, const Mat44_t& velocity);
 
 private:
-    const camera::CameraBase* _camera; 
+    const camera::CameraBase* _camera;
 
 };
 

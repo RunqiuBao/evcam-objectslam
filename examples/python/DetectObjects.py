@@ -167,7 +167,7 @@ def SelectTemplateByEventLinemod(sceneImage, bbox, myTemplateManager, sceneImage
         if minX < 0:
             biaxX = 0 - minX
             minX += biaxX
-            maxX +=biaxX
+            maxX += biaxX
         scanWindow = sceneImage[minY:maxY, minX:maxX]
         windowFeatureVector = oneTemplate.ComputeImagePatchFeatureVector(scanWindow, gradMagnitudeThreshold=5, debugInfo=debugInfo)
         pixelResponse = numpy.zeros_like(windowFeatureVector)
@@ -260,17 +260,19 @@ def DoTemplateRecognitionForDetections(detections, image, myTemplateManager, deb
         else:
             templatedDetections.append(detectionOrigin + " " + str(indexSmallestShapeDifference))
 
-        # write template index to yolo results
+        # write template index, scale to yolo results
         pathTemplateIndexWithYoloResults = os.path.join(debugDir, '..', 'detectionID0', imageName + '.txt')
         if os.path.isfile(pathTemplateIndexWithYoloResults):
             with open(pathTemplateIndexWithYoloResults, 'a') as f:
                 detection.append(str(indexSmallestShapeDifference))
+                detection.append(str(bestTemplate.scaleFactor))
                 if isNewLineAtEnd:
                     detection[-1] = detection[-1] + '\n'
                 f.write(' '.join(detection))
         else:
             with open(pathTemplateIndexWithYoloResults, 'w') as f:
                 detection.append(str(indexSmallestShapeDifference))
+                detection.append(str(bestTemplate.scaleFactor))
                 if isNewLineAtEnd:
                     detection[-1] = detection[-1] + '\n'
                 f.write(' '.join(detection))
@@ -286,7 +288,7 @@ def SaveSbn_ForLoopRoutine(i, myEventData, lastTimeStampRight):
     # if (i % 10) != 0:
     #     continue
     cc = TransformSbn2Image(mysbn)
-    
+
     cv2.imwrite(os.path.join('/home/runqiu/tmptmp/eventstereoslam-dataset/leftcam/', str(i).zfill(6) + '.png'), cc.astype('uint8'))
     mysbnRight, lastTimeStampRight = myEventData.StackOneFrame(EventsInETHZFormat.PopOneTimeLimitedSbn, 720, 1280, timeStampLimit=max(lastTimeStamp, lastTimeStampRight))
     print("right: {}".format(lastTimeStampRight))
