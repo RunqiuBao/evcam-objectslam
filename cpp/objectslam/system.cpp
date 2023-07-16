@@ -9,6 +9,8 @@
 #include <boost/algorithm/string.hpp>
 #include <boost/lexical_cast.hpp>
 #include <opencv2/opencv.hpp>
+#include <Eigen/Core>
+#include <cassert>
 
 #include <logging.h>
 TDO_LOGGER("eventobjectslam.system")
@@ -57,6 +59,23 @@ void LoadDetections(const std::vector<std::string>& sDetections, std::vector<Two
         detections.push_back(TwoDBoundingBox(x, y, bWidth, bHeight, templateID, templateScale));
         TDO_LOG_DEBUG_FORMAT("one detection: %f, %f, template No. %d, at scale %f", x % y % templateID % templateScale);
     }
+}
+
+void Draw3DBoundingBox(
+    const Eigen::Ref<const Eigen::Matrix<float, 2, Eigen::Dynamic>, 0, Eigen::Stride<2, 1>> dstPoints,
+    cv::Mat& displayImage
+){
+    assert(displayImage.channels() == 1);
+    for (size_t indexVertex=0; indexVertex < dstPoints.cols(); indexVertex++){
+        cv::Point vertex = cv::Point(dstPoints(0, indexVertex), dstPoints(1, indexVertex));
+        cv::circle(displayImage, vertex, 3, cv::Scalar(0), cv::FILLED);
+    }
+    std::array<size_t, 12> indicesLineStart = {0, 1, 2, 3, 0, 1, 2, 3, 4, 5, 6, 7};
+    std::array<size_t, 12> indicesLineEnd = {1, 2, 3, 0, 4, 5, 6, 7, 5, 6, 7, 4};
+    for (size_t indexLine=0; indexLine < 12; indexLine++){
+        cv::line(displayImage, cv::Point(dstPoints(0, indicesLineStart[indexLine]), dstPoints(1, indicesLineStart[indexLine])), cv::Point(dstPoints(0, indicesLineEnd[indexLine]), dstPoints(1, indicesLineEnd[indexLine])), cv::Scalar(0), 1);
+    }
+    
 }
 
 void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
@@ -142,17 +161,19 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
         leftCamImagePath.append("leftcam/").append(filename + ".png");
         cv::Mat display3DDetections = cv::imread(leftCamImagePath.string(), cv::IMREAD_GRAYSCALE);
         for (ThreeDDetection oneDetection : threeDDetections){
-            
+            Eigen::Matrix<float, 2, Eigen::Dynamic> dstPoints = Eigen::Matrix<float, 2, Eigen::Dynamic>::Zero(2, oneDetection._vertices3DInCamera.cols());
+            myStereoCamera.ProjectPoints(oneDetection._vertices3DInCamera, dstPoints);
+            Draw3DBoundingBox(dstPoints, display3DDetections);
         }
+        std::filesystem::path debug3DDetectionPath = sStereoSequencePath;
+        debug3DDetectionPath.append("debug3DDetection/").append(filename + ".png");
+        cv::imwrite(debug3DDetectionPath.string() , display3DDetections);
 
         // // ransac base plane estimation
            // at the same time, ground plane based detection filtering
         // // object 3d bounding box detection and ground plane based pose correction
         // // input the correct detections to frameTracker, get pose return from frameTracker and print.
 
-        if (filename == "000006"){
-            break;
-        }
     }
 }
 

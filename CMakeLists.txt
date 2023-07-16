@@ -43,6 +43,10 @@ include_directories( ${OpenCV_INCLUDE_DIRS} )
 set(CMAKE_PREFIX_PATH "${CMAKE_SOURCE_DIR}/3rdparty/rapidjson/build/rapidjsoninstall/")
 find_package(RapidJSON)
 
+# include boost
+find_package(Boost REQUIRED)
+include_directories(${Boost_INCLUDE_DIRS})
+
 set(TDO_INSTALL_PATH "${INSTALL_PATH_ALLTARGETS}")
 set(CMAKE_INSTALL_PREFIX "${TDO_INSTALL_PATH}")
 

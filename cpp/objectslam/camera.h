@@ -19,6 +19,7 @@ public:
     //! height of image
     unsigned int _rows;
     Eigen::Matrix3f _kk;
+    std::vector<float> _distortCoef;
     float _baseline;
 
     CameraBase(
@@ -39,9 +40,14 @@ public:
         std::vector<std::shared_ptr<TwoDBoundingBox>>& matchedRightCamDetections
     );
 
-    float TriangulateThreeDPointInStereoCamera(const float disparity);
+    float TriangulateDepthInStereoCamera(const float disparity);
 
-    Eigen::MatrixXf ProjectPoints(Eigen::MatrixXf points);
+    void ProjectPointTo3DByDepth(const float Z, const float u, const float v, float& X, float& Y);
+
+    void ProjectPoints(
+        const Eigen::Ref<const Eigen::Matrix<float, 3, Eigen::Dynamic>, 0, Eigen::Stride<3, 1>> points,
+        Eigen::Ref<Eigen::Matrix<float, 2, Eigen::Dynamic>, 0, Eigen::Stride<2, 1> > dstPoints
+    );
 
     void CreateThreeDDetections(
         const std::vector<std::shared_ptr<TwoDBoundingBox>>& matchedLeftCamDetections,
