@@ -2,6 +2,7 @@
 #define EVENTOBJECTSLAM_SYSTEM_H
 
 #include "objectslam.h"
+#include "frametracker.h"
 #include <rapidjson/document.h>
 #include <rapidjson/filereadstream.h>
 
@@ -36,6 +37,15 @@ public:
     ~SLAMSystem(){};
 
     void TestTrackStereoSequence(const std::string stereoSequencePath);
+
+    Mat44_t AppendStereoFrame(const cv::Mat& leftImg, const cv::Mat& rightImg, const double timestamp, const cv::Mat& maskImg);
+
+
+private:
+    std::shared_ptr<camera::CameraBase> _camera = nullptr;
+    std::shared_ptr<FrameTracker> _frameTracker = nullptr;
+
+
 };
 
 }

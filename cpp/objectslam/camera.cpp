@@ -25,18 +25,21 @@ float camera::CameraBase::TriangulateDepthInStereoCamera(const float disparity){
 void camera::CameraBase::MatchStereoBBoxes(
     std::vector<TwoDBoundingBox>& leftCamDetections,
     std::vector<TwoDBoundingBox>& rightCamDetections,
-    const object::ObjectBase& objectInfo,
     std::vector<std::shared_ptr<TwoDBoundingBox>>& matchedLeftCamDetections,
     std::vector<std::shared_ptr<TwoDBoundingBox>>& matchedRightCamDetections
 ){
     size_t yMarginForMatch = 20;  //unit is pixel
     float distanceErrorToReject = 2.0;  // unit is m
     std::vector<size_t> indicesMatchedDetectionInRightCam;  // Note: to prevent repeated match to same detection
+    if (leftCamDetections.size() == 0)
+        return;
+
+    const object::ObjectBase& objectInfo = (*leftCamDetections[0]._pObjectInfo);
     for (TwoDBoundingBox& oneDetectionLeftCam : leftCamDetections){
         int indexsmallestDepthError = -1;
         float smallestDepthError = std::numeric_limits<float>::max();
         float estimatedDepth = -1.;
-        float depthByScale = objectInfo._templates[objectInfo.indicesInTemplatesArray[oneDetectionLeftCam._templateID]]._simulationCameraInObjectTransform.block(0, 3, 3, 1).norm() / oneDetectionLeftCam._templateScale;
+        float depthByScale = objectInfo._templates[objectInfo._indicesInTemplatesArray[oneDetectionLeftCam._templateID]]._simulationCameraInObjectTransform.block(0, 3, 3, 1).norm() / oneDetectionLeftCam._templateScale;
         for (size_t indexDetectionInRightCam=0; indexDetectionInRightCam < rightCamDetections.size(); indexDetectionInRightCam++){
             std::shared_ptr<TwoDBoundingBox> pOneDetectionRightCam = std::make_shared<TwoDBoundingBox>(rightCamDetections[indexDetectionInRightCam]);
             if (std::abs(oneDetectionLeftCam._centerY - (*pOneDetectionRightCam)._centerY) < yMarginForMatch){
@@ -91,7 +94,7 @@ void camera::CameraBase::CreateThreeDDetections(
 
     for (const std::shared_ptr<TwoDBoundingBox> matchedLeftCamDetection : matchedLeftCamDetections){
         size_t templateID = (*matchedLeftCamDetection)._templateID;
-        Mat44_t objectInCameraTransform = objectInfo._templates[objectInfo.indicesInTemplatesArray[templateID]]._simulationCameraInObjectTransform.inverse();
+        Mat44_t objectInCameraTransform = objectInfo._templates[objectInfo._indicesInTemplatesArray[templateID]]._simulationCameraInObjectTransform.inverse();
         float X, Y;
         this->ProjectPointTo3DByDepth((*matchedLeftCamDetection)._esitmated3DDepth, (*matchedLeftCamDetection)._centerX, (*matchedLeftCamDetection)._centerY, X, Y);
         objectInCameraTransform(0, 3) = X;

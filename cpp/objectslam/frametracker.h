@@ -4,6 +4,7 @@
 #include "objectslam.h"
 #include "camera.h"
 #include "frame.h"
+#include <opencv2/opencv.hpp>
 
 namespace eventobjectslam{
 
@@ -20,14 +21,16 @@ class FrameTracker {
 
 public:
     // constructor
-    FrameTracker(camera::CameraBase* camera);
+    FrameTracker(std::shared_ptr<camera::CameraBase> camera);
 
-    bool DoBruteForceMatchBasedTrack(frame& currentFrame, const frame& lastFrame, const Mat44_t& velocity);
+    Mat44_t TrackStereoImage(const cv::Mat& leftImg, const cv::Mat& rightImg, const double timestamp, const cv::Mat& maskImg);
 
-    bool DoMotionBasedTrack(frame& currentFrame, const frame& lastFrame, const Mat44_t& velocity);
+    bool DoBruteForceMatchBasedTrack(Frame& currentFrame, const Frame& lastFrame, const Mat44_t& velocity);
+
+    bool DoMotionBasedTrack(Frame& currentFrame, const Frame& lastFrame, const Mat44_t& velocity);
 
 private:
-    const camera::CameraBase* _camera;
+    std::shared_ptr<camera::CameraBase> _camera;
 
 };
 

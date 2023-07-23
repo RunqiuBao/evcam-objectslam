@@ -35,7 +35,6 @@ public:
     void MatchStereoBBoxes(
         std::vector<TwoDBoundingBox>& leftCamDetections,
         std::vector<TwoDBoundingBox>& rightCamDetections,
-        const object::ObjectBase& objectInfo,
         std::vector<std::shared_ptr<TwoDBoundingBox>>& matchedLeftCamDetections,
         std::vector<std::shared_ptr<TwoDBoundingBox>>& matchedRightCamDetections
     );

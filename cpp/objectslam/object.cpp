@@ -24,7 +24,8 @@ object::ObjectBase::ObjectBase(const std::string sTemplatesPath){
     fclose(fp);
 
     TDO_LOG_DEBUG("start loading templates...");
-    indicesInTemplatesArray.reserve(jsonTemplateInfos.Size() - 1);
+    _indicesInTemplatesArray.reserve(jsonTemplateInfos.Size() - 1);
+    _templates.reserve(jsonTemplateInfos.Size() - 1);
     for (rapidjson::SizeType i = 0; i < jsonTemplateInfos.Size(); ++i) {
         const rapidjson::Value& jsonOneTemplate = jsonTemplateInfos[i];
         if (jsonOneTemplate.HasMember("objectName")){
@@ -37,7 +38,7 @@ object::ObjectBase::ObjectBase(const std::string sTemplatesPath){
         }
         else {
             uint16_t templID = jsonOneTemplate["templId"].GetInt();
-            indicesInTemplatesArray[templID] = _templates.size(); 
+            _indicesInTemplatesArray.push_back(_templates.size());
             Mat44_t simulationCameraInObjectTransform;
             const rapidjson::Value& jsonSimulationCameraInObjectTransform = jsonOneTemplate["camInObjectTransformation"];
             for (rapidjson::SizeType i = 0; i < jsonSimulationCameraInObjectTransform.Size(); i++){

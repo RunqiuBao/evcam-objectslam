@@ -3,7 +3,11 @@
 
 #include <Eigen/Core>
 #include <cassert>
+#include <opencv2/opencv.hpp>
 
+#include "camera.h"
+
+namespace eventobjectslam {
 
 namespace mathutils {
 
@@ -20,6 +24,14 @@ MatrixType TransformPoints(const MatrixType& transform, const MatrixType& points
     }
 }
 
-}
+std::vector<cv::Point> ProjectPoints3DToPoints2D(Eigen::MatrixXf& mPoints3D, camera::CameraBase& camera);
+
+cv::Mat Draw2DHullMaskFrom2DPointsSet(const std::vector<cv::Point>& points2DCV, const size_t imageH, const size_t imageW);
+
+
+
+} // end of mathutils
+
+} // end of eventobjectslam
 
 #endif  // MATHUTILS_H
