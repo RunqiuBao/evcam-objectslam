@@ -68,6 +68,8 @@ public:
 
 };
 
+typedef std::array<float, 6> ThreeDPlane;  // {x, y, z, nx, ny, nz}
+
 }  // end of namespace eventobjectslam
 
 #endif

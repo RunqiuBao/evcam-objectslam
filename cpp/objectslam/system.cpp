@@ -171,7 +171,7 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
         oneFrame.SetDetectionsFromExternalSrc(std::move(leftCamDetections), std::move(rightCamDetections));
 
         std::vector<std::shared_ptr<TwoDBoundingBox>> matchedLeftCamDetections, matchedRightCamDetections;
-        auto matchedDetections = oneFrame.GetMatchedDetections();
+        auto matchedDetections = oneFrame.GetMatchedDetections();  // Note: return a tuple.
         matchedLeftCamDetections = std::get<0>(matchedDetections);
         matchedRightCamDetections = std::get<1>(matchedDetections);
 
@@ -321,9 +321,10 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
         outputFile << std::to_string(frameCount) << " " << cameraInRealWorld(0, 3) << " " << cameraInRealWorld(1, 3) << " " << cameraInRealWorld(2, 3) << " " << myQuaternion.x() << " " << myQuaternion.y() << " " << myQuaternion.z() << " " << myQuaternion.w() << std::endl;
         TDO_LOG_DEBUG("cameraInRealWorld: \n" << cameraInRealWorld);
         frameCount++;
-        // if (filename == "000006"){
-        //     break;
-        // }
+
+        if (filename == "000001"){
+            break;
+        }
     }
     outputFile.close();
 }

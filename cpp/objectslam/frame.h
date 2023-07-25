@@ -26,6 +26,8 @@ public:
 
     std::tuple<std::vector<std::shared_ptr<TwoDBoundingBox>>, std::vector<std::shared_ptr<TwoDBoundingBox>>> GetMatchedDetections();
 
+    void Refine3DDetections();
+
 private:
     FrameType _frameType;
     cv::Mat _leftImage;

@@ -23,11 +23,9 @@ public:
     // constructor
     FrameTracker(std::shared_ptr<camera::CameraBase> camera);
 
-    Mat44_t TrackStereoImage(const cv::Mat& leftImg, const cv::Mat& rightImg, const double timestamp, const cv::Mat& maskImg);
+    Mat44_t DoBruteForceMatchBasedTrack(Frame& currentFrame, const Frame& lastFrame, const Mat44_t& velocity);
 
-    bool DoBruteForceMatchBasedTrack(Frame& currentFrame, const Frame& lastFrame, const Mat44_t& velocity);
-
-    bool DoMotionBasedTrack(Frame& currentFrame, const Frame& lastFrame, const Mat44_t& velocity);
+    Mat44_t DoMotionBasedTrack(Frame& currentFrame, const Frame& lastFrame, const Mat44_t& velocity);
 
 private:
     std::shared_ptr<camera::CameraBase> _camera;
