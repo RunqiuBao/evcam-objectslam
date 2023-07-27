@@ -18,7 +18,7 @@ static ThreeDPlane FitPlaneBySVD(std::vector<Eigen::Vector3f> pointsOnPlaneInlie
     for (size_t indexPoint = 0; indexPoint < pointsOnPlaneInliers.size(); indexPoint++){
         mPointsOnPlane.col(indexPoint) = pointsOnPlaneInliers[indexPoint];
     }
-    Eigen::Vector3f centerPoint = mPointsOnPlane.colwise().mean();
+    Eigen::Vector3f centerPoint = mPointsOnPlane.rowwise().mean();
     Eigen::MatrixXf mCenteredPointsOnPlane(3, pointsOnPlaneInliers.size());
     for (size_t indexPoint = 0; indexPoint < pointsOnPlaneInliers.size(); indexPoint++){
         mCenteredPointsOnPlane.col(indexPoint) = mPointsOnPlane.block(0, indexPoint, 3, 1) - centerPoint;
@@ -56,11 +56,13 @@ void Frame::Refine3DDetections(){
     // (1) refine by ground plane.
     int numSamplePoints = 3;
     int maxNumIterations = 6;
-    float inlierDistanceToPlaneThreshold = 0.5;
+    float inlierDistanceToPlaneThreshold = 0.1;
     int minNumPointsInliers = 1;
     ThreeDPlane planeModelBestFit;
     bool isSuccess = false;
+    int numFinalInliers = 0;
     float bestAvgDistanceToPlane = std::numeric_limits<float>::infinity();
+    float averageDistanceToPlane = 0.;
     for(size_t indexIteration=0; indexIteration < maxNumIterations; indexIteration++){
         std::vector<int> pointIndicies(_threeDDetections.size());
         std::iota(pointIndicies.begin(), pointIndicies.end(), 0);
@@ -77,8 +79,9 @@ void Frame::Refine3DDetections(){
         for (size_t indexPoint = 0; indexPoint < pointsOnPlaneInliers.size(); indexPoint++){
             mPointsOnPlane.col(indexPoint) = pointsOnPlaneInliers[indexPoint];
         }
-        Eigen::Vector3f centerPoint = mPointsOnPlane.colwise().mean();
+        Eigen::Vector3f centerPoint = mPointsOnPlane.rowwise().mean();
         Eigen::Vector3f normalPlane = (pointsOnPlaneInliers[1] - pointsOnPlaneInliers[0]).cross(pointsOnPlaneInliers[2] - pointsOnPlaneInliers[0]);
+        normalPlane /= normalPlane.norm();
         if (normalPlane[1] > 0)
             normalPlane *= -1;  // Y direction need to be negative.
         ThreeDPlane planeModel = {centerPoint[0], centerPoint[1], centerPoint[2], normalPlane[0], normalPlane[1], normalPlane[2]};
@@ -99,14 +102,21 @@ void Frame::Refine3DDetections(){
             planeModel = FitPlaneBySVD(pointsOnPlaneInliers);
             centerPoint << planeModel[0], planeModel[1], planeModel[2];
             normalPlane << planeModel[3], planeModel[4], planeModel[5];
-            float averageDistanceToPlane = ComputeAvgDistanceOfPointsToPlane(planeModel, pointsOnPlaneInliers);
+            averageDistanceToPlane = ComputeAvgDistanceOfPointsToPlane(planeModel, pointsOnPlaneInliers);
             if (averageDistanceToPlane < bestAvgDistanceToPlane){
                 bestAvgDistanceToPlane = averageDistanceToPlane;
                 planeModelBestFit = planeModel;
                 isSuccess = true;
+                numFinalInliers = pointsOnPlaneInliers.size();
             }
         }
-
+    }
+    if (isSuccess){
+        TDO_LOG_DEBUG("plane fitting succeeded. averageDistanceToPlane: " << averageDistanceToPlane << ", num inliers: " << numFinalInliers);
+        TDO_LOG_DEBUG("planeModelBestFit: " << planeModelBestFit[0] << ", " << planeModelBestFit[1] << ", " << planeModelBestFit[2] << ", " << planeModelBestFit[3] << ", " << planeModelBestFit[4] << ", " << planeModelBestFit[5]);
+    }
+    else{
+        TDO_LOG_DEBUG("plane fitting failed. averageDistanceToPlane: " << averageDistanceToPlane);
     }
 
 }
