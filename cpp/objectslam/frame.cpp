@@ -1,4 +1,5 @@
 #include "frame.h"
+#include "mathutils.h"
 
 #include <numeric>
 
@@ -28,6 +29,7 @@ static ThreeDPlane FitPlaneBySVD(std::vector<Eigen::Vector3f> pointsOnPlaneInlie
     Eigen::MatrixXf leftSingularVectors = svdOperator.matrixU();
     Eigen::MatrixXf rightSingularVectors = svdOperator.matrixV();
     TDO_LOG_DEBUG_FORMAT("leftSingularVectors shape: h * w: %f * %f", leftSingularVectors.rows() % leftSingularVectors.cols());
+    TDO_LOG_DEBUG_FORMAT("SingularValues: %f, %f, %f", singularValues[0] % singularValues[1] % singularValues[2]);
     Eigen::Vector3f normalPlane;
     normalPlane << leftSingularVectors(0, 2), leftSingularVectors(1, 2), leftSingularVectors(2, 2);
     if (normalPlane[1] > 0)
@@ -57,7 +59,7 @@ void Frame::Refine3DDetections(){
     int numSamplePoints = 3;
     int maxNumIterations = 6;
     float inlierDistanceToPlaneThreshold = 0.1;
-    int minNumPointsInliers = 1;
+    int minNumPointsInliers = 2;
     ThreeDPlane planeModelBestFit;
     bool isSuccess = false;
     int numFinalInliers = 0;
@@ -111,9 +113,27 @@ void Frame::Refine3DDetections(){
             }
         }
     }
+    float degAngleThresholdNeedRefine = 10;
     if (isSuccess){
         TDO_LOG_DEBUG("plane fitting succeeded. averageDistanceToPlane: " << averageDistanceToPlane << ", num inliers: " << numFinalInliers);
         TDO_LOG_DEBUG("planeModelBestFit: " << planeModelBestFit[0] << ", " << planeModelBestFit[1] << ", " << planeModelBestFit[2] << ", " << planeModelBestFit[3] << ", " << planeModelBestFit[4] << ", " << planeModelBestFit[5]);
+        for(size_t indexThreeDDetection=0; indexThreeDDetection < _threeDDetections.size(); indexThreeDDetection++){
+            Eigen::Vector3f zAxis = _threeDDetections[indexThreeDDetection]._objectInCameraTransform.block(0, 2, 3, 1);
+            TDO_LOG_DEBUG("detection " << indexThreeDDetection << ", z axis: " << zAxis[0] << ", " << zAxis[1] << ", " << zAxis[2]);
+            // TODO: refine detection pose, if too tilted.
+            Eigen::Vector3f sourceDir = _threeDDetections[indexThreeDDetection]._objectInCameraTransform.block(0, 2, 3, 1);
+            Eigen::Vector3f targetDir(planeModelBestFit[3], planeModelBestFit[4], planeModelBestFit[5]);  // normal of the detected ground plane
+            if (targetDir[1] < 0){  // by default camera Y pointing to sky
+                targetDir *= -1;
+            }
+            if (sourceDir.dot(targetDir) < std::cos(degAngleThresholdNeedRefine * M_PI / 180.0)){
+                Eigen::Vector4f qRotateToNormal = mathutils::CreateQuatRotateDirection(sourceDir, targetDir);
+                Eigen::Matrix4f rotateToNormal = mathutils::ConvertMatrixFromQuat(qRotateToNormal);
+                _threeDDetections[indexThreeDDetection]._objectInCameraTransform.block(0, 0, 3, 3) = rotateToNormal.block(0, 0, 3, 3) * _threeDDetections[indexThreeDDetection]._objectInCameraTransform.block(0, 0, 3, 3);
+                Eigen::Vector3f zAxisNew = _threeDDetections[indexThreeDDetection]._objectInCameraTransform.block(0, 2, 3, 1);
+                TDO_LOG_DEBUG("refine detection " << indexThreeDDetection << ", z axis new: " << zAxisNew[0] << ", " << zAxisNew[1] << ", " << zAxisNew[2]);
+            }
+        }
     }
     else{
         TDO_LOG_DEBUG("plane fitting failed. averageDistanceToPlane: " << averageDistanceToPlane);
@@ -121,7 +141,8 @@ void Frame::Refine3DDetections(){
 
 }
 
-void Frame::SetDetectionsFromExternalSrc(std::vector<TwoDBoundingBox>&& leftCamDetections, std::vector<TwoDBoundingBox>&& rightCamDetections){
+void Frame::SetDetectionsFromExternalSrc(std::vector<TwoDBoundingBox>&& leftCamDetections, std::vector<TwoDBoundingBox>&& rightCamDetections){  // Note: right value reference
+
     _leftCamDetections = std::move(leftCamDetections);
     _rightCamDetections = std::move(rightCamDetections);
     // // stereo triangulation and template scale based filtering
@@ -130,8 +151,36 @@ void Frame::SetDetectionsFromExternalSrc(std::vector<TwoDBoundingBox>&& leftCamD
     _pCamera->CreateThreeDDetections(_matchedLeftCamDetections, _matchedRightCamDetections, (*_leftCamDetections[0]._pObjectInfo), _threeDDetections);
 
     Refine3DDetections();
-    
-    
+
+    Draw3DVerticesFor3DDetections((*_leftCamDetections[0]._pObjectInfo), _pCamera, _threeDDetections);
+
+}
+
+void Frame::Draw3DVerticesFor3DDetections(
+    const object::ObjectBase& objectInfo,
+    const std::shared_ptr<eventobjectslam::camera::CameraBase> pCamera,
+    std::vector<ThreeDDetection>& threeDDetections
+){
+    float xSize, ySize, zSize;
+    xSize = objectInfo._objectExtents[0];
+    ySize = objectInfo._objectExtents[1];
+    zSize = objectInfo._objectExtents[2];
+    Eigen::MatrixXf vertices3D;
+    vertices3D.resize(3, 8);
+    vertices3D.col(0) << xSize / 2, ySize / 2, zSize / 2;
+    vertices3D.col(1) << -xSize / 2, ySize / 2, zSize / 2;
+    vertices3D.col(2) << -xSize / 2, -ySize / 2, zSize / 2;
+    vertices3D.col(3) << xSize / 2, -ySize / 2, zSize / 2;
+    vertices3D.col(4) << xSize / 2, ySize / 2, -zSize / 2;
+    vertices3D.col(5) << -xSize / 2, ySize / 2, -zSize / 2;
+    vertices3D.col(6) << -xSize / 2, -ySize / 2, -zSize / 2;
+    vertices3D.col(7) << xSize / 2, -ySize / 2, -zSize / 2;
+    int detectionID = 0;
+    for (ThreeDDetection threeDDetection : threeDDetections){
+        Eigen::MatrixXf vertices3DInCamera = mathutils::TransformPoints<Eigen::MatrixXf>(threeDDetection._objectInCameraTransform, vertices3D);
+        threeDDetections[detectionID]._vertices3DInCamera = vertices3DInCamera;
+        detectionID++;
+    }
 }
 
 std::vector<ThreeDDetection> Frame::Get3DDetections(){

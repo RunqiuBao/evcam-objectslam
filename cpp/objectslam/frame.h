@@ -28,6 +28,12 @@ public:
 
     void Refine3DDetections();
 
+    void Draw3DVerticesFor3DDetections(
+        const object::ObjectBase& objectInfo,
+        const std::shared_ptr<eventobjectslam::camera::CameraBase> pCamera,
+        std::vector<ThreeDDetection>& threeDDetections
+    );
+
 private:
     FrameType _frameType;
     cv::Mat _leftImage;

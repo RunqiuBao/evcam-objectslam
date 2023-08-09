@@ -77,21 +77,6 @@ void camera::CameraBase::CreateThreeDDetections(
     std::vector<ThreeDDetection>& threeDDetections
 ){
     int detectionID = 0;
-    float xSize, ySize, zSize;
-    xSize = objectInfo._objectExtents[0];
-    ySize = objectInfo._objectExtents[1];
-    zSize = objectInfo._objectExtents[2];
-    Eigen::MatrixXf vertices3D;
-    vertices3D.resize(3, 8);
-    vertices3D.col(0) << xSize / 2, ySize / 2, zSize / 2;
-    vertices3D.col(1) << -xSize / 2, ySize / 2, zSize / 2;
-    vertices3D.col(2) << -xSize / 2, -ySize / 2, zSize / 2;
-    vertices3D.col(3) << xSize / 2, -ySize / 2, zSize / 2;
-    vertices3D.col(4) << xSize / 2, ySize / 2, -zSize / 2;
-    vertices3D.col(5) << -xSize / 2, ySize / 2, -zSize / 2;
-    vertices3D.col(6) << -xSize / 2, -ySize / 2, -zSize / 2;
-    vertices3D.col(7) << xSize / 2, -ySize / 2, -zSize / 2;
-
     for (const std::shared_ptr<TwoDBoundingBox> matchedLeftCamDetection : matchedLeftCamDetections){
         size_t templateID = (*matchedLeftCamDetection)._templateID;
         Mat44_t objectInCameraTransform = objectInfo._templates[objectInfo._indicesInTemplatesArray[templateID]]._simulationCameraInObjectTransform.inverse();
@@ -100,7 +85,7 @@ void camera::CameraBase::CreateThreeDDetections(
         objectInCameraTransform(0, 3) = X;
         objectInCameraTransform(1, 3) = Y;
         objectInCameraTransform(2, 3) = (*matchedLeftCamDetection)._esitmated3DDepth;
-        Eigen::MatrixXf vertices3DInCamera = mathutils::TransformPoints<Eigen::MatrixXf>(objectInCameraTransform, vertices3D);
+        Eigen::MatrixXf vertices3DInCamera = Eigen::MatrixXf::Zero(3, 8);  // fill this later in Frame class member method.
         ThreeDDetection new3DDetection(objectInCameraTransform, detectionID, vertices3DInCamera, this->_cameraID);
         threeDDetections.push_back(new3DDetection);
         detectionID++;

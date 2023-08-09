@@ -179,10 +179,12 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
         leftCamImagePath.append("leftcam/").append(filename + ".png");
         cv::Mat display3DDetections = cv::imread(leftCamImagePath.string(), cv::IMREAD_GRAYSCALE);
         std::vector<ThreeDDetection> threeDDetections = oneFrame.Get3DDetections();
+        int countThreeDDetection = 0;
         for (ThreeDDetection oneDetection : threeDDetections){
             Eigen::Matrix<float, 2, Eigen::Dynamic> dstPoints = Eigen::Matrix<float, 2, Eigen::Dynamic>::Zero(2, oneDetection._vertices3DInCamera.cols());
             myStereoCamera.ProjectPoints(oneDetection._vertices3DInCamera, dstPoints);
             viszutils::Draw3DBoundingBox(dstPoints, display3DDetections);
+            countThreeDDetection++;
         }
         std::filesystem::path debug3DDetectionPath = sStereoSequencePath;
         debug3DDetectionPath.append("debug3DDetection/").append(filename + ".png");
@@ -322,9 +324,9 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
         TDO_LOG_DEBUG("cameraInRealWorld: \n" << cameraInRealWorld);
         frameCount++;
 
-        if (filename == "000001"){
-            break;
-        }
+        // if (filename == "000006"){
+        //     break;
+        // }
     }
     outputFile.close();
 }

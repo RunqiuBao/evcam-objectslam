@@ -28,6 +28,12 @@ std::vector<cv::Point> ProjectPoints3DToPoints2D(Eigen::MatrixXf& mPoints3D, cam
 
 cv::Mat Draw2DHullMaskFrom2DPointsSet(const std::vector<cv::Point>& points2DCV, const size_t imageH, const size_t imageW);
 
+Eigen::Vector4f CreateQuatRotateDirection(const Eigen::Vector3f sourceDir, const Eigen::Vector3f targetDir);
+
+Eigen::Vector4f ConvertQuatFromAxisAngle(const Eigen::Vector3f axis, const float angle);
+
+Eigen::Matrix4f ConvertMatrixFromQuat(const Eigen::Vector4f quat);
+
 
 
 } // end of mathutils
