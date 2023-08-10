@@ -36,7 +36,8 @@ find_package(pybind11 REQUIRED)
 message(STATUS "Found pybind11 v${pybind11_VERSION}: ${pybind11_INCLUDE_DIRS}")
 
 # include opencv
-find_package( OpenCV REQUIRED )
+set(CMAKE_PREFIX_PATH "${INSTALLED_OPENCV4_LIB_PATH}/cmake/" ${CMAKE_PREFIX_PATH})
+find_package( OpenCV 4.7.0 REQUIRED )
 include_directories( ${OpenCV_INCLUDE_DIRS} )
 
 # include rapidjson

@@ -204,9 +204,10 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
         else{
             // project 3d landmarks and 3d detections to current camera pose and find correspondences.
             size_t countLandmark = 0;
-            std::vector<size_t> indicesCorrespondingDetecton;
+            std::vector<int> indicesCorrespondingDetecton;
             indicesCorrespondingDetecton.reserve(landmarks.size());
             size_t minOverlapAreaToReject = 400;
+            size_t finalOverlapArea = 0;
             cv::Mat displayLandmarks(myStereoCamera._rows, myStereoCamera._cols, CV_8UC1, cv::Scalar(0));
             cv::Mat displayDetections(myStereoCamera._rows, myStereoCamera._cols, CV_8UC1, cv::Scalar(0));
             for (ThreeDDetection landmark : landmarks){
@@ -227,16 +228,19 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
                     cv::Scalar sum = cv::sum(overlaps);
                     if (sum[0] > largestOverlapArea && sum[0] > minOverlapAreaToReject){
                         indexLargestOverlap = countDetection;
+                        finalOverlapArea = sum[0];
                     }
                     // TDO_LOG_DEBUG_FORMAT("Landmark No.%d, detection No.%d, overlapping area: %d", countLandmark % countDetection % sum[0]);
                     countDetection++;
                 }
                 if (indexLargestOverlap >= 0){
-                    indicesCorrespondingDetecton.push_back(indexLargestOverlap);
                     std::vector<cv::Point> points2DCV = mathutils::ProjectPoints3DToPoints2D(threeDDetections[indexLargestOverlap]._vertices3DInCamera, myStereoCamera);
                     cv::Mat detectionPoseMask = mathutils::Draw2DHullMaskFrom2DPointsSet(points2DCV, myStereoCamera._rows, myStereoCamera._cols);
                     cv::bitwise_or(detectionPoseMask, displayDetections, displayDetections);
+                    TDO_LOG_DEBUG("found corresponding detection for landmark " << std::to_string(countLandmark) << ", overlap area :" << finalOverlapArea);
                 }
+                indicesCorrespondingDetecton.push_back(indexLargestOverlap);
+
                 countLandmark++;
             }
             std::vector<cv::Mat> channels;
@@ -246,8 +250,8 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
             TDO_LOG_DEBUG("displayLandmarks sum: " << sum[0]);
             TDO_LOG_DEBUG("displayDetections sum: " << sum2[0]);
             channels.push_back(displayLandmarks * 255);
-            channels.push_back(zeroChannel * 255);
             channels.push_back(displayDetections * 255);
+            channels.push_back(zeroChannel * 255);
             cv::Mat debugTracking;
             cv::merge(channels, debugTracking);
             std::filesystem::path debugTrackingPath = sStereoSequencePath;
@@ -260,7 +264,11 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
             std::vector<cv::Point2f> imagePoints;
             // Populate imagePoints with the corresponding 2D coordinates of the object in the image
             size_t indexLandmark = 0;
-            for (size_t indexCorrespondingDetection : indicesCorrespondingDetecton){
+            for (int indexCorrespondingDetection : indicesCorrespondingDetecton){
+                if (indexCorrespondingDetection < 0){
+                    indexLandmark++;
+                    continue;
+                }
                 cv::Point3f point3D(
                     landmarks[indexLandmark]._objectInCameraTransform(0, 3),
                     landmarks[indexLandmark]._objectInCameraTransform(1, 3),
@@ -287,33 +295,42 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
             // Rotation vector and translation vector
             cv::Mat rvec, tvec;
             // Estimate camera pose using PnP
-            cv::solvePnP(objectPoints, imagePoints, cameraMatrix, distCoeffs, rvec, tvec);
-            cv::Mat rotationMatrix;
-            cv::Rodrigues(rvec, rotationMatrix);
-            TDO_LOG_DEBUG("rvec: " << rvec << ", tvec: " << tvec);
-            Mat44_t worldInCurrentCamera = Eigen::Matrix4f::Identity();
-            for (int i=0; i < 3; i++){
-                for (int j=0; j<3; j++){
-                    worldInCurrentCamera(i, j) = rotationMatrix.at<double>(i, j);
-                }
-            }
-            worldInCurrentCamera(0, 3) = tvec.at<double>(0);
-            worldInCurrentCamera(1, 3) = tvec.at<double>(1);
-            worldInCurrentCamera(2, 3) = tvec.at<double>(2);
-            Mat44_t currentCameraInWorld = worldInCurrentCamera.inverse();
-            TDO_LOG_DEBUG("currentCameraInWorld: \n" << currentCameraInWorld);
-            if (currentCameraInWorld(2, 3) < -1.0 || currentCameraInWorld(2, 3) > 1.0){
+            if (objectPoints.size() < 4){
                 // track failed
                 nextFrameInCameraTransform = Eigen::Matrix4f::Identity();
+                TDO_LOG_DEBUG("track fail. not updating camera pose.");
                 // not updating cameraInWorld
             }
             else{
-                nextFrameInCameraTransform(0, 3) = currentCameraInWorld(0, 3) - cameraInWorldTransform(0, 3);
-                nextFrameInCameraTransform(1, 3) = currentCameraInWorld(1, 3) - cameraInWorldTransform(1, 3);
-                nextFrameInCameraTransform(2, 3) = currentCameraInWorld(2, 3) - cameraInWorldTransform(2, 3);
-                cameraInWorldTransform(0, 3) = currentCameraInWorld(0, 3);
-                cameraInWorldTransform(1, 3) = currentCameraInWorld(1, 3);
-                cameraInWorldTransform(2, 3) = currentCameraInWorld(2, 3);
+                cv::solvePnP(objectPoints, imagePoints, cameraMatrix, distCoeffs, rvec, tvec, false, cv::SOLVEPNP_EPNP);
+                TDO_LOG_DEBUG("rvec: " << rvec << ", tvec: " << tvec);
+                cv::Mat rotationMatrix;
+                cv::Rodrigues(rvec, rotationMatrix);
+                Mat44_t worldInCurrentCamera = Eigen::Matrix4f::Identity();
+                for (int i=0; i < 3; i++){
+                    for (int j=0; j<3; j++){
+                        worldInCurrentCamera(i, j) = rotationMatrix.at<double>(i, j);
+                    }
+                }
+                worldInCurrentCamera(0, 3) = tvec.at<double>(0);
+                worldInCurrentCamera(1, 3) = tvec.at<double>(1);
+                worldInCurrentCamera(2, 3) = tvec.at<double>(2);
+                Mat44_t currentCameraInWorld = worldInCurrentCamera.inverse();
+                TDO_LOG_DEBUG("currentCameraInWorld: \n" << currentCameraInWorld);
+                if (currentCameraInWorld(2, 3) < -1.0 || currentCameraInWorld(2, 3) > 1.0){
+                    // track failed
+                    nextFrameInCameraTransform = Eigen::Matrix4f::Identity();
+                    TDO_LOG_DEBUG("track fail. not updating camera pose.");
+                    // not updating cameraInWorld
+                }
+                else{
+                    nextFrameInCameraTransform(0, 3) = currentCameraInWorld(0, 3) - cameraInWorldTransform(0, 3);
+                    nextFrameInCameraTransform(1, 3) = currentCameraInWorld(1, 3) - cameraInWorldTransform(1, 3);
+                    nextFrameInCameraTransform(2, 3) = currentCameraInWorld(2, 3) - cameraInWorldTransform(2, 3);
+                    cameraInWorldTransform(0, 3) = currentCameraInWorld(0, 3);
+                    cameraInWorldTransform(1, 3) = currentCameraInWorld(1, 3);
+                    cameraInWorldTransform(2, 3) = currentCameraInWorld(2, 3);
+                }
             }
 
         }
@@ -324,9 +341,10 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
         TDO_LOG_DEBUG("cameraInRealWorld: \n" << cameraInRealWorld);
         frameCount++;
 
-        // if (filename == "000006"){
-        //     break;
-        // }
+        if (filename == "000036"){
+            break;
+        }
+
     }
     outputFile.close();
 }
