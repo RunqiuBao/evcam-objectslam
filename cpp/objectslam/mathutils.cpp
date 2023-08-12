@@ -96,5 +96,12 @@ Eigen::Matrix4f mathutils::ConvertMatrixFromQuat(const Eigen::Vector4f quat){
     return T;
 }
 
+std::string mathutils::FillZeros(const std::string& str, const int width)
+{
+  std::stringstream ss;
+  ss << std::setw(width) << std::setfill('0') << str;
+  return ss.str();
+}
+
 
 }  // end of eventobjectslam

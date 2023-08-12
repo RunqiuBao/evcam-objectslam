@@ -68,6 +68,18 @@ public:
 
 };
 
+class LandMark {
+
+public:
+    ThreeDDetection _detection;
+    int _landmarkIDInKeyframe;
+
+    LandMark(const ThreeDDetection& detection, const int landmarkIDInKeyframe)
+    : _detection(detection), _landmarkIDInKeyframe(landmarkIDInKeyframe)
+    {}
+
+};
+
 typedef std::array<float, 6> ThreeDPlane;  // {x, y, z, nx, ny, nz}
 
 }  // end of namespace eventobjectslam

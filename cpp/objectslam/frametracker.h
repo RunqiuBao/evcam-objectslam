@@ -3,6 +3,7 @@
 
 #include "objectslam.h"
 #include "camera.h"
+#include "keyframe.h"
 #include "frame.h"
 #include <opencv2/opencv.hpp>
 
@@ -21,14 +22,21 @@ class FrameTracker {
 
 public:
     // constructor
-    FrameTracker(std::shared_ptr<camera::CameraBase> camera);
+    FrameTracker(std::shared_ptr<camera::CameraBase> camera)
+    : _camera(camera)
+    {}
 
-    Mat44_t DoBruteForceMatchBasedTrack(Frame& currentFrame, const Frame& lastFrame, const Mat44_t& velocity);
+    bool DoMotionBasedTrack(Frame& currentFrame, const Frame& lastFrame, Mat44_t& velocity) const;
 
-    Mat44_t DoMotionBasedTrack(Frame& currentFrame, const Frame& lastFrame, const Mat44_t& velocity);
+    bool Do2DTrackingBasedTrack(Frame& currentFrame, const Frame& lastFrame, const Mat44_t& velocity) const;
+
+    std::shared_ptr<KeyFrame> _pRefKeyframe;
+
+    std::string _sStereoSequencePathForDebug;
 
 private:
     std::shared_ptr<camera::CameraBase> _camera;
+
 
 };
 

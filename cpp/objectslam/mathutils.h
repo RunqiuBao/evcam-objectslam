@@ -24,6 +24,10 @@ MatrixType TransformPoints(const MatrixType& transform, const MatrixType& points
     }
 }
 
+/**
+ *   mPoints3D: 3xn Eigen matrix
+ * 
+**/
 std::vector<cv::Point> ProjectPoints3DToPoints2D(Eigen::MatrixXf& mPoints3D, camera::CameraBase& camera);
 
 cv::Mat Draw2DHullMaskFrom2DPointsSet(const std::vector<cv::Point>& points2DCV, const size_t imageH, const size_t imageW);
@@ -34,7 +38,7 @@ Eigen::Vector4f ConvertQuatFromAxisAngle(const Eigen::Vector3f axis, const float
 
 Eigen::Matrix4f ConvertMatrixFromQuat(const Eigen::Vector4f quat);
 
-
+std::string FillZeros(const std::string& str, const int width);
 
 } // end of mathutils
 

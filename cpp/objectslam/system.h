@@ -44,6 +44,7 @@ public:
 private:
     std::shared_ptr<camera::CameraBase> _camera = nullptr;
     std::shared_ptr<FrameTracker> _frameTracker = nullptr;
+    std::vector<Frame> _frameStack;
 
 
 };

@@ -4,10 +4,14 @@
 #include "objectslam.h"
 #include "object.h"
 #include "camera.h"
+#include "keyframe.h"
 
 #include <opencv2/opencv.hpp>
+#include <numeric>
 
 namespace eventobjectslam{
+
+class KeyFrame;  // Note: due to mutual reference.
 
 enum class FrameType {
     Stereo,
@@ -20,6 +24,15 @@ public:
     Frame(const FrameType frameType, const double timestamp, const std::shared_ptr<camera::CameraBase> pCamera);
 
     // ~Frame();
+
+    void SetPose(const Mat44_t pose_kc){
+        _pose_kc = pose_kc;
+    }
+
+    Mat44_t GetPose() const{
+        return _pose_kc;
+    }
+
     void SetDetectionsFromExternalSrc(std::vector<TwoDBoundingBox>&& leftCamDetections, std::vector<TwoDBoundingBox>&& rightCamDetections);
 
     std::vector<ThreeDDetection> Get3DDetections();
@@ -34,24 +47,34 @@ public:
         std::vector<ThreeDDetection>& threeDDetections
     );
 
-private:
-    FrameType _frameType;
-    cv::Mat _leftImage;
-    cv::Mat _rightImage;
-    cv::Mat _maskImage;
-    double _timestamp;
+    void SetDetectionsAsLandmarks(){
+        _detectionIDsOfCorrespondingLandmarks.resize(_threeDDetections.size());
+        std::iota(_detectionIDsOfCorrespondingLandmarks.begin(), _detectionIDsOfCorrespondingLandmarks.end(), 0);
+    }
+
+    cv::Mat _leftTrackImage;
+
+    std::shared_ptr<KeyFrame> _pRefKeyframe;
+    // 3D detections from the matched 2D detections
+    std::vector<ThreeDDetection> _threeDDetections;
+    std::vector<int> _detectionIDsOfCorrespondingLandmarks; // Note: size if same as landmarks in refKeyframe; if not correspondence, will be -1.
     // 2D detections on the left- and right Image
     std::vector<TwoDBoundingBox> _leftCamDetections;
     std::vector<TwoDBoundingBox> _rightCamDetections;
     // matched 2D detections
     std::vector<std::shared_ptr<TwoDBoundingBox>> _matchedLeftCamDetections;
     std::vector<std::shared_ptr<TwoDBoundingBox>> _matchedRightCamDetections;
+    double _timestamp;
+
+private:
+    FrameType _frameType;
+    cv::Mat _leftImage;
+    cv::Mat _rightImage;
+    cv::Mat _maskImage;
     // frame pose
-    Mat44_t _pose;
+    Mat44_t _pose_kc;  // current in refKeyrame transform
     // camera instance that took this frame
     std::shared_ptr<camera::CameraBase> _pCamera;
-    // 3D detections from the matched 2D detections
-    std::vector<ThreeDDetection> _threeDDetections;
 
 };
 

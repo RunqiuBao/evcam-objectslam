@@ -150,7 +150,7 @@ void Frame::SetDetectionsFromExternalSrc(std::vector<TwoDBoundingBox>&& leftCamD
     // // object 3d bounding box detection and ground plane based pose correction
     _pCamera->CreateThreeDDetections(_matchedLeftCamDetections, _matchedRightCamDetections, (*_leftCamDetections[0]._pObjectInfo), _threeDDetections);
 
-    Refine3DDetections();
+    // Refine3DDetections();
 
     Draw3DVerticesFor3DDetections((*_leftCamDetections[0]._pObjectInfo), _pCamera, _threeDDetections);
 
