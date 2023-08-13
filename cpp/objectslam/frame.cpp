@@ -9,7 +9,7 @@ TDO_LOGGER("eventobjectslam.frame")
 namespace eventobjectslam {
 
 Frame::Frame(const FrameType frameType, const double timestamp, const std::shared_ptr<camera::CameraBase> pCamera)
-: _frameType(frameType), _timestamp(timestamp), _pCamera(pCamera)
+: _frameType(frameType), _timestamp(timestamp), _pCamera(pCamera), _isTracked(false)
 {
 
 }

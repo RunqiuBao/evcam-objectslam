@@ -52,8 +52,6 @@ public:
         std::iota(_detectionIDsOfCorrespondingLandmarks.begin(), _detectionIDsOfCorrespondingLandmarks.end(), 0);
     }
 
-    cv::Mat _leftTrackImage;
-
     std::shared_ptr<KeyFrame> _pRefKeyframe;
     // 3D detections from the matched 2D detections
     std::vector<ThreeDDetection> _threeDDetections;
@@ -65,6 +63,8 @@ public:
     std::vector<std::shared_ptr<TwoDBoundingBox>> _matchedLeftCamDetections;
     std::vector<std::shared_ptr<TwoDBoundingBox>> _matchedRightCamDetections;
     double _timestamp;
+
+    bool _isTracked; // Note: whether tracking succeeded or not on this frame.
 
 private:
     FrameType _frameType;

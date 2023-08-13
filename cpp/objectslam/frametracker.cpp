@@ -2,6 +2,8 @@
 #include "frametracker.h"
 
 #include <filesystem>
+#include <opencv2/tracking.hpp>
+#include <opencv2/tracking/tracking_legacy.hpp>
 
 #include <logging.h>
 TDO_LOGGER("eventobjectslam.frametracker")
@@ -20,6 +22,31 @@ namespace eventobjectslam {
 // // 4. if not enough detection or correspondences, return false.
 
 // }
+
+static void TrackWithPnP(
+    const std::vector<cv::Point3f>& objectPoints,
+    const std::vector<cv::Point2f>& imagePoints,
+    const cv::Mat& cameraMatrix,
+    const cv::Mat& distCoeffs,
+    Mat44_t& currentFrameInRefKeyFrame
+){
+    // Rotation vector and translation vector
+    cv::Mat rvec, tvec;
+    cv::solvePnP(objectPoints, imagePoints, cameraMatrix, distCoeffs, rvec, tvec, false, cv::SOLVEPNP_EPNP);
+    TDO_LOG_DEBUG("rvec: " << rvec << ", tvec: " << tvec);
+    cv::Mat rotationMatrix;
+    cv::Rodrigues(rvec, rotationMatrix);
+    Mat44_t refKeyFrameInCurrentFrame = Eigen::Matrix4f::Identity();
+    for (int i=0; i < 3; i++){
+        for (int j=0; j<3; j++){
+            refKeyFrameInCurrentFrame(i, j) = rotationMatrix.at<double>(i, j);
+        }
+    }
+    refKeyFrameInCurrentFrame(0, 3) = tvec.at<double>(0);
+    refKeyFrameInCurrentFrame(1, 3) = tvec.at<double>(1);
+    refKeyFrameInCurrentFrame(2, 3) = tvec.at<double>(2);
+    currentFrameInRefKeyFrame = refKeyFrameInCurrentFrame.inverse();
+}
 
 bool FrameTracker::DoMotionBasedTrack(Frame& currentFrame, const Frame& lastFrame, Mat44_t& velocity) const{
     if (currentFrame._timestamp == 30){
@@ -108,18 +135,7 @@ bool FrameTracker::DoMotionBasedTrack(Frame& currentFrame, const Frame& lastFram
         imagePoints.push_back(point2D);
         indexLandmark++;
     }
-    // Camera intrinsic matrix (3x3)
-    cv::Mat cameraMatrix = cv::Mat::eye(3, 3, CV_64F);
-    cameraMatrix.at<double>(0, 0) = static_cast<double>(myStereoCamera._kk(0, 0));
-    cameraMatrix.at<double>(0, 2) = static_cast<double>(myStereoCamera._kk(0, 2));
-    cameraMatrix.at<double>(1, 1) = static_cast<double>(myStereoCamera._kk(1, 1));
-    cameraMatrix.at<double>(1, 2) = static_cast<double>(myStereoCamera._kk(1, 2));
-    // Set the appropriate values for the cameraMatrix
-    // Distortion coefficients
-    cv::Mat distCoeffs = cv::Mat::zeros(5, 1, CV_64F);
-    // Set the appropriate values for the distCoeffs
-    // Rotation vector and translation vector
-    cv::Mat rvec, tvec;
+
     // Estimate camera pose using PnP
     if (objectPoints.size() < 4){
         // track failed
@@ -130,22 +146,21 @@ bool FrameTracker::DoMotionBasedTrack(Frame& currentFrame, const Frame& lastFram
         return false;
     }
     else{
-        cv::solvePnP(objectPoints, imagePoints, cameraMatrix, distCoeffs, rvec, tvec, false, cv::SOLVEPNP_EPNP);
-        TDO_LOG_DEBUG("rvec: " << rvec << ", tvec: " << tvec);
-        cv::Mat rotationMatrix;
-        cv::Rodrigues(rvec, rotationMatrix);
-        Mat44_t refKeyFrameInCurrentFrame = Eigen::Matrix4f::Identity();
-        for (int i=0; i < 3; i++){
-            for (int j=0; j<3; j++){
-                refKeyFrameInCurrentFrame(i, j) = rotationMatrix.at<double>(i, j);
-            }
-        }
-        refKeyFrameInCurrentFrame(0, 3) = tvec.at<double>(0);
-        refKeyFrameInCurrentFrame(1, 3) = tvec.at<double>(1);
-        refKeyFrameInCurrentFrame(2, 3) = tvec.at<double>(2);
-        Mat44_t currentFrameInRefKeyFrame = refKeyFrameInCurrentFrame.inverse();
+        // Camera intrinsic matrix (3x3)
+        cv::Mat cameraMatrix = cv::Mat::eye(3, 3, CV_64F);
+        cameraMatrix.at<double>(0, 0) = static_cast<double>(myStereoCamera._kk(0, 0));
+        cameraMatrix.at<double>(0, 2) = static_cast<double>(myStereoCamera._kk(0, 2));
+        cameraMatrix.at<double>(1, 1) = static_cast<double>(myStereoCamera._kk(1, 1));
+        cameraMatrix.at<double>(1, 2) = static_cast<double>(myStereoCamera._kk(1, 2));
+        // Set the appropriate values for the cameraMatrix
+        // Distortion coefficients
+        cv::Mat distCoeffs = cv::Mat::zeros(5, 1, CV_64F);
+        // Set the appropriate values for the distCoeffs
+
+        Mat44_t currentFrameInRefKeyFrame;
+        TrackWithPnP(objectPoints, imagePoints, cameraMatrix, distCoeffs, currentFrameInRefKeyFrame);
         TDO_LOG_DEBUG("currentCameraInWorld: \n" << currentFrameInRefKeyFrame);
-        if (currentFrameInRefKeyFrame(2, 3) < -1.0 || currentFrameInRefKeyFrame(2, 3) > 1.0){
+        if (currentFrameInRefKeyFrame(1, 3) < -1.0 || currentFrameInRefKeyFrame(1, 3) > 1.0){
             // track failed
             velocity = Eigen::Matrix4f::Identity();
             currentFrame.SetPose(velocity * lastFrame.GetPose());
@@ -162,12 +177,112 @@ bool FrameTracker::DoMotionBasedTrack(Frame& currentFrame, const Frame& lastFram
             // cameraInWorldTransform(2, 3) = currentCameraInWorld(2, 3);
             velocity = currentFrameInRefKeyFrame * lastFrame.GetPose().inverse();
             currentFrame.SetPose(currentFrameInRefKeyFrame);
+            currentFrame._isTracked = true;
+            currentFrame._detectionIDsOfCorrespondingLandmarks = indicesCorrespondingDetecton;
             return true;
         }
     }
 }
 
-bool FrameTracker::Do2DTrackingBasedTrack(Frame& currentFrame, const Frame& lastFrame, const Mat44_t& velocity) const{
+static void DrawNodes(
+    cv::Mat& canvas,
+    const std::vector<ThreeDDetection>& threeDDetections,
+    camera::CameraBase& camera,
+    const int nodeSize
+){
+    canvas = cv::Mat::zeros(camera._rows, camera._cols, CV_8U);
+    for (ThreeDDetection oneDetection : threeDDetections){
+        Eigen::MatrixXf detectionPoseCenter = Eigen::MatrixXf::Zero(3, 1);
+        detectionPoseCenter.block(0, 0, 3, 1) = oneDetection._objectInCameraTransform.block(0, 3, 3, 1);
+        std::vector<cv::Point> point2DPoseCenter = mathutils::ProjectPoints3DToPoints2D(detectionPoseCenter, camera);
+        cv::circle(canvas, point2DPoseCenter[0], nodeSize, cv::Scalar(255), -1, cv::LINE_AA);
+    }
+}
+
+bool FrameTracker::Do2DTrackingBasedTrack(Frame& currentFrame, const Frame& lastFrame, Mat44_t& velocity) const{
+    int nodeSizeHalf = 5;
+    int nodeRoiSize = 20;
+    int maxTrackSuccessRoiSizeError = 2.0;
+    // Draw nodes for tracking
+    cv::Mat nodesCurrentFrame, nodesLastFrame;
+    camera::CameraBase myStereoCamera = *_camera;
+    DrawNodes(nodesCurrentFrame, currentFrame._threeDDetections, *_camera, nodeSizeHalf);
+    DrawNodes(nodesLastFrame, lastFrame._threeDDetections, *_camera, nodeSizeHalf);
+
+    cv::Mat debugTracking = nodesCurrentFrame.clone();
+    std::vector<cv::Point3f> objectPoints;
+    std::vector<cv::Point2f> imagePoints;
+    int countLandmark = 0;
+    for (int detectionID : lastFrame._detectionIDsOfCorrespondingLandmarks){
+        if (detectionID >= 0){
+            ThreeDDetection theDetection = lastFrame._threeDDetections[detectionID];
+            Eigen::MatrixXf detectionPoseCenter = Eigen::MatrixXf::Zero(3, 1);
+            detectionPoseCenter.block(0, 0, 3, 1) = theDetection._objectInCameraTransform.block(0, 3, 3, 1);
+            std::vector<cv::Point> point2DPoseCenter = mathutils::ProjectPoints3DToPoints2D(detectionPoseCenter, myStereoCamera);
+            cv::Rect_<double> roiNode(point2DPoseCenter[0].x, point2DPoseCenter[0].y, nodeRoiSize, nodeRoiSize);
+            cv::Ptr<cv::legacy::Tracker> twoDTracker = cv::legacy::TrackerMedianFlow::create();
+            twoDTracker->init(nodesLastFrame, roiNode);
+            cv::Rect_<double> roiNodeUpdate;
+            twoDTracker->update(nodesCurrentFrame, roiNodeUpdate);
+            if (std::abs(roiNodeUpdate.width - nodeRoiSize) < maxTrackSuccessRoiSizeError && std::abs(roiNodeUpdate.height - nodeRoiSize) < maxTrackSuccessRoiSizeError){
+                // track success, record all infos.
+                cv::Point3f point3D(
+                    lastFrame._pRefKeyframe->landmarks[countLandmark]->_detection._objectInCameraTransform(0, 3),
+                    lastFrame._pRefKeyframe->landmarks[countLandmark]->_detection._objectInCameraTransform(1, 3),
+                    lastFrame._pRefKeyframe->landmarks[countLandmark]->_detection._objectInCameraTransform(2, 3)
+                );
+                objectPoints.push_back(point3D);
+                cv::Point2f point2D(
+                    roiNodeUpdate.x,
+                    roiNodeUpdate.y
+                );
+                imagePoints.push_back(point2D);
+                // debug image
+                cv::rectangle(debugTracking, roiNodeUpdate, cv::Scalar(255), 2, cv::LINE_AA);
+            }
+        }
+        countLandmark++;
+    }
+    std::filesystem::path debug2DTrackingPath = _sStereoSequencePathForDebug;
+    debug2DTrackingPath.append("testBinaryTracking/").append(mathutils::FillZeros(std::to_string(static_cast<int>(currentFrame._timestamp)), 6) + ".png");
+    cv::imwrite(debug2DTrackingPath.string(), debugTracking);
+
+    if (objectPoints.size() < 4){
+        velocity = Eigen::Matrix4f::Identity();
+        currentFrame.SetPose(velocity * lastFrame.GetPose());
+        TDO_LOG_DEBUG("2d track fail. not updating camera pose.");
+        return false;
+    }
+    else{
+        // Camera intrinsic matrix (3x3)
+        cv::Mat cameraMatrix = cv::Mat::eye(3, 3, CV_64F);
+        cameraMatrix.at<double>(0, 0) = static_cast<double>(myStereoCamera._kk(0, 0));
+        cameraMatrix.at<double>(0, 2) = static_cast<double>(myStereoCamera._kk(0, 2));
+        cameraMatrix.at<double>(1, 1) = static_cast<double>(myStereoCamera._kk(1, 1));
+        cameraMatrix.at<double>(1, 2) = static_cast<double>(myStereoCamera._kk(1, 2));
+        // Set the appropriate values for the cameraMatrix
+        // Distortion coefficients
+        cv::Mat distCoeffs = cv::Mat::zeros(5, 1, CV_64F);
+        // Set the appropriate values for the distCoeffs
+
+        Mat44_t currentFrameInRefKeyFrame;
+        TrackWithPnP(objectPoints, imagePoints, cameraMatrix, distCoeffs, currentFrameInRefKeyFrame);
+        TDO_LOG_DEBUG("currentCameraInWorld: \n" << currentFrameInRefKeyFrame);
+        if (currentFrameInRefKeyFrame(1, 3) < -1.0 || currentFrameInRefKeyFrame(1, 3) > 1.0){
+            // track failed
+            velocity = Eigen::Matrix4f::Identity();
+            currentFrame.SetPose(velocity * lastFrame.GetPose());
+            TDO_LOG_DEBUG("track fail. not updating camera pose.");
+            // not updating cameraInWorld
+            return false;
+        }
+        else{
+            velocity = currentFrameInRefKeyFrame * lastFrame.GetPose().inverse();
+            currentFrame.SetPose(currentFrameInRefKeyFrame);
+            currentFrame._isTracked = true;
+            return true;
+        }
+    }
 
 }
 

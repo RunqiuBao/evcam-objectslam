@@ -188,19 +188,10 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
             Eigen::Matrix<float, 2, Eigen::Dynamic> dstPoints = Eigen::Matrix<float, 2, Eigen::Dynamic>::Zero(2, oneDetection._vertices3DInCamera.cols());
             myStereoCamera.ProjectPoints(oneDetection._vertices3DInCamera, dstPoints);
             viszutils::Draw3DBoundingBox(dstPoints, display3DDetections);
-            // for debug binary tracking
-            Eigen::MatrixXf detectionPoseCenter = Eigen::MatrixXf::Zero(3, 1);
-            detectionPoseCenter.block(0, 0, 3, 1) = oneDetection._objectInCameraTransform.block(0, 3, 3, 1);
-            std::vector<cv::Point> point2DPoseCenter = mathutils::ProjectPoints3DToPoints2D(detectionPoseCenter, myStereoCamera);
-            TDO_LOG_DEBUG("detection " << std::to_string(countThreeDDetection) << ", pose center 2d: " << point2DPoseCenter[0]);
-            cv::circle(testBinaryTracking, point2DPoseCenter[0], 5, cv::Scalar(255), -1, cv::LINE_AA);
 
             countThreeDDetection++;
         }
-        std::filesystem::path testBinaryTrackingPath = sStereoSequencePath;
-        testBinaryTrackingPath.append("testBinaryTracking/").append(filename + ".png");
-        cv::imwrite(testBinaryTrackingPath.string() , testBinaryTracking * 255);
-        oneFrame._leftTrackImage = testBinaryTracking * 255;
+
         std::filesystem::path debug3DDetectionPath = sStereoSequencePath;
         debug3DDetectionPath.append("debug3DDetection/").append(filename + ".png");
         cv::imwrite(debug3DDetectionPath.string() , display3DDetections);
@@ -214,13 +205,13 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
             oneFrame.SetPose(Eigen::Matrix4f::Identity());
             std::shared_ptr<KeyFrame> pOneKeyframe = std::make_shared<KeyFrame>(oneFrame);  // Note: allocated on heap. will not disappear due to out of scope.
             _tracker._pRefKeyframe = pOneKeyframe;
-            oneFrame._pRefKeyframe = pOneKeyframe;
             oneFrame.SetDetectionsAsLandmarks();
         }
         else{
             bool isSuccess = _tracker.DoMotionBasedTrack(oneFrame, _frameStack.back(), nextFrameInCameraTransform);
-            if (!isSuccess){
+            if ((!isSuccess) && _frameStack.back()._isTracked){
                 bool isSuccess = _tracker.Do2DTrackingBasedTrack(oneFrame, _frameStack.back(), nextFrameInCameraTransform);
+                // TODO: if fail again, need another track trial from keyframe.
             }
 
         }
@@ -230,9 +221,10 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
         outputFile << std::to_string(frameCount) << " " << cameraInRealWorld(0, 3) << " " << cameraInRealWorld(1, 3) << " " << cameraInRealWorld(2, 3) << " " << myQuaternion.x() << " " << myQuaternion.y() << " " << myQuaternion.z() << " " << myQuaternion.w() << std::endl;
         TDO_LOG_DEBUG("cameraInRealWorld: \n" << cameraInRealWorld);
         frameCount++;
+        oneFrame._pRefKeyframe = _tracker._pRefKeyframe;
         _frameStack.push_back(oneFrame);
 
-        if (filename == "000036"){
+        if (filename == "000050"){
             break;
         }
 

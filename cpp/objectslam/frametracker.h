@@ -28,7 +28,7 @@ public:
 
     bool DoMotionBasedTrack(Frame& currentFrame, const Frame& lastFrame, Mat44_t& velocity) const;
 
-    bool Do2DTrackingBasedTrack(Frame& currentFrame, const Frame& lastFrame, const Mat44_t& velocity) const;
+    bool Do2DTrackingBasedTrack(Frame& currentFrame, const Frame& lastFrame, Mat44_t& velocity) const;
 
     std::shared_ptr<KeyFrame> _pRefKeyframe;
 
