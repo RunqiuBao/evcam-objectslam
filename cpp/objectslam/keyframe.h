@@ -13,11 +13,13 @@ class Frame;  // Note: due to mutual reference.
 class KeyFrame {
 
 public:
-    KeyFrame(const Frame& refFrame);
+    KeyFrame(const std::shared_ptr<Frame> pRefFrame, const Mat44_t& refKeyFrameInWorldTransform);
 
     std::vector<std::shared_ptr<LandMark>> landmarks;
 
     Mat44_t _pose_wc;  // Note: pose current to world
+
+    std::shared_ptr<Frame> _pRefFrame;
 
 };
 

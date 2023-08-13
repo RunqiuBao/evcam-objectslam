@@ -7,6 +7,7 @@
 #include "keyframe.h"
 
 #include <filesystem>
+#include <functional>
 #include <fstream>
 #include <vector>
 #include <algorithm>
@@ -135,7 +136,8 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
 
     FrameTracker _tracker(_camera);
     _tracker._sStereoSequencePathForDebug = sStereoSequencePath;
-    std::vector<Frame> _frameStack;
+    std::vector<std::shared_ptr<Frame>> _pFrameStack;
+    std::vector<std::shared_ptr<KeyFrame>> _pKeyFrameStack;
     for(const std::string& filename : filenames){
         TDO_LOG_DEBUG(filename);
 
@@ -170,18 +172,18 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
         std::vector<TwoDBoundingBox> rightCamDetections;
         LoadDetections(sDetections, rightCamDetections, myStereoCamera._cols, myStereoCamera._rows, pColorcone);
 
-        Frame oneFrame(FrameType::Stereo, static_cast<double>(frameCount), _camera);
-        oneFrame.SetDetectionsFromExternalSrc(std::move(leftCamDetections), std::move(rightCamDetections));
+        std::shared_ptr<Frame> pOneFrame = std::make_shared<Frame>(FrameType::Stereo, static_cast<double>(frameCount), _camera);
+        pOneFrame->SetDetectionsFromExternalSrc(std::move(leftCamDetections), std::move(rightCamDetections));
 
         std::vector<std::shared_ptr<TwoDBoundingBox>> matchedLeftCamDetections, matchedRightCamDetections;
-        auto matchedDetections = oneFrame.GetMatchedDetections();  // Note: return a tuple.
+        auto matchedDetections = pOneFrame->GetMatchedDetections();  // Note: return a tuple.
         matchedLeftCamDetections = std::get<0>(matchedDetections);
         matchedRightCamDetections = std::get<1>(matchedDetections);
 
         std::filesystem::path leftCamImagePath = sStereoSequencePath;
         leftCamImagePath.append("leftcam/").append(filename + ".png");
         cv::Mat display3DDetections = cv::imread(leftCamImagePath.string(), cv::IMREAD_GRAYSCALE);
-        std::vector<ThreeDDetection> threeDDetections = oneFrame._threeDDetections;
+        std::vector<ThreeDDetection> threeDDetections = pOneFrame->_threeDDetections;
         int countThreeDDetection = 0;
         cv::Mat testBinaryTracking(myStereoCamera._rows, myStereoCamera._cols, CV_8UC1, cv::Scalar(0));
         for (ThreeDDetection oneDetection : threeDDetections){
@@ -202,29 +204,51 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
         // // input the correct detections to frameTracker, get pose return from frameTracker and print.
 
         if (filename == "000000"){
-            oneFrame.SetPose(Eigen::Matrix4f::Identity());
-            std::shared_ptr<KeyFrame> pOneKeyframe = std::make_shared<KeyFrame>(oneFrame);  // Note: allocated on heap. will not disappear due to out of scope.
+            pOneFrame->SetPose(Eigen::Matrix4f::Identity());
+            TDO_LOG_INFO("keyframe insert! frame number: " << filename);
+            std::shared_ptr<KeyFrame> pOneKeyframe = std::make_shared<KeyFrame>(pOneFrame, Eigen::Matrix4f::Identity());  // Note: allocated on heap. will not disappear due to out of scope.
             _tracker._pRefKeyframe = pOneKeyframe;
-            oneFrame.SetDetectionsAsLandmarks();
+            _pKeyFrameStack.push_back(pOneKeyframe);
+            pOneFrame->SetDetectionsAsLandmarks();
+            pOneFrame->SetPose(Eigen::Matrix4f::Identity());
         }
         else{
-            bool isSuccess = _tracker.DoMotionBasedTrack(oneFrame, _frameStack.back(), nextFrameInCameraTransform);
-            if ((!isSuccess) && _frameStack.back()._isTracked){
-                bool isSuccess = _tracker.Do2DTrackingBasedTrack(oneFrame, _frameStack.back(), nextFrameInCameraTransform);
+            bool isSuccess = _tracker.DoMotionBasedTrack(*pOneFrame, (*_pFrameStack.back()), nextFrameInCameraTransform);
+
+            if ((!isSuccess) && (*_pFrameStack.back())._isTracked){
+                bool isSuccess = _tracker.Do2DTrackingBasedTrack(*pOneFrame, (*_pFrameStack.back()), nextFrameInCameraTransform);
                 // TODO: if fail again, need another track trial from keyframe.
+                if (!isSuccess){
+                    nextFrameInCameraTransform = (*_pFrameStack.back()).GetPose();
+                    bool isSuccess = _tracker.DoMotionBasedTrack(*pOneFrame, (*_tracker._pRefKeyframe->_pRefFrame), nextFrameInCameraTransform);
+                    if (!isSuccess){
+                        TDO_LOG_DEBUG("track trial from keyframe also failed.");
+                    }
+                }
+            }
+
+            // insert new key frame if detection increased than previous frame
+            if (isSuccess && (pOneFrame->_threeDDetections.size() > (*_pFrameStack.back())._threeDDetections.size())){
+                std::shared_ptr<KeyFrame> pOneKeyFrame = std::make_shared<KeyFrame>(pOneFrame, _tracker._pRefKeyframe->_pose_wc);
+                _tracker._pRefKeyframe = pOneKeyFrame;
+                _pKeyFrameStack.push_back(pOneKeyFrame);
+                pOneFrame->SetDetectionsAsLandmarks();
+                pOneFrame->SetPose(Eigen::Matrix4f::Identity());
+                TDO_LOG_INFO("keyframe insert! frame number: " << filename);
+                TDO_LOG_INFO("keyframe in world pose: " << pOneKeyFrame->_pose_wc);
             }
 
         }
-        TDO_LOG_DEBUG("------------- End of one frame ------------");
-        Mat44_t cameraInRealWorld = worldInRealWorld * oneFrame.GetPose();
+        TDO_LOG_INFO("------------- End of one frame ------------");
+        Mat44_t cameraInRealWorld = worldInRealWorld * _tracker._pRefKeyframe->_pose_wc * pOneFrame->GetPose();
         Eigen::Quaternionf myQuaternion(cameraInRealWorld.block<3, 3>(0, 0));
         outputFile << std::to_string(frameCount) << " " << cameraInRealWorld(0, 3) << " " << cameraInRealWorld(1, 3) << " " << cameraInRealWorld(2, 3) << " " << myQuaternion.x() << " " << myQuaternion.y() << " " << myQuaternion.z() << " " << myQuaternion.w() << std::endl;
         TDO_LOG_DEBUG("cameraInRealWorld: \n" << cameraInRealWorld);
         frameCount++;
-        oneFrame._pRefKeyframe = _tracker._pRefKeyframe;
-        _frameStack.push_back(oneFrame);
+        pOneFrame->_pRefKeyframe = _tracker._pRefKeyframe;
+        _pFrameStack.push_back(pOneFrame);
 
-        if (filename == "000050"){
+        if (filename == "000100"){
             break;
         }
 

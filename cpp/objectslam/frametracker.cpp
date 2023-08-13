@@ -2,6 +2,7 @@
 #include "frametracker.h"
 
 #include <filesystem>
+#include <algorithm>
 #include <opencv2/tracking.hpp>
 #include <opencv2/tracking/tracking_legacy.hpp>
 
@@ -49,16 +50,13 @@ static void TrackWithPnP(
 }
 
 bool FrameTracker::DoMotionBasedTrack(Frame& currentFrame, const Frame& lastFrame, Mat44_t& velocity) const{
-    if (currentFrame._timestamp == 30){
-        int a = 1;
-    }
     size_t minOverlapAreaToReject = 400;
+    float maxPoseErrorInY = 0.5;
 
     std::vector<std::shared_ptr<LandMark>> landmarks = _pRefKeyframe->landmarks;
     // project 3d landmarks and 3d detections to current camera pose and find correspondences.
     std::vector<int> indicesCorrespondingDetecton;
     indicesCorrespondingDetecton.reserve(landmarks.size());
-    size_t finalOverlapArea = 0;
     size_t countLandmark = 0;
     camera::CameraBase myStereoCamera = *_camera;
     cv::Mat displayLandmarks(myStereoCamera._rows, myStereoCamera._cols, CV_8UC1, cv::Scalar(0));
@@ -81,7 +79,7 @@ bool FrameTracker::DoMotionBasedTrack(Frame& currentFrame, const Frame& lastFram
             cv::Scalar sum = cv::sum(overlaps);
             if (sum[0] > largestOverlapArea && sum[0] > minOverlapAreaToReject){
                 indexLargestOverlap = countDetection;
-                finalOverlapArea = sum[0];
+                largestOverlapArea = sum[0];
             }
             // TDO_LOG_DEBUG_FORMAT("Landmark No.%d, detection No.%d, overlapping area: %d", countLandmark % countDetection % sum[0]);
             countDetection++;
@@ -90,7 +88,7 @@ bool FrameTracker::DoMotionBasedTrack(Frame& currentFrame, const Frame& lastFram
             std::vector<cv::Point> points2DCV = mathutils::ProjectPoints3DToPoints2D(currentFrame._threeDDetections[indexLargestOverlap]._vertices3DInCamera, myStereoCamera);
             cv::Mat detectionPoseMask = mathutils::Draw2DHullMaskFrom2DPointsSet(points2DCV, myStereoCamera._rows, myStereoCamera._cols);
             cv::bitwise_or(detectionPoseMask, displayDetections, displayDetections);
-            TDO_LOG_DEBUG("found corresponding detection for landmark " << std::to_string(countLandmark) << ", overlap area :" << finalOverlapArea);
+            TDO_LOG_DEBUG("found corresponding detection for landmark " << std::to_string(countLandmark) << ", overlap area :" << largestOverlapArea);
         }
         indicesCorrespondingDetecton.push_back(indexLargestOverlap);
 
@@ -160,7 +158,7 @@ bool FrameTracker::DoMotionBasedTrack(Frame& currentFrame, const Frame& lastFram
         Mat44_t currentFrameInRefKeyFrame;
         TrackWithPnP(objectPoints, imagePoints, cameraMatrix, distCoeffs, currentFrameInRefKeyFrame);
         TDO_LOG_DEBUG("currentCameraInWorld: \n" << currentFrameInRefKeyFrame);
-        if (currentFrameInRefKeyFrame(1, 3) < -1.0 || currentFrameInRefKeyFrame(1, 3) > 1.0){
+        if (currentFrameInRefKeyFrame(1, 3) < -maxPoseErrorInY || currentFrameInRefKeyFrame(1, 3) > maxPoseErrorInY){
             // track failed
             velocity = Eigen::Matrix4f::Identity();
             currentFrame.SetPose(velocity * lastFrame.GetPose());
@@ -203,6 +201,7 @@ bool FrameTracker::Do2DTrackingBasedTrack(Frame& currentFrame, const Frame& last
     int nodeSizeHalf = 5;
     int nodeRoiSize = 20;
     int maxTrackSuccessRoiSizeError = 2.0;
+    float maxPoseErrorInY = 0.5;
     // Draw nodes for tracking
     cv::Mat nodesCurrentFrame, nodesLastFrame;
     camera::CameraBase myStereoCamera = *_camera;
@@ -213,6 +212,10 @@ bool FrameTracker::Do2DTrackingBasedTrack(Frame& currentFrame, const Frame& last
     std::vector<cv::Point3f> objectPoints;
     std::vector<cv::Point2f> imagePoints;
     int countLandmark = 0;
+    std::vector<int> indicesCorrespondingDetecton;
+    indicesCorrespondingDetecton.reserve(lastFrame._pRefKeyframe->landmarks.size());
+    currentFrame._detectionIDsOfCorrespondingLandmarks.resize(lastFrame._pRefKeyframe->landmarks.size());
+    std::fill(currentFrame._detectionIDsOfCorrespondingLandmarks.begin(), currentFrame._detectionIDsOfCorrespondingLandmarks.end(), -1);
     for (int detectionID : lastFrame._detectionIDsOfCorrespondingLandmarks){
         if (detectionID >= 0){
             ThreeDDetection theDetection = lastFrame._threeDDetections[detectionID];
@@ -239,6 +242,26 @@ bool FrameTracker::Do2DTrackingBasedTrack(Frame& currentFrame, const Frame& last
                 imagePoints.push_back(point2D);
                 // debug image
                 cv::rectangle(debugTracking, roiNodeUpdate, cv::Scalar(255), 2, cv::LINE_AA);
+                // find inter-frame correspondences
+                float bestDistanceToDetectionCenter = std::numeric_limits<float>::infinity();
+                int bestIndexDetectionCurrentFrame = -1;
+                for (size_t indexDetectionCurrentFrame=0; indexDetectionCurrentFrame < currentFrame._threeDDetections.size(); indexDetectionCurrentFrame++){
+                    if (
+                        roiNodeUpdate.x > (currentFrame._matchedLeftCamDetections[indexDetectionCurrentFrame]->_centerX - 0.5 * currentFrame._matchedLeftCamDetections[indexDetectionCurrentFrame]->_bWidth)
+                        && roiNodeUpdate.x < (currentFrame._matchedLeftCamDetections[indexDetectionCurrentFrame]->_centerX + 0.5 * currentFrame._matchedLeftCamDetections[indexDetectionCurrentFrame]->_bWidth)
+                        && roiNodeUpdate.y > (currentFrame._matchedLeftCamDetections[indexDetectionCurrentFrame]->_centerY - 0.5 * currentFrame._matchedLeftCamDetections[indexDetectionCurrentFrame]->_bHeight)
+                        && roiNodeUpdate.y < (currentFrame._matchedLeftCamDetections[indexDetectionCurrentFrame]->_centerY + 0.5 * currentFrame._matchedLeftCamDetections[indexDetectionCurrentFrame]->_bHeight)
+                    ){
+                        Eigen::Vector2f center2DRoiUpdate(roiNodeUpdate.x, roiNodeUpdate.y);
+                        Eigen::Vector2f center2DCorrespondingDetectionCurrentFrame(currentFrame._matchedLeftCamDetections[indexDetectionCurrentFrame]->_centerX, currentFrame._matchedLeftCamDetections[indexDetectionCurrentFrame]->_centerY);
+                        if (((center2DRoiUpdate - center2DCorrespondingDetectionCurrentFrame).norm() - bestDistanceToDetectionCenter) < bestDistanceToDetectionCenter){
+                            bestIndexDetectionCurrentFrame = indexDetectionCurrentFrame;
+                            bestDistanceToDetectionCenter = (center2DRoiUpdate - center2DCorrespondingDetectionCurrentFrame).norm();
+                        }
+                    }
+                }
+                if (bestIndexDetectionCurrentFrame > 0)
+                    currentFrame._detectionIDsOfCorrespondingLandmarks[countLandmark] = bestIndexDetectionCurrentFrame;
             }
         }
         countLandmark++;
@@ -268,7 +291,7 @@ bool FrameTracker::Do2DTrackingBasedTrack(Frame& currentFrame, const Frame& last
         Mat44_t currentFrameInRefKeyFrame;
         TrackWithPnP(objectPoints, imagePoints, cameraMatrix, distCoeffs, currentFrameInRefKeyFrame);
         TDO_LOG_DEBUG("currentCameraInWorld: \n" << currentFrameInRefKeyFrame);
-        if (currentFrameInRefKeyFrame(1, 3) < -1.0 || currentFrameInRefKeyFrame(1, 3) > 1.0){
+        if (currentFrameInRefKeyFrame(1, 3) < -maxPoseErrorInY || currentFrameInRefKeyFrame(1, 3) > maxPoseErrorInY){
             // track failed
             velocity = Eigen::Matrix4f::Identity();
             currentFrame.SetPose(velocity * lastFrame.GetPose());

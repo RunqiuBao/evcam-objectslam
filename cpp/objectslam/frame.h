@@ -60,7 +60,7 @@ public:
     std::vector<TwoDBoundingBox> _leftCamDetections;
     std::vector<TwoDBoundingBox> _rightCamDetections;
     // matched 2D detections
-    std::vector<std::shared_ptr<TwoDBoundingBox>> _matchedLeftCamDetections;
+    std::vector<std::shared_ptr<TwoDBoundingBox>> _matchedLeftCamDetections;  // Note: same order as _threeDDetections
     std::vector<std::shared_ptr<TwoDBoundingBox>> _matchedRightCamDetections;
     double _timestamp;
 
