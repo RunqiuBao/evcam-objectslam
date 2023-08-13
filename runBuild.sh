@@ -6,7 +6,7 @@ readonly NC="\033[0m" # No Color
 
 INSTALL_PATH="/home/runqiu/code/event_camera_repo/tools/tool_detectobjects/tdoinstall"
 LOG4CXX_LIB_PATH="/home/runqiu/code/event_camera_repo/tools/tool_detectobjects/3rdparty/log4cxx/install/lib"
-OPENCV4_LIB_PATH="/home/runqiu/code/event_camera_repo/tools/tool_detectobjects/3rdparty/opencv/build/opencvinstall/lib"
+OPENCV4_LIB_PATH="/home/runqiu/code/event_camera_repo/tools/tool_detectobjects/3rdparty/opencv/opencvinstall/lib"
 PYTHONPACKAGE_SRC_PATH="/home/runqiu/code/event_camera_repo/tools/tool_detectobjects/python/src"
 isAddPaths=false
 isInstallPythonPackage=false

@@ -13,3 +13,6 @@
 [submodule "3rdparty/rapidjson"]
 	path = 3rdparty/rapidjson
 	url = https://github.com/Tencent/rapidjson.git
+[submodule "3rdparty/opencv_contrib"]
+	path = 3rdparty/opencv_contrib
+	url = https://github.com/opencv/opencv_contrib.git
