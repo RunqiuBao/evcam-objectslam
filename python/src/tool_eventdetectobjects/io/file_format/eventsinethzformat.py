@@ -46,15 +46,11 @@ class EventsInETHZFormat(object):
         timeStampLimit=None,
         timeLimit=None
     ):
-        if timeStampLimit is not None:
-            if float(newevent[0]) >= timeStampLimit:
-                return True
-        else:
-            if (float(newevent[0]) - timeStampStart) >= timeLimit:
-                logger.error("Event stacking has overpassed time limit %.6f sec.", timeLimit)
-                return True
-            elif indexEvent >= maxEventNumberPerFrame:
-                return True
+        if (float(newevent[0]) - timeStampStart) >= timeLimit:
+            logger.info("Event stacking has overpassed time limit %.6f sec.", timeLimit)
+            return True
+        elif indexEvent >= maxEventNumberPerFrame:
+            return True
         return False
 
     @staticmethod
@@ -63,10 +59,13 @@ class EventsInETHZFormat(object):
         indexEvent=None,
         timeStampStart=None,
         maxEventNumberPerFrame=None,
-        timeStampLimit=None,
+        timeStampLimit=None,  # NOte: for syncing slave camera with master
         timeLimit=None
     ):
-        if (float(newevent[0]) - timeStampStart) >= timeLimit:
+        if timeStampLimit is not None:
+            if float(newevent[0]) >= timeStampLimit:
+                return True
+        elif (float(newevent[0]) - timeStampStart) >= timeLimit:
             return True
         return False
 

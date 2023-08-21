@@ -282,22 +282,6 @@ def DoTemplateRecognitionForDetections(detections, image, myTemplateManager, deb
         cv2.imwrite(os.path.join(debugDir, imageName + '_linemod.png'), imageForDebug2)
     return templatedDetections
 
-def SaveSbn_ForLoopRoutine(i, myEventData, lastTimeStampRight):
-    mysbn, lastTimeStamp = myEventData.StackOneFrame(EventsInETHZFormat.PopOneSbt, 720, 1280, timeLimit=0.02)
-    print("left: {}".format(lastTimeStamp))
-    # if (i % 10) != 0:
-    #     continue
-    cc = TransformSbn2Image(mysbn)
-
-    cv2.imwrite(os.path.join('/home/runqiu/tmptmp/eventstereoslam-dataset/leftcam/', str(i).zfill(6) + '.png'), cc.astype('uint8'))
-    mysbnRight, lastTimeStampRight = myEventData.StackOneFrame(EventsInETHZFormat.PopOneTimeLimitedSbn, 720, 1280, timeStampLimit=max(lastTimeStamp, lastTimeStampRight))
-    print("right: {}".format(lastTimeStampRight))
-    try:
-        ccRight = TransformSbn2Image(mysbnRight)
-    except:
-        from IPython import embed; print('here!'); embed()
-    cv2.imwrite(os.path.join('/home/runqiu/tmptmp/eventstereoslam-dataset/rightcam/', str(i).zfill(6) + '.png'), ccRight.astype('uint8'))
-
 
 def DoEventlinemodDetection_ForLoopRoutine(myTemplateDetector, mysbn, frameCount):
     myTemplateDetector.DetectTemplatesSemiScaleInvariant(mysbn, minScale=0.4, maxScale=1.2, scaleMultiplier=1.2, debugPathRoot='/home/runqiu/tmptmp/debugEventLinemod/', dataSaveRoot='/media/runqiu/data/eventLinemodDatasets/validatorTraining', frameIndex=frameCount)
@@ -332,6 +316,10 @@ if __name__ == "__main__":
 
     # make sure output path exists
     os.makedirs(args.outputpath, exist_ok=True)
+    os.makedirs(os.path.join(args.yoloresultpath, 'leftcam', 'detectionID0'), exist_ok=True)
+    os.makedirs(os.path.join(args.yoloresultpath, 'rightcam', 'detectionID0'), exist_ok=True)
+    os.makedirs(os.path.join(args.yoloresultpath, 'leftcam', 'debug'), exist_ok=True)
+    os.makedirs(os.path.join(args.yoloresultpath, 'rightcam', 'debug'), exist_ok=True)
 
     # config logger
     commonlogging.ConfigureRootLogger(os.path.join(args.outputpath, 'mylog.txt'), level=args.loglevel)
@@ -340,10 +328,6 @@ if __name__ == "__main__":
     templateInfos, templateData = ReadFromTemplateFolder(args.templatepath)
     myTemplateManager = EventLinemodTemplateManager(templateInfos, templateData)
     # myTemplateDetector = EventLinemodDetector(myTemplateManager, templateResponseThreshold=400)
-
-    # start detection
-    # myEventData = EventsInETHZFormat(args.inputdata)
-    # myEventDataRight = EventsInETHZFormat(os.path.join(os.path.dirname(args.inputdata).rsplit('/', 1)[0], 'rightcam', 'DVS_TEXT.txt'))
 
     # load yolo detection results
     imageNames = glob.glob(os.path.join(args.yoloresultpath, 'leftcam', '*.png'))
@@ -364,10 +348,6 @@ if __name__ == "__main__":
         detectionsWithTemplIDsLeftCam = DoTemplateRecognitionForDetections(detectionsLeftCam, leftCamImage, myTemplateManager, debugDir=os.path.join(args.yoloresultpath, 'leftcam', 'debug'), imageName=imageName.split('.png')[0])
         logger.debug("====right cam====")
         detectionsWithTemplIDsRIghtCam = DoTemplateRecognitionForDetections(detectionsRightCam, rightCamImage, myTemplateManager, debugDir=os.path.join(args.yoloresultpath, 'rightcam', 'debug'), imageName=imageName.split('.png')[0])
-        with open(os.path.join(args.yoloresultpath, 'leftcam', 'labelsYoloTemplated', imageName.split('.png')[0] + '.txt'), 'w') as f:
-            f.writelines(detectionsWithTemplIDsLeftCam)
-        with open(os.path.join(args.yoloresultpath, 'rightcam', 'labelsYoloTemplated', imageName.split('.png')[0] + '.txt'), 'w') as f:
-            f.writelines(detectionsWithTemplIDsRIghtCam)
 
         logger.debug("--------- finished one frame [%s] in %f seconds ----------", imageName, time.time() - starttime)
 
