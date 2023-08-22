@@ -52,6 +52,7 @@ static void TrackWithPnP(
 bool FrameTracker::DoMotionBasedTrack(Frame& currentFrame, const Frame& lastFrame, Mat44_t& velocity) const{
     size_t minOverlapAreaToReject = 400;
     float maxPoseErrorInY = 0.5;
+    float maxPoseErrorInXZ = 4.0;
 
     std::vector<std::shared_ptr<LandMark>> landmarks = _pRefKeyframe->landmarks;
     // project 3d landmarks and 3d detections to current camera pose and find correspondences.
@@ -158,7 +159,14 @@ bool FrameTracker::DoMotionBasedTrack(Frame& currentFrame, const Frame& lastFram
         Mat44_t currentFrameInRefKeyFrame;
         TrackWithPnP(objectPoints, imagePoints, cameraMatrix, distCoeffs, currentFrameInRefKeyFrame);
         TDO_LOG_DEBUG("currentCameraInWorld: \n" << currentFrameInRefKeyFrame);
-        if (currentFrameInRefKeyFrame(1, 3) < -maxPoseErrorInY || currentFrameInRefKeyFrame(1, 3) > maxPoseErrorInY){
+        if (
+            currentFrameInRefKeyFrame(1, 3) < -maxPoseErrorInY
+            || currentFrameInRefKeyFrame(1, 3) > maxPoseErrorInY
+            || currentFrameInRefKeyFrame(0, 3) < -maxPoseErrorInXZ
+            || currentFrameInRefKeyFrame(0, 3) > maxPoseErrorInXZ
+            || currentFrameInRefKeyFrame(2, 3) < -maxPoseErrorInXZ
+            || currentFrameInRefKeyFrame(2, 3) > maxPoseErrorInXZ
+        ){
             // track failed
             velocity = Eigen::Matrix4f::Identity();
             currentFrame.SetPose(velocity * lastFrame.GetPose());
@@ -202,6 +210,8 @@ bool FrameTracker::Do2DTrackingBasedTrack(Frame& currentFrame, const Frame& last
     int nodeRoiSize = 20;
     int maxTrackSuccessRoiSizeError = 2.0;
     float maxPoseErrorInY = 0.5;
+    float maxPoseErrorInXZ = 4.0;
+
     // Draw nodes for tracking
     cv::Mat nodesCurrentFrame, nodesLastFrame;
     camera::CameraBase myStereoCamera = *_camera;
@@ -291,7 +301,14 @@ bool FrameTracker::Do2DTrackingBasedTrack(Frame& currentFrame, const Frame& last
         Mat44_t currentFrameInRefKeyFrame;
         TrackWithPnP(objectPoints, imagePoints, cameraMatrix, distCoeffs, currentFrameInRefKeyFrame);
         TDO_LOG_DEBUG("currentCameraInWorld: \n" << currentFrameInRefKeyFrame);
-        if (currentFrameInRefKeyFrame(1, 3) < -maxPoseErrorInY || currentFrameInRefKeyFrame(1, 3) > maxPoseErrorInY){
+        if (
+            currentFrameInRefKeyFrame(1, 3) < -maxPoseErrorInY
+            || currentFrameInRefKeyFrame(1, 3) > maxPoseErrorInY
+            || currentFrameInRefKeyFrame(0, 3) < -maxPoseErrorInXZ
+            || currentFrameInRefKeyFrame(0, 3) > maxPoseErrorInXZ
+            || currentFrameInRefKeyFrame(2, 3) < -maxPoseErrorInXZ
+            || currentFrameInRefKeyFrame(2, 3) > maxPoseErrorInXZ
+        ){
             // track failed
             velocity = Eigen::Matrix4f::Identity();
             currentFrame.SetPose(velocity * lastFrame.GetPose());
