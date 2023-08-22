@@ -139,6 +139,9 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
     std::vector<std::shared_ptr<Frame>> _pFrameStack;
     std::vector<std::shared_ptr<KeyFrame>> _pKeyFrameStack;
     for(const std::string& filename : filenames){
+        if (filename == "000789"){
+            break;
+        }
         TDO_LOG_DEBUG(filename);
 
         std::filesystem::path leftCamPath = sStereoSequencePath;
@@ -195,7 +198,12 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
         }
 
         std::filesystem::path debug3DDetectionPath = sStereoSequencePath;
-        debug3DDetectionPath.append("debug3DDetection/").append(filename + ".png");
+        debug3DDetectionPath.append("debug3DDetection/");
+        if (!std::filesystem::exists(debug3DDetectionPath) && !std::filesystem::create_directory(debug3DDetectionPath)){
+            TDO_LOG_ERROR_FORMAT("Failed to create the folder: %s", debug3DDetectionPath.string());
+            return;
+        }
+        debug3DDetectionPath.append(filename + ".png");
         cv::imwrite(debug3DDetectionPath.string() , display3DDetections);
 
         // // ransac based plane estimation
@@ -247,10 +255,6 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
         frameCount++;
         pOneFrame->_pRefKeyframe = _tracker._pRefKeyframe;
         _pFrameStack.push_back(pOneFrame);
-
-        if (filename == "000100"){
-            break;
-        }
 
     }
     outputFile.close();

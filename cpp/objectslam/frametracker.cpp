@@ -107,7 +107,12 @@ bool FrameTracker::DoMotionBasedTrack(Frame& currentFrame, const Frame& lastFram
     cv::Mat debugTracking;
     cv::merge(channels, debugTracking);
     std::filesystem::path debugTrackingPath = _sStereoSequencePathForDebug;
-    debugTrackingPath.append("debugTracking/").append(mathutils::FillZeros(std::to_string(static_cast<int>(currentFrame._timestamp)), 6) + ".png");
+    debugTrackingPath.append("debugTracking/");
+    if (!std::filesystem::exists(debugTrackingPath) && !std::filesystem::create_directory(debugTrackingPath)){
+        TDO_LOG_ERROR_FORMAT("Failed to create the folder: %s", debugTrackingPath.string());
+        return false;
+    }
+    debugTrackingPath.append(mathutils::FillZeros(std::to_string(static_cast<int>(currentFrame._timestamp)), 6) + ".png");
     cv::imwrite(debugTrackingPath.string() , debugTracking);
     // 3D object points in world coordinates
     std::vector<cv::Point3f> objectPoints;
@@ -277,7 +282,12 @@ bool FrameTracker::Do2DTrackingBasedTrack(Frame& currentFrame, const Frame& last
         countLandmark++;
     }
     std::filesystem::path debug2DTrackingPath = _sStereoSequencePathForDebug;
-    debug2DTrackingPath.append("testBinaryTracking/").append(mathutils::FillZeros(std::to_string(static_cast<int>(currentFrame._timestamp)), 6) + ".png");
+    debug2DTrackingPath.append("testBinaryTracking/");
+    if (!std::filesystem::exists(debug2DTrackingPath) && !std::filesystem::create_directory(debug2DTrackingPath)){
+        TDO_LOG_ERROR_FORMAT("Failed to create the folder: %s", debug2DTrackingPath.string());
+        return false;
+    }
+    debug2DTrackingPath.append(mathutils::FillZeros(std::to_string(static_cast<int>(currentFrame._timestamp)), 6) + ".png");
     cv::imwrite(debug2DTrackingPath.string(), debugTracking);
 
     if (objectPoints.size() < 4){
