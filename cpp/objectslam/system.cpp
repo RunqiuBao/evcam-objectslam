@@ -139,9 +139,6 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
     std::vector<std::shared_ptr<Frame>> _pFrameStack;
     std::vector<std::shared_ptr<KeyFrame>> _pKeyFrameStack;
     for(const std::string& filename : filenames){
-        if (filename == "000789"){
-            break;
-        }
         TDO_LOG_DEBUG(filename);
 
         std::filesystem::path leftCamPath = sStereoSequencePath;

@@ -39,7 +39,7 @@ def SaveEventStack_ForLoopRoutine(
     imageHeight,
     stackingMode
 ):
-    perStackTimeLength = 0.05
+    perStackTimeLength = 0.0125
     if stackingMode == 'sbn':
         myStack, lastTimeStamp = myEventData.StackOneFrame(EventsInETHZFormat.PopOneTimeLimitedSbn, imageHeight, imageWidth, maxEventNumberPerFrame=40000, timeLimit=perStackTimeLength)
     elif stackingMode == 'sbt':
@@ -111,7 +111,7 @@ if __name__ == "__main__":
             args.datasetRootPath,
             imageWidth,
             imageHeight,
-            'sbn'
+            'sbt'
         )
         indexFrame += 1
         logger.info("-------- one stack: %d--------", indexFrame)

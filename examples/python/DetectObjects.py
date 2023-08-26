@@ -350,5 +350,3 @@ if __name__ == "__main__":
         detectionsWithTemplIDsRIghtCam = DoTemplateRecognitionForDetections(detectionsRightCam, rightCamImage, myTemplateManager, debugDir=os.path.join(args.yoloresultpath, 'rightcam', 'debug'), imageName=imageName.split('.png')[0])
 
         logger.debug("--------- finished one frame [%s] in %f seconds ----------", imageName, time.time() - starttime)
-
-        
