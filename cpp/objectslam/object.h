@@ -68,14 +68,14 @@ public:
 
 };
 
-class LandMark {
+class RefObject {
 
 public:
     ThreeDDetection _detection;
-    int _landmarkIDInKeyframe;
+    int _refObjectIDInKeyframe;
 
-    LandMark(const ThreeDDetection& detection, const int landmarkIDInKeyframe)
-    : _detection(detection), _landmarkIDInKeyframe(landmarkIDInKeyframe)
+    RefObject(const ThreeDDetection& detection, const int refObjectIDInKeyframe)
+    : _detection(detection), _refObjectIDInKeyframe(refObjectIDInKeyframe)
     {}
 
 };

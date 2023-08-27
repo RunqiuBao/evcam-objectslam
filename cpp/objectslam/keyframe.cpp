@@ -7,11 +7,11 @@ namespace eventobjectslam {
 
 KeyFrame::KeyFrame(const std::shared_ptr<Frame> pRefFrame, const Mat44_t& refKeyFrameInWorldTransform){
     _pose_wc = refKeyFrameInWorldTransform * pRefFrame->GetPose();
-    size_t countLandmark = 0;
+    size_t countRefObject = 0;
     for(ThreeDDetection oneDetection : pRefFrame->_threeDDetections){
-        std::shared_ptr<LandMark> oneLandmark = std::make_shared<LandMark>(oneDetection, countLandmark);
-        landmarks.push_back(oneLandmark);
-        countLandmark++;
+        std::shared_ptr<RefObject> oneRefObject = std::make_shared<RefObject>(oneDetection, countRefObject);
+        _refObjects.push_back(oneRefObject);
+        countRefObject++;
     }
     _pRefFrame = pRefFrame;
 }

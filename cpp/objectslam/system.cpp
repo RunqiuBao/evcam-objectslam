@@ -214,7 +214,7 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
             std::shared_ptr<KeyFrame> pOneKeyframe = std::make_shared<KeyFrame>(pOneFrame, Eigen::Matrix4f::Identity());  // Note: allocated on heap. will not disappear due to out of scope.
             _tracker._pRefKeyframe = pOneKeyframe;
             _pKeyFrameStack.push_back(pOneKeyframe);
-            pOneFrame->SetDetectionsAsLandmarks();
+            pOneFrame->SetDetectionsAsRefObjects();
             pOneFrame->SetPose(Eigen::Matrix4f::Identity());
         }
         else{
@@ -237,7 +237,7 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
                 std::shared_ptr<KeyFrame> pOneKeyFrame = std::make_shared<KeyFrame>(pOneFrame, _tracker._pRefKeyframe->_pose_wc);
                 _tracker._pRefKeyframe = pOneKeyFrame;
                 _pKeyFrameStack.push_back(pOneKeyFrame);
-                pOneFrame->SetDetectionsAsLandmarks();
+                pOneFrame->SetDetectionsAsRefObjects();
                 pOneFrame->SetPose(Eigen::Matrix4f::Identity());
                 TDO_LOG_INFO("keyframe insert! frame number: " << filename);
                 TDO_LOG_INFO("keyframe in world pose: " << pOneKeyFrame->_pose_wc);

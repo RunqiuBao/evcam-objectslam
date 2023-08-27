@@ -15,7 +15,7 @@ class KeyFrame {
 public:
     KeyFrame(const std::shared_ptr<Frame> pRefFrame, const Mat44_t& refKeyFrameInWorldTransform);
 
-    std::vector<std::shared_ptr<LandMark>> landmarks;
+    std::vector<std::shared_ptr<RefObject>> _refObjects;
 
     Mat44_t _pose_wc;  // Note: pose current to world
 

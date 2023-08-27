@@ -47,15 +47,15 @@ public:
         std::vector<ThreeDDetection>& threeDDetections
     );
 
-    void SetDetectionsAsLandmarks(){
-        _detectionIDsOfCorrespondingLandmarks.resize(_threeDDetections.size());
-        std::iota(_detectionIDsOfCorrespondingLandmarks.begin(), _detectionIDsOfCorrespondingLandmarks.end(), 0);
+    void SetDetectionsAsRefObjects(){
+        _detectionIDsOfCorrespondingRefObjects.resize(_threeDDetections.size());
+        std::iota(_detectionIDsOfCorrespondingRefObjects.begin(), _detectionIDsOfCorrespondingRefObjects.end(), 0);
     }
 
     std::shared_ptr<KeyFrame> _pRefKeyframe;
     // 3D detections from the matched 2D detections
     std::vector<ThreeDDetection> _threeDDetections;
-    std::vector<int> _detectionIDsOfCorrespondingLandmarks; // Note: size if same as landmarks in refKeyframe; if not correspondence, will be -1.
+    std::vector<int> _detectionIDsOfCorrespondingRefObjects; // Note: size if same as refObjects in refKeyframe; if not correspondence, will be -1.
     // 2D detections on the left- and right Image
     std::vector<TwoDBoundingBox> _leftCamDetections;
     std::vector<TwoDBoundingBox> _rightCamDetections;
