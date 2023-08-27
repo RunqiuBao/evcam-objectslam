@@ -45,3 +45,14 @@ if [[ "$answer" == [yY] ]]; then
   make -j8
   make install)
 fi
+
+read -p "Do you want to build pangolin?(y/n)" answer
+if [[ "$answer" == [yY] ]]; then
+  # build pangolin
+  (cd Pangolin
+  cmake -B build -GNinja
+  cmake --build build
+  echo -e "-------- build python stuff --------"
+  cmake --build build -t pypangolin_pip_install)
+fi
+ 

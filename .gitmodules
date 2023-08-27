@@ -16,3 +16,6 @@
 [submodule "3rdparty/opencv_contrib"]
 	path = 3rdparty/opencv_contrib
 	url = https://github.com/opencv/opencv_contrib.git
+[submodule "3rdparty/Pangolin"]
+	path = 3rdparty/Pangolin
+	url = https://github.com/stevenlovegrove/Pangolin.git
