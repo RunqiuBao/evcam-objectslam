@@ -4,7 +4,7 @@
 #include <filesystem>
 
 #include <logging.h>
-TDO_LOGGER("examples.DetectObjectsByEventLinemod")
+TDO_LOGGER("eventobjectslam.object")
 
 
 namespace eventobjectslam {

@@ -5,7 +5,10 @@ TDO_LOGGER("eventobjectslam.keyframe")
 
 namespace eventobjectslam {
 
-KeyFrame::KeyFrame(const std::shared_ptr<Frame> pRefFrame, const Mat44_t& refKeyFrameInWorldTransform){
+std::atomic<unsigned int> KeyFrame::_nextID{0};
+
+KeyFrame::KeyFrame(const std::shared_ptr<Frame> pRefFrame, const Mat44_t& refKeyFrameInWorldTransform)
+:_keyFrameID(_nextID++) {
     _pose_wc = refKeyFrameInWorldTransform * pRefFrame->GetPose();
     size_t countRefObject = 0;
     for(ThreeDDetection oneDetection : pRefFrame->_threeDDetections){

@@ -21,6 +21,9 @@ public:
 
     std::shared_ptr<Frame> _pRefFrame;
 
+    unsigned int _keyFrameID;
+    static std::atomic<unsigned int> _nextID;
+
 };
 
 
