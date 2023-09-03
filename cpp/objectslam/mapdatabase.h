@@ -23,21 +23,22 @@ public:
 
     // ~MapDataBase();
 
-    void AddKeyFrame(KeyFrame* keyFrame);
+    void AddKeyFrame(std::shared_ptr<KeyFrame> pKeyFrame);
 
-    void AddLandMark(LandMark* landMark);
+    void AddLandMark(std::shared_ptr<LandMark> pLandmark);
 
 private:
     // mutex for mutal exclusion controll between class methods called in different threads
     mutable std::mutex _mtxMapAccess;
 
+    size_t _maxKeyFrameID = 0;
     //! IDs and keyframes
-    std::unordered_map<unsigned int, KeyFrame*> _keyFrames;
+    std::unordered_map<unsigned int, std::shared_ptr<KeyFrame>> _keyFrames;
 
     //! IDs and landmarks
-    std::unordered_map<unsigned int, LandMark*> _landMarks;
+    std::unordered_map<unsigned int, std::shared_ptr<LandMark>> _landmarks;
 
-}
+};
 
 }  // end of namespace eventobjectslam
 

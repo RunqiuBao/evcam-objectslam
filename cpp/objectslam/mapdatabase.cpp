@@ -10,9 +10,16 @@ MapDataBase::MapDataBase(){
     TDO_LOG_INFO("Construct: MapDataBase");
 }
 
-void MapDataBase::AddLandMark(KeyFrame* keyFrame){
+void MapDataBase::AddKeyFrame(std::shared_ptr<KeyFrame> pKeyFrame){
     std::lock_guard<std::mutex> lock(_mtxMapAccess);
-    _keyFrames[keyFrame]
+    _keyFrames[pKeyFrame->_keyFrameID] = pKeyFrame;
+    if (pKeyFrame->_keyFrameID > _maxKeyFrameID)
+        _maxKeyFrameID = pKeyFrame->_keyFrameID;
+}
+
+void MapDataBase::AddLandMark(std::shared_ptr<LandMark> pLandmark){
+    std::lock_guard<std::mutex> lock(_mtxMapAccess);
+    _landmarks[pLandmark->_landmarkID] = pLandmark;
 }
 
 } // end of namespace eventobjectslam

@@ -253,6 +253,9 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
         pOneFrame->_pRefKeyframe = _tracker._pRefKeyframe;
         _pFrameStack.push_back(pOneFrame);
 
+        if (filename == "000800"){
+            break;
+        }
     }
     outputFile.close();
 }

@@ -3,12 +3,14 @@
 
 #include "frame.h"
 #include "object.h"
+#include "landmark.h"
 
 #include <opencv2/opencv.hpp>
 
 namespace eventobjectslam{
 
 class Frame;  // Note: due to mutual reference.
+class LandMark;  // Note: due to mutual reference.
 
 class KeyFrame {
 
@@ -23,6 +25,12 @@ public:
 
     unsigned int _keyFrameID;
     static std::atomic<unsigned int> _nextID;
+
+    // observed landmarks
+    std::vector<std::shared_ptr<LandMark>> _observedLandmarks;
+
+private:
+    mutable std::mutex _mtxLandmarks;
 
 };
 
