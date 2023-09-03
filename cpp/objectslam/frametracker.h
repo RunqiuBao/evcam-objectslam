@@ -30,6 +30,8 @@ public:
 
     bool Do2DTrackingBasedTrack(Frame& currentFrame, const Frame& lastFrame, Mat44_t& velocity) const;
 
+    void CreateNewLandmarks(std::shared_ptr<KeyFrame> pRefKeyFrame, std::shared_ptr<MapDataBase> mapDb, const std::shared_ptr<object::ObjectBase> pObjectInfo);
+
     std::shared_ptr<KeyFrame> _pRefKeyframe;
 
     std::string _sStereoSequencePathForDebug;

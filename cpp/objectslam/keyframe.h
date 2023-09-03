@@ -4,6 +4,7 @@
 #include "frame.h"
 #include "object.h"
 #include "landmark.h"
+#include "camera.h"
 
 #include <opencv2/opencv.hpp>
 
@@ -15,11 +16,11 @@ class LandMark;  // Note: due to mutual reference.
 class KeyFrame {
 
 public:
-    KeyFrame(const std::shared_ptr<Frame> pRefFrame, const Mat44_t& refKeyFrameInWorldTransform);
+    KeyFrame(const std::shared_ptr<Frame> pRefFrame, const Mat44_t& refKeyFrameInWorldTransform, const std::shared_ptr<camera::CameraBase> pCamera);
 
     std::vector<std::shared_ptr<RefObject>> _refObjects;
 
-    Mat44_t _pose_wc;  // Note: pose current to world
+    Mat44_t _poseCurrentFrameInWorld;  // Note: pose current to world
 
     std::shared_ptr<Frame> _pRefFrame;
 
@@ -28,6 +29,9 @@ public:
 
     // observed landmarks
     std::vector<std::shared_ptr<LandMark>> _observedLandmarks;
+
+    // camera instance
+    std::shared_ptr<camera::CameraBase> _pCamera;
 
 private:
     mutable std::mutex _mtxLandmarks;

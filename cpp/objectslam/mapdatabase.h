@@ -27,6 +27,9 @@ public:
 
     void AddLandMark(std::shared_ptr<LandMark> pLandmark);
 
+    // scan existing landmarks for ones that are within fov of input keyFrame.
+    std::vector<std::shared_ptr<LandMark>> GetVisibleLandmarks(std::shared_ptr<KeyFrame> pRefKeyFrame);
+
 private:
     // mutex for mutal exclusion controll between class methods called in different threads
     mutable std::mutex _mtxMapAccess;

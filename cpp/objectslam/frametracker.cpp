@@ -1,5 +1,6 @@
 #include "mathutils.h"
 #include "frametracker.h"
+#include "mapdatabase.h"
 
 #include <filesystem>
 #include <algorithm>
@@ -186,7 +187,7 @@ bool FrameTracker::DoMotionBasedTrack(Frame& currentFrame, const Frame& lastFram
             // cameraInWorldTransform(0, 3) = currentCameraInWorld(0, 3);
             // cameraInWorldTransform(1, 3) = currentCameraInWorld(1, 3);
             // cameraInWorldTransform(2, 3) = currentCameraInWorld(2, 3);
-            velocity = currentFrameInRefKeyFrame * lastFrame.GetPose().inverse();
+            velocity =  lastFrame.GetPose().inverse() * currentFrameInRefKeyFrame;  // Note: think like there is a point in last frame, 
             currentFrame.SetPose(currentFrameInRefKeyFrame);
             currentFrame._isTracked = true;
             currentFrame._detectionIDsOfCorrespondingRefObjects = indicesCorrespondingDetecton;
@@ -327,12 +328,18 @@ bool FrameTracker::Do2DTrackingBasedTrack(Frame& currentFrame, const Frame& last
             return false;
         }
         else{
-            velocity = currentFrameInRefKeyFrame * lastFrame.GetPose().inverse();
+            velocity = lastFrame.GetPose().inverse() * currentFrameInRefKeyFrame;  //Note: think like there is a point in current frame, first transform it to keyframe, then to last frame.
             currentFrame.SetPose(currentFrameInRefKeyFrame);
             currentFrame._isTracked = true;
             return true;
         }
     }
+
+}
+
+
+void FrameTracker::CreateNewLandmarks(std::shared_ptr<KeyFrame> pRefKeyFrame, std::shared_ptr<MapDataBase> pMapDb, const std::shared_ptr<object::ObjectBase> pObjectInfo){
+    std::vector<std::shared_ptr<LandMark>> visibleLandmarks = pMapDb->GetVisibleLandmarks(pRefKeyFrame);
 
 }
 

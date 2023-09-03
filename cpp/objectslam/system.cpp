@@ -5,6 +5,7 @@
 #include "viszutils.h"
 #include "frame.h"
 #include "keyframe.h"
+#include "mapdatabase.h"
 
 #include <filesystem>
 #include <functional>
@@ -138,6 +139,7 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
     _tracker._sStereoSequencePathForDebug = sStereoSequencePath;
     std::vector<std::shared_ptr<Frame>> _pFrameStack;
     std::vector<std::shared_ptr<KeyFrame>> _pKeyFrameStack;
+    MapDataBase _mapDb;
     for(const std::string& filename : filenames){
         TDO_LOG_DEBUG(filename);
 
@@ -211,13 +213,15 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
         if (filename == "000000"){
             pOneFrame->SetPose(Eigen::Matrix4f::Identity());
             TDO_LOG_INFO("keyframe insert! frame number: " << filename);
-            std::shared_ptr<KeyFrame> pOneKeyframe = std::make_shared<KeyFrame>(pOneFrame, Eigen::Matrix4f::Identity());  // Note: allocated on heap. will not disappear due to out of scope.
+            std::shared_ptr<KeyFrame> pOneKeyframe = std::make_shared<KeyFrame>(pOneFrame, Eigen::Matrix4f::Identity(), _camera);  // Note: allocated on heap. will not disappear due to out of scope.
             _tracker._pRefKeyframe = pOneKeyframe;
             _pKeyFrameStack.push_back(pOneKeyframe);
+            _mapDb.AddKeyFrame(pOneKeyframe);
             pOneFrame->SetDetectionsAsRefObjects();
             pOneFrame->SetPose(Eigen::Matrix4f::Identity());
         }
         else{
+            Mat44_t nextFrameInCameraTransformBackup = nextFrameInCameraTransform;  // Note: backup in case first track fails and nextFrameInCameraTransform will be set to identity,
             bool isSuccess = _tracker.DoMotionBasedTrack(*pOneFrame, (*_pFrameStack.back()), nextFrameInCameraTransform);
 
             if ((!isSuccess) && (*_pFrameStack.back())._isTracked){
@@ -234,18 +238,19 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
 
             // insert new key frame if detection increased than previous frame
             if (isSuccess && (pOneFrame->_threeDDetections.size() > (*_pFrameStack.back())._threeDDetections.size())){
-                std::shared_ptr<KeyFrame> pOneKeyFrame = std::make_shared<KeyFrame>(pOneFrame, _tracker._pRefKeyframe->_pose_wc);
+                std::shared_ptr<KeyFrame> pOneKeyFrame = std::make_shared<KeyFrame>(pOneFrame, _tracker._pRefKeyframe->_poseCurrentFrameInWorld, _camera);
                 _tracker._pRefKeyframe = pOneKeyFrame;
+                _mapDb.AddKeyFrame(pOneKeyFrame);
                 _pKeyFrameStack.push_back(pOneKeyFrame);
                 pOneFrame->SetDetectionsAsRefObjects();
                 pOneFrame->SetPose(Eigen::Matrix4f::Identity());
                 TDO_LOG_INFO("keyframe insert! frame number: " << filename);
-                TDO_LOG_INFO("keyframe in world pose: " << pOneKeyFrame->_pose_wc);
+                TDO_LOG_INFO("keyframe in world pose: " << pOneKeyFrame->_poseCurrentFrameInWorld);
             }
 
         }
         TDO_LOG_INFO("------------- End of one frame ------------");
-        Mat44_t cameraInRealWorld = worldInRealWorld * _tracker._pRefKeyframe->_pose_wc * pOneFrame->GetPose();
+        Mat44_t cameraInRealWorld = worldInRealWorld * _tracker._pRefKeyframe->_poseCurrentFrameInWorld * pOneFrame->GetPose();  //Note: think like there is a point in current frame, first it will be transformed into keyframe, then to world, then to realWorld.
         Eigen::Quaternionf myQuaternion(cameraInRealWorld.block<3, 3>(0, 0));
         outputFile << std::to_string(frameCount) << " " << cameraInRealWorld(0, 3) << " " << cameraInRealWorld(1, 3) << " " << cameraInRealWorld(2, 3) << " " << myQuaternion.x() << " " << myQuaternion.y() << " " << myQuaternion.z() << " " << myQuaternion.w() << std::endl;
         TDO_LOG_DEBUG("cameraInRealWorld: \n" << cameraInRealWorld);

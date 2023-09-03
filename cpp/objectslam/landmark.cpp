@@ -7,7 +7,9 @@ namespace eventobjectslam {
 
 std::atomic<unsigned int> LandMark::_nextID{0};
 
-LandMark::LandMark(const Mat44_t pose_wc)
-:_pose_wc(pose_wc), _landmarkID(_nextID++){}
+LandMark::LandMark(const Mat44_t poseCurrentFrameInWorld, const std::shared_ptr<object::ObjectBase> pObjectInfo)
+:_poseCurrentFrameInWorld(poseCurrentFrameInWorld), _landmarkID(_nextID++), _pObjectInfo(pObjectInfo){
+
+}
 
 }  // end of namespace eventobjectslam
