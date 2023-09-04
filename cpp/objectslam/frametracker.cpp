@@ -1,6 +1,7 @@
 #include "mathutils.h"
 #include "frametracker.h"
 #include "mapdatabase.h"
+#include "landmark.h"
 
 #include <filesystem>
 #include <algorithm>
@@ -340,7 +341,38 @@ bool FrameTracker::Do2DTrackingBasedTrack(Frame& currentFrame, const Frame& last
 
 void FrameTracker::CreateNewLandmarks(std::shared_ptr<KeyFrame> pRefKeyFrame, std::shared_ptr<MapDataBase> pMapDb, const std::shared_ptr<object::ObjectBase> pObjectInfo){
     std::vector<std::shared_ptr<LandMark>> visibleLandmarks = pMapDb->GetVisibleLandmarks(pRefKeyFrame);
-
+    float minOverlapAreaRatioForCorrespondence = 0.5;
+    std::vector<int> indicesLandmarkForRefObjects(pRefKeyFrame->_refObjects.size(), -1);
+    for (int indexRefObject=0; indexRefObject < pRefKeyFrame->_refObjects.size(); indexRefObject++){
+        std::shared_ptr<RefObject> pRefObject = pRefKeyFrame->_refObjects[indexRefObject];
+        std::vector<cv::Point> refObjectPoints2D = mathutils::ProjectPoints3DToPoints2D(pRefObject->_detection._vertices3DInCamera, (*pRefKeyFrame->_pCamera));
+        cv::Mat refObjectPoseMask = mathutils::Draw2DHullMaskFrom2DPointsSet(refObjectPoints2D, (*pRefKeyFrame->_pCamera)._rows, (*pRefKeyFrame->_pCamera)._cols);
+        for (int indexVisibleLandmark=0; indexVisibleLandmark < visibleLandmarks.size(); indexVisibleLandmark++){
+            std::shared_ptr<LandMark> pOneLandmark = visibleLandmarks[indexVisibleLandmark];
+            Eigen::MatrixXf transformedVerticesInWorld = mathutils::TransformPoints<Eigen::MatrixXf>(pOneLandmark->_poseLandmarkInWorld, pOneLandmark->_vertices3DInLandmark);
+            Eigen::MatrixXf transformedVerticesInCamera = mathutils::TransformPoints<Eigen::MatrixXf>((pRefKeyFrame->_poseCurrentFrameInWorld).inverse(), transformedVerticesInWorld);
+            std::vector<cv::Point> oneLandmarkPoints2D = mathutils::ProjectPoints3DToPoints2D(transformedVerticesInCamera, (*pRefKeyFrame->_pCamera));
+            cv::Mat oneLandmarkPoseMask = mathutils::Draw2DHullMaskFrom2DPointsSet(oneLandmarkPoints2D, (*pRefKeyFrame->_pCamera)._rows, (*pRefKeyFrame->_pCamera)._cols);
+            cv::Mat overlaps;
+            cv::bitwise_and(refObjectPoseMask, oneLandmarkPoseMask, overlaps);
+            cv::Scalar overlapArea = cv::sum(overlaps);
+            cv::Scalar refObjectPoseMaskArea = cv::sum(refObjectPoseMask);
+            if (overlapArea[0] / refObjectPoseMaskArea[0] > minOverlapAreaRatioForCorrespondence){
+                indicesLandmarkForRefObjects[indexRefObject] = indexVisibleLandmark;
+            }
+        }
+        if (indicesLandmarkForRefObjects[indexRefObject] < 0){
+            // if not correspondence, create landmark.
+            Mat44_t poseLandmarkInWorld = pRefKeyFrame->_poseCurrentFrameInWorld * pRefObject->_detection._objectInCameraTransform;
+            std::shared_ptr<LandMark> pOneLandmark = std::make_shared<LandMark>(poseLandmarkInWorld, pObjectInfo);
+            pOneLandmark->AddObservation(pRefKeyFrame, indexRefObject);
+            pMapDb->AddLandMark(pOneLandmark);
+        }
+        else{
+            // if correspondence, and newdetection has higher score, update landmark orientation.
+            visibleLandmarks[indicesLandmarkForRefObjects[indexRefObject]]->AddObservation(pRefKeyFrame, indexRefObject);
+        }
+    }
 }
 
 }  // end of namespace eventobjectslam

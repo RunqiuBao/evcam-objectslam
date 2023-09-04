@@ -5,6 +5,7 @@
 #include "camera.h"
 #include "keyframe.h"
 #include "frame.h"
+#include "mapdatabase.h"
 #include <opencv2/opencv.hpp>
 
 namespace eventobjectslam{

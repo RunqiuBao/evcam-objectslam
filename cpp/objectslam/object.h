@@ -60,6 +60,7 @@ public:
     unsigned int _cameraID;
     Mat44_t _objectInCameraTransform;
     int _detectionID;
+    float _detectionScore;  // Note: used for records of confidence of the detection.
     Eigen::MatrixXf _vertices3DInCamera; // Note: 3x8 matrix, vertex 1, 2, 3, 4 should respectively have a connecting edge with 5, 6, 7, 8.
 
     ThreeDDetection(const Mat44_t objectInCameraTransform, const int detectionID, const Eigen::MatrixXf& vertices3DInCamera, const unsigned int cameraID)
@@ -84,11 +85,11 @@ typedef std::array<float, 6> ThreeDPlane;  // {x, y, z, nx, ny, nz}
 
 
 /***** shared methods operating objects *****/
-Eigen::MatrixXf GetVerticesOf3DBoundingBoxFromObject(const std::shared_ptr<object::ObjectBase> pObjectInfo){
+inline Eigen::MatrixXf GetVerticesOf3DBoundingBoxFromObject(const std::shared_ptr<object::ObjectBase> pObjectInfo){
     float xSize, ySize, zSize;
-    xSize = objectInfo._objectExtents[0];
-    ySize = objectInfo._objectExtents[1];
-    zSize = objectInfo._objectExtents[2];
+    xSize = pObjectInfo->_objectExtents[0];
+    ySize = pObjectInfo->_objectExtents[1];
+    zSize = pObjectInfo->_objectExtents[2];
     Eigen::MatrixXf vertices3D;
     vertices3D.resize(3, 8);
     vertices3D.col(0) << xSize / 2, ySize / 2, zSize / 2;
@@ -100,6 +101,16 @@ Eigen::MatrixXf GetVerticesOf3DBoundingBoxFromObject(const std::shared_ptr<objec
     vertices3D.col(6) << -xSize / 2, -ySize / 2, -zSize / 2;
     vertices3D.col(7) << xSize / 2, -ySize / 2, -zSize / 2;
     return vertices3D;
+}
+
+inline bool CompareDetectionScoreIfBetter(std::string methodName, float oldScore, float newScore){
+    if (methodName == "linemod"){
+        return newScore < oldScore;
+    }
+    else{
+        // error, return False for now.
+        return false;
+    }
 }
 
 }  // end of namespace eventobjectslam

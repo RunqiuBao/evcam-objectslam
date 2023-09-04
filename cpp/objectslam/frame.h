@@ -42,7 +42,7 @@ public:
     void Refine3DDetections();
 
     void Draw3DVerticesFor3DDetections(
-        const object::ObjectBase& objectInfo,
+        const std::shared_ptr<object::ObjectBase> pObjectInfo,
         const std::shared_ptr<eventobjectslam::camera::CameraBase> pCamera,
         std::vector<ThreeDDetection>& threeDDetections
     );

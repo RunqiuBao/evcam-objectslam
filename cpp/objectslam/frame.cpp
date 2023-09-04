@@ -1,5 +1,6 @@
 #include "frame.h"
 #include "mathutils.h"
+#include "object.h"
 
 #include <numeric>
 
@@ -152,29 +153,16 @@ void Frame::SetDetectionsFromExternalSrc(std::vector<TwoDBoundingBox>&& leftCamD
 
     // Refine3DDetections();
 
-    Draw3DVerticesFor3DDetections((*_leftCamDetections[0]._pObjectInfo), _pCamera, _threeDDetections);
+    Draw3DVerticesFor3DDetections(_leftCamDetections[0]._pObjectInfo, _pCamera, _threeDDetections);
 
 }
 
 void Frame::Draw3DVerticesFor3DDetections(
-    const object::ObjectBase& objectInfo,
+    const std::shared_ptr<object::ObjectBase> pObjectInfo,
     const std::shared_ptr<eventobjectslam::camera::CameraBase> pCamera,
     std::vector<ThreeDDetection>& threeDDetections
 ){
-    float xSize, ySize, zSize;
-    xSize = objectInfo._objectExtents[0];
-    ySize = objectInfo._objectExtents[1];
-    zSize = objectInfo._objectExtents[2];
-    Eigen::MatrixXf vertices3D;
-    vertices3D.resize(3, 8);
-    vertices3D.col(0) << xSize / 2, ySize / 2, zSize / 2;
-    vertices3D.col(1) << -xSize / 2, ySize / 2, zSize / 2;
-    vertices3D.col(2) << -xSize / 2, -ySize / 2, zSize / 2;
-    vertices3D.col(3) << xSize / 2, -ySize / 2, zSize / 2;
-    vertices3D.col(4) << xSize / 2, ySize / 2, -zSize / 2;
-    vertices3D.col(5) << -xSize / 2, ySize / 2, -zSize / 2;
-    vertices3D.col(6) << -xSize / 2, -ySize / 2, -zSize / 2;
-    vertices3D.col(7) << xSize / 2, -ySize / 2, -zSize / 2;
+    Eigen::MatrixXf vertices3D = GetVerticesOf3DBoundingBoxFromObject(pObjectInfo);
     int detectionID = 0;
     for (ThreeDDetection threeDDetection : threeDDetections){
         Eigen::MatrixXf vertices3DInCamera = mathutils::TransformPoints<Eigen::MatrixXf>(threeDDetection._objectInCameraTransform, vertices3D);

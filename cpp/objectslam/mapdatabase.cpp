@@ -27,7 +27,8 @@ void MapDataBase::AddLandMark(std::shared_ptr<LandMark> pLandmark){
 
 std::vector<std::shared_ptr<LandMark>> MapDataBase::GetVisibleLandmarks(std::shared_ptr<KeyFrame> pRefKeyFrame){
     float angleFoVLimit = std::atan(std::max(pRefKeyFrame->_pCamera->_cols, pRefKeyFrame->_pCamera->_rows) / 2. /pRefKeyFrame->_pCamera->_kk(0, 0));
-    TDO_LOG_DEBUG_FORMAT("angleFoVLimit of this camera: %f deg", angleFoVLimit * (180.0 / M_PI));
+    float angleFoVLimitDegree = angleFoVLimit * (180.0 / M_PI);
+    TDO_LOG_DEBUG_FORMAT("angleFoVLimit of this camera: %f deg", angleFoVLimitDegree);
     std::vector<std::shared_ptr<LandMark>> visibleLandmarks;
     for (const auto id_landmark : _landmarks){
         Eigen::Vector3f vCamToLandmark = id_landmark.second->_poseLandmarkInWorld.block(0, 3, 3, 1) - pRefKeyFrame->_poseCurrentFrameInWorld.block(0, 3, 3, 1);
