@@ -23,6 +23,7 @@ void MapDataBase::AddKeyFrame(std::shared_ptr<KeyFrame> pKeyFrame){
 void MapDataBase::AddLandMark(std::shared_ptr<LandMark> pLandmark){
     std::lock_guard<std::mutex> lock(_mtxMapAccess);
     _landmarks[pLandmark->_landmarkID] = pLandmark;
+    TDO_LOG_INFO_FORMAT("Added one landmark to MapDB. Totally %d landmarks.", _landmarks.size());
 }
 
 std::vector<std::shared_ptr<LandMark>> MapDataBase::GetVisibleLandmarks(std::shared_ptr<KeyFrame> pRefKeyFrame){
