@@ -266,6 +266,7 @@ def DoTemplateRecognitionForDetections(detections, image, myTemplateManager, deb
             with open(pathTemplateIndexWithYoloResults, 'a') as f:
                 detection.append(str(indexSmallestShapeDifference))
                 detection.append(str(bestTemplate.scaleFactor))
+                detection.append(str(smallestScore))
                 if isNewLineAtEnd:
                     detection[-1] = detection[-1] + '\n'
                 f.write(' '.join(detection))
@@ -273,6 +274,7 @@ def DoTemplateRecognitionForDetections(detections, image, myTemplateManager, deb
             with open(pathTemplateIndexWithYoloResults, 'w') as f:
                 detection.append(str(indexSmallestShapeDifference))
                 detection.append(str(bestTemplate.scaleFactor))
+                detection.append(str(smallestScore))
                 if isNewLineAtEnd:
                     detection[-1] = detection[-1] + '\n'
                 f.write(' '.join(detection))
