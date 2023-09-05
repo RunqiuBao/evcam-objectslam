@@ -6,7 +6,9 @@ readonly NC="\033[0m" # No Color
 
 INSTALL_PATH="/home/runqiu/code/event_camera_repo/tools/tool_detectobjects/tdoinstall"
 LOG4CXX_LIB_PATH="/home/runqiu/code/event_camera_repo/tools/tool_detectobjects/3rdparty/log4cxx/install/lib"
+RAPIDJSON_LIB_PATH="/home/runqiu/code/event_camera_repo/tools/tool_detectobjects/3rdparty/rapidjson/rapidjsoninstall/lib"
 OPENCV4_LIB_PATH="/home/runqiu/code/event_camera_repo/tools/tool_detectobjects/3rdparty/opencv/opencvinstall/lib"
+PANGOLIN_LIB_PATH="/home/runqiu/code/event_camera_repo/tools/tool_detectobjects/3rdparty/Pangolin/pangolininstall/lib"
 PYTHONPACKAGE_SRC_PATH="/home/runqiu/code/event_camera_repo/tools/tool_detectobjects/python/src"
 isAddPaths=false
 isInstallPythonPackage=false
@@ -22,14 +24,16 @@ function display_help() {
     echo "options:"
     echo "-h,    --help                     Display this help"
     echo "-i,    --installpath              Define the path to install the library. By default is '/home/runqiu/code/event_camera_repo/tools/tool_detectobjects/tdoinstall'"
-    echo "-l,    --log4cxxlibpath           Define the path to the installed lib path of log4cxx. By default is ${LOG4CXX_LIB_PATH}"
-    echo "-o     --opencv4libpath           Define the path to the installed lib path of opencv4. By default is ${OPENCV4_LIB_PATH}"
-    echo "-p,    --pypackagepath            Define the path to the python package source dir. By default is '/home/runqiu/code/event_camera_repo/tools/tool_detectobjects/python/src'"
-    echo "-P,   --installpythonpackage     Whether to install the python package or not. By default False"
+    echo "       --log4cxxlibpath           Define the path to the installed lib path of log4cxx. By default is ${LOG4CXX_LIB_PATH}"
+    echo "       --rapidjsonlibpath         Define the path to the installed lib path of rapidjson. By default is ${RAPIDJSON_LIB_PATH}"
+    echo "       --pangolinlibpath          Define the path to the installed lib path of Pangolin. By default is ${PANGOLIN_LIB_PATH}"
+    echo "       --opencv4libpath           Define the path to the installed lib path of opencv4. By default is ${OPENCV4_LIB_PATH}"
+    echo "       --pypackagepath            Define the path to the python package source dir. By default is ${PYTHONPACKAGE_SRC_PATH}"
+    echo "       --installpythonpackage     Whether to install the python package or not. By default False"
     echo "-a,    --addpaths                 Add shared library paths to LD_LIBRARY_PATH. By default is false."
     echo
     echo -e "${GREEN}Example usages: ${NC}"
-    echo -e "${GREEN}  source runBuild.sh -a -i -P /home/runqiu/code/event_camera_repo/tools/tool_detectobjects/tdoinstall ${NC}"
+    echo -e "${GREEN}  source runBuild.sh -a --installpythonpackage -i /home/runqiu/code/event_camera_repo/tools/tool_detectobjects/tdoinstall ${NC}"
     echo -e "${GREEN}  Note: source runBuild.sh at the first build to make addPaths global; -a to add shared libs paths to LD_LIBRARY_PATH ${NC}"
     echo -e "${GREEN}  Note: If you want to run executable in one terminal, need to source this script in that terminal. ${NC}"
 
@@ -63,19 +67,27 @@ function parse_args() {
                 isAddPaths=true
                 shift 1  # only need to shift by 1 as this is a store_true arguments.
                 ;;
-            -l|--log4cxxlibpath)
+            --log4cxxlibpath)
                 LOG4CXX_LIB_PATH="$2"
                 shift 2
                 ;;
-            -o|--opencv4libpath)
+            --rapidjsonlibpath)
+                RAPIDJSON_LIB_PATH="$2"
+                shift 2
+                ;;
+            --pangolinlibpath)
+                PANGOLIN_LIB_PATH="$2"
+                shift 2
+                ;;
+            --opencv4libpath)
                 OPENCV4_LIB_PATH="$2"
                 shift 2
                 ;;
-            -p|--pypackagepath)
+            --pypackagepath)
                 PYTHONPACKAGE_SRC_PATH="$2"
                 shift 2
                 ;;
-            -P|--installpythonpackage)
+            --installpythonpackage)
                 isInstallPythonPackage=true
                 shift 1  # only need to shift by 1 as this is a store_true arguments.
                 ;;
@@ -121,6 +133,7 @@ if $isAddPaths; then
     export LD_LIBRARY_PATH=${INSTALL_PATH}/lib:${LD_LIBRARY_PATH}
     export LD_LIBRARY_PATH=${LOG4CXX_LIB_PATH}:${LD_LIBRARY_PATH}
     export LD_LIBRARY_PATH=${OPENCV4_LIB_PATH}:${LD_LIBRARY_PATH}
+    export LD_LIBRARY_PATH=${PANGOLIN_LIB_PATH}:${LD_LIBRARY_PATH}
     echo -e "[Add lib path & python src path] LD_LIBRARY_PATH: ${LD_LIBRARY_PATH}"
     # add paths for python packages
     export PYTHONPATH="${PYTHONPACKAGE_SRC_PATH}:$PYTHONPATH"
@@ -132,6 +145,8 @@ fi
 cmake \
   -DCMAKE_INSTALL_PREFIX=${INSTALL_PATH} \
   -DINSTALLED_LOG4CXX_LIB_PATH=${LOG4CXX_LIB_PATH} \
+  -DINSTALLED_RAPIDJSON_LIB_PATH=${RAPIDJSON_LIB_PATH} \
+  -DINSTALLED_PANGOLIN_LIB_PATH=${PANGOLIN_LIB_PATH} \
   -DINSTALLED_OPENCV4_LIB_PATH=${OPENCV4_LIB_PATH} \
   -DINSTALL_PATH_ALLTARGETS=${INSTALL_PATH} \
   ..

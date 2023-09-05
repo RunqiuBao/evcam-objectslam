@@ -20,7 +20,7 @@ if [[ "$answer" == [yY] ]]; then
   rm -r build/
   mkdir -p build && cd build
   mkdir -p rapidjsoninstall
-  cmake -DCMAKE_BUILD_TYPE=RELEASE -DCMAKE_INSTALL_PREFIX=${PWD}/rapidjsoninstall/ -DRAPIDJSON_BUILD_DOC=OFF -DRAPIDJSON_BUILD_EXAMPLES=OFF -DRAPIDJSON_BUILD_TESTS=OFF ..
+  cmake -DCMAKE_BUILD_TYPE=RELEASE -DCMAKE_INSTALL_PREFIX=../rapidjsoninstall/ -DRAPIDJSON_BUILD_DOC=OFF -DRAPIDJSON_BUILD_EXAMPLES=OFF -DRAPIDJSON_BUILD_TESTS=OFF ..
   make
   make install)
 fi
@@ -41,7 +41,7 @@ if [[ "$answer" == [yY] ]]; then
   # build pybind11
   (cd pybind11
   mkdir -p build && cd build
-  cmake -DCMAKE_BUILD_TYPE=RELEASE -DCMAKE_INSTALL_PREFIX=./pybind11install/ ..
+  cmake -DCMAKE_BUILD_TYPE=RELEASE -DCMAKE_INSTALL_PREFIX=../pybind11install/ ..
   make -j8
   make install)
 fi
@@ -50,9 +50,12 @@ read -p "Do you want to build pangolin?(y/n)" answer
 if [[ "$answer" == [yY] ]]; then
   # build pangolin
   (cd Pangolin
-  cmake -B build -GNinja
-  cmake --build build
-  echo -e "-------- build python stuff --------"
-  cmake --build build -t pypangolin_pip_install)
+  mkdir -p pangolininstall
+  mkdir -p build && cd build
+  cmake -GNinja ..
+  cmake --build ./
+  cmake --install ./ --prefix ../pangolininstall/
+  echo -e "-------- install python stuff --------"
+  cmake --build ./ -t pypangolin_pip_install)
 fi
  
