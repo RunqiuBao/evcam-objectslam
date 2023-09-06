@@ -15,7 +15,7 @@ MapDataBase::MapDataBase(){
 
 void MapDataBase::AddKeyFrame(std::shared_ptr<KeyFrame> pKeyFrame){
     std::lock_guard<std::mutex> lock(_mtxMapAccess);
-    _keyFrames[pKeyFrame->_keyFrameID] = pKeyFrame;
+    _keyframes[pKeyFrame->_keyFrameID] = pKeyFrame;
     if (pKeyFrame->_keyFrameID > _maxKeyFrameID)
         _maxKeyFrameID = pKeyFrame->_keyFrameID;
 }
@@ -42,6 +42,27 @@ std::vector<std::shared_ptr<LandMark>> MapDataBase::GetVisibleLandmarks(std::sha
     }
     TDO_LOG_DEBUG_FORMAT("Found %d visible landmarks in total %d landmarks.", visibleLandmarks.size() % _landmarks.size());
     return visibleLandmarks;
+}
+
+std::vector<std::shared_ptr<KeyFrame>> MapDataBase::GetAllKeyframes() const{
+    TDO_LOG_DEBUG_FORMAT("debug: _keyframes.size(): %d.", _keyframes.size());
+    std::lock_guard<std::mutex> lock(_mtxMapAccess);
+    std::vector<std::shared_ptr<KeyFrame>> keyframes;
+    keyframes.reserve(_keyframes.size());
+    for (const auto id_keyframe : _keyframes) {
+        keyframes.push_back(id_keyframe.second);
+    }
+    return keyframes;
+}
+
+std::vector<std::shared_ptr<LandMark>> MapDataBase::GetAllLandmarks() const{
+    std::lock_guard<std::mutex> lock(_mtxMapAccess);
+    std::vector<std::shared_ptr<LandMark>> landmarks;
+    landmarks.reserve(_landmarks.size());
+    for (const auto id_landmark : _landmarks) {
+        landmarks.push_back(id_landmark.second);
+    }
+    return landmarks;
 }
 
 } // end of namespace eventobjectslam

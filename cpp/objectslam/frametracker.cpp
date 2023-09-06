@@ -373,6 +373,8 @@ void FrameTracker::CreateNewLandmarks(std::shared_ptr<KeyFrame> pRefKeyFrame, st
             visibleLandmarks[indicesLandmarkForRefObjects[indexRefObject]]->AddObservation(pRefKeyFrame, indexRefObject);
         }
     }
+    TDO_LOG_DEBUG_FORMAT("%d landmarks currently in MapDb.", pMapDb->_landmarks.size());
+
 }
 
 }  // end of namespace eventobjectslam

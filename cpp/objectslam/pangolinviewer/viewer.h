@@ -16,10 +16,7 @@ public:
     Viewer(const std::shared_ptr<MapDataBase> pMapDatabase);
 
     // main loop for window refresh
-    void Run(
-        std::vector<std::shared_ptr<KeyFrame>> vKeyFrames,
-        std::vector<std::shared_ptr<LandMark>> vLandmarks
-    );
+    void Run();
 
 private:
     const std::shared_ptr<MapDataBase> _pMapDatabase;

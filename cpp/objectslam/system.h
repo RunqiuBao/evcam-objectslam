@@ -40,12 +40,11 @@ public:
 
     Mat44_t AppendStereoFrame(const cv::Mat& leftImg, const cv::Mat& rightImg, const double timestamp, const cv::Mat& maskImg);
 
+    std::shared_ptr<MapDataBase> _pMapDb;
 
 private:
     std::shared_ptr<camera::CameraBase> _camera = nullptr;
     std::shared_ptr<FrameTracker> _frameTracker = nullptr;
-    std::vector<Frame> _frameStack;
-
 
 };
 

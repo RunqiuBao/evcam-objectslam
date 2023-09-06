@@ -30,16 +30,19 @@ public:
     // scan existing landmarks for ones that are within fov of input keyFrame.
     std::vector<std::shared_ptr<LandMark>> GetVisibleLandmarks(std::shared_ptr<KeyFrame> pRefKeyFrame);
 
-private:
-    // mutex for mutal exclusion controll between class methods called in different threads
-    mutable std::mutex _mtxMapAccess;
+    std::vector<std::shared_ptr<KeyFrame>> GetAllKeyframes() const;
+    std::vector<std::shared_ptr<LandMark>> GetAllLandmarks() const;
 
     size_t _maxKeyFrameID = 0;
     //! IDs and keyframes
-    std::unordered_map<unsigned int, std::shared_ptr<KeyFrame>> _keyFrames;
+    std::unordered_map<unsigned int, std::shared_ptr<KeyFrame>> _keyframes;
 
     //! IDs and landmarks
     std::unordered_map<unsigned int, std::shared_ptr<LandMark>> _landmarks;
+
+private:
+    // mutex for mutal exclusion controll between class methods called in different threads
+    mutable std::mutex _mtxMapAccess;
 
 };
 

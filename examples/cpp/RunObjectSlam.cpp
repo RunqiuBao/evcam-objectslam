@@ -1,5 +1,6 @@
 #include <argparser.h>
 #include <system.h>
+#include <pangolinviewer/viewer.h>
 
 #include <logging.h>
 TDO_LOGGER("examples.RunObjectSlam")
@@ -22,9 +23,20 @@ int main(int argc, char** argv){
     TDO_LOG_DEBUG("-------- start run slam! --------");
 
     eventobjectslam::SystemConfig thisSysConfig(argparser.getCmdOption("sysconfigpath"));
-    std::shared_ptr pThisSysConfig = std::make_shared<eventobjectslam::SystemConfig>(thisSysConfig);
+    std::shared_ptr<eventobjectslam::SystemConfig> pThisSysConfig = std::make_shared<eventobjectslam::SystemConfig>(thisSysConfig);
+
     eventobjectslam::SLAMSystem thisSlamSys(pThisSysConfig);
-    thisSlamSys.TestTrackStereoSequence(argparser.getCmdOption("stereoseqpath"));
+
+    eventobjectslam::pangolinviewer::Viewer viewer(thisSlamSys._pMapDb);
+
+    // run the SLAM in another thread
+    std::thread thread([&]() {
+        thisSlamSys.TestTrackStereoSequence(argparser.getCmdOption("stereoseqpath"));
+    });
+    TDO_LOG_DEBUG("until here");
+    viewer.Run();
+
+    thread.join();
 
     return 0;
 }
