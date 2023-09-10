@@ -31,12 +31,17 @@ static void TrackWithPnP(
     const std::vector<cv::Point2f>& imagePoints,
     const cv::Mat& cameraMatrix,
     const cv::Mat& distCoeffs,
+    const float maxPoseError,  // Note: assume camera pose should be close to the origin point. if over this error, use ransacpnp instead.
     Mat44_t& currentFrameInRefKeyFrame
 ){
     // Rotation vector and translation vector
     cv::Mat rvec, tvec;
     cv::solvePnP(objectPoints, imagePoints, cameraMatrix, distCoeffs, rvec, tvec, false, cv::SOLVEPNP_EPNP);
     TDO_LOG_DEBUG("rvec: " << rvec << ", tvec: " << tvec);
+    if (std::sqrt(tvec.at<double>(0)*tvec.at<double>(0) + tvec.at<double>(1)*tvec.at<double>(1) + tvec.at<double>(2)*tvec.at<double>(2)) > maxPoseError){
+        cv::solvePnPRansac(objectPoints, imagePoints, cameraMatrix, distCoeffs, rvec, tvec, false, 20, 3.0);  // iterationsCount = 20, 	reprojectionError = 3.0
+    }
+    TDO_LOG_DEBUG("(ransac) rvec: " << rvec << ", tvec: " << tvec);
     cv::Mat rotationMatrix;
     cv::Rodrigues(rvec, rotationMatrix);
     Mat44_t refKeyFrameInCurrentFrame = Eigen::Matrix4f::Identity();
@@ -53,8 +58,7 @@ static void TrackWithPnP(
 
 bool FrameTracker::DoMotionBasedTrack(Frame& currentFrame, const Frame& lastFrame, Mat44_t& velocity) const{
     size_t minOverlapAreaToReject = 400;
-    float maxPoseErrorInY = 0.5;
-    float maxPoseErrorInXZ = 1.0;
+    float maxPoseError = 0.5;
 
     std::vector<std::shared_ptr<RefObject>> refObjects = _pRefKeyframe->_refObjects;
     // project 3d refObjects and 3d detections to current camera pose and find correspondences.
@@ -164,15 +168,11 @@ bool FrameTracker::DoMotionBasedTrack(Frame& currentFrame, const Frame& lastFram
         // Set the appropriate values for the distCoeffs
 
         Mat44_t currentFrameInRefKeyFrame;
-        TrackWithPnP(objectPoints, imagePoints, cameraMatrix, distCoeffs, currentFrameInRefKeyFrame);
-        TDO_LOG_DEBUG("currentCameraInWorld: \n" << currentFrameInRefKeyFrame);
+        TrackWithPnP(objectPoints, imagePoints, cameraMatrix, distCoeffs, maxPoseError, currentFrameInRefKeyFrame);
+        TDO_LOG_DEBUG("currentCameraInRefKeyFrame: \n" << currentFrameInRefKeyFrame);
+        velocity = lastFrame.GetPose().inverse() * currentFrameInRefKeyFrame;  // Note: think like there is a point in last frame, first transform it to keyframe then to current frame.
         if (
-            currentFrameInRefKeyFrame(1, 3) < -maxPoseErrorInY
-            || currentFrameInRefKeyFrame(1, 3) > maxPoseErrorInY
-            || currentFrameInRefKeyFrame(0, 3) < -maxPoseErrorInXZ
-            || currentFrameInRefKeyFrame(0, 3) > maxPoseErrorInXZ
-            || currentFrameInRefKeyFrame(2, 3) < -maxPoseErrorInXZ
-            || currentFrameInRefKeyFrame(2, 3) > maxPoseErrorInXZ
+            velocity.block(0, 3, 3, 1).norm() > maxPoseError
         ){
             // track failed
             velocity = Eigen::Matrix4f::Identity();
@@ -188,10 +188,10 @@ bool FrameTracker::DoMotionBasedTrack(Frame& currentFrame, const Frame& lastFram
             // cameraInWorldTransform(0, 3) = currentCameraInWorld(0, 3);
             // cameraInWorldTransform(1, 3) = currentCameraInWorld(1, 3);
             // cameraInWorldTransform(2, 3) = currentCameraInWorld(2, 3);
-            velocity =  lastFrame.GetPose().inverse() * currentFrameInRefKeyFrame;  // Note: think like there is a point in last frame, 
             currentFrame.SetPose(currentFrameInRefKeyFrame);
             currentFrame._isTracked = true;
             currentFrame._detectionIDsOfCorrespondingRefObjects = indicesCorrespondingDetecton;
+            TDO_LOG_DEBUG("track succeeded. currentFrameInRefFrame:\n" << velocity);
             return true;
         }
     }
@@ -215,9 +215,8 @@ static void DrawNodes(
 bool FrameTracker::Do2DTrackingBasedTrack(Frame& currentFrame, const Frame& lastFrame, Mat44_t& velocity) const{
     int nodeSizeHalf = 5;
     int nodeRoiSize = 20;
-    int maxTrackSuccessRoiSizeError = 2.0;
-    float maxPoseErrorInY = 0.5;
-    float maxPoseErrorInXZ = 1.0;
+    int maxTrackSuccessRoiSizeError = 2;
+    float maxPoseError = 0.5;
 
     // Draw nodes for tracking
     cv::Mat nodesCurrentFrame, nodesLastFrame;
@@ -244,6 +243,7 @@ bool FrameTracker::Do2DTrackingBasedTrack(Frame& currentFrame, const Frame& last
             twoDTracker->init(nodesLastFrame, roiNode);
             cv::Rect_<double> roiNodeUpdate;
             twoDTracker->update(nodesCurrentFrame, roiNodeUpdate);
+            TDO_LOG_DEBUG_FORMAT("roiUpdate h, w: %d, %d; nodeRoiSize: %d", roiNodeUpdate.height % roiNodeUpdate.width % nodeRoiSize);
             if (std::abs(roiNodeUpdate.width - nodeRoiSize) < maxTrackSuccessRoiSizeError && std::abs(roiNodeUpdate.height - nodeRoiSize) < maxTrackSuccessRoiSizeError){
                 // track success, record all infos.
                 cv::Point3f point3D(
@@ -287,10 +287,11 @@ bool FrameTracker::Do2DTrackingBasedTrack(Frame& currentFrame, const Frame& last
     debug2DTrackingPath.append("testBinaryTracking/");
     if (!std::filesystem::exists(debug2DTrackingPath) && !std::filesystem::create_directory(debug2DTrackingPath)){
         TDO_LOG_ERROR_FORMAT("Failed to create the folder: %s", debug2DTrackingPath.string());
-        return false;
+        throw std::runtime_error(std::string("Error creating folder: ") + debug2DTrackingPath.string());
     }
     debug2DTrackingPath.append(mathutils::FillZeros(std::to_string(static_cast<int>(currentFrame._timestamp)), 6) + ".png");
     cv::imwrite(debug2DTrackingPath.string(), debugTracking);
+    TDO_LOG_DEBUG_FORMAT("written testBinaryTracking debug image: %s", debug2DTrackingPath.string());
 
     if (objectPoints.size() < 4){
         velocity = Eigen::Matrix4f::Identity();
@@ -311,20 +312,15 @@ bool FrameTracker::Do2DTrackingBasedTrack(Frame& currentFrame, const Frame& last
         // Set the appropriate values for the distCoeffs
 
         Mat44_t currentFrameInRefKeyFrame;
-        TrackWithPnP(objectPoints, imagePoints, cameraMatrix, distCoeffs, currentFrameInRefKeyFrame);
+        TrackWithPnP(objectPoints, imagePoints, cameraMatrix, distCoeffs, maxPoseError, currentFrameInRefKeyFrame);
         TDO_LOG_DEBUG("currentCameraInWorld: \n" << currentFrameInRefKeyFrame);
         if (
-            currentFrameInRefKeyFrame(1, 3) < -maxPoseErrorInY
-            || currentFrameInRefKeyFrame(1, 3) > maxPoseErrorInY
-            || currentFrameInRefKeyFrame(0, 3) < -maxPoseErrorInXZ
-            || currentFrameInRefKeyFrame(0, 3) > maxPoseErrorInXZ
-            || currentFrameInRefKeyFrame(2, 3) < -maxPoseErrorInXZ
-            || currentFrameInRefKeyFrame(2, 3) > maxPoseErrorInXZ
+            currentFrameInRefKeyFrame.block(0, 3, 3, 1).norm() > maxPoseError
         ){
             // track failed
             velocity = Eigen::Matrix4f::Identity();
             currentFrame.SetPose(velocity * lastFrame.GetPose());
-            TDO_LOG_DEBUG("track fail. not updating camera pose.");
+            TDO_LOG_DEBUG("track fail due to too large displacement. not updating camera pose.");
             // not updating cameraInWorld
             return false;
         }

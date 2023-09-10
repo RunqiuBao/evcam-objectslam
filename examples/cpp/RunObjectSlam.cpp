@@ -31,12 +31,12 @@ int main(int argc, char** argv){
 
     // run the SLAM in another thread
     std::thread thread([&]() {
-        thisSlamSys.TestTrackStereoSequence(argparser.getCmdOption("stereoseqpath"));
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        eventobjectslam::pangolinviewer::Viewer viewer(thisSlamSys._pMapDb);
+        viewer.Run();
     });
-    TDO_LOG_DEBUG("until here");
-    std::this_thread::sleep_for(std::chrono::milliseconds(5));
-    eventobjectslam::pangolinviewer::Viewer viewer(thisSlamSys._pMapDb);
-    viewer.Run();
+
+    thisSlamSys.TestTrackStereoSequence(argparser.getCmdOption("stereoseqpath"));
 
     thread.join();
 

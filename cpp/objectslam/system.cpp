@@ -147,6 +147,7 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
         std::ifstream detectionResult(leftCamPath.append("detectionID0").append(filename + ".txt"));
         if (!detectionResult.is_open()) {
             TDO_LOG_DEBUG("Failed to open the left detectionResult (" << filename << ").");
+            frameCount++;
             continue;
         }
         std::vector<std::string> sDetections;
@@ -163,6 +164,7 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
         std::ifstream detectionResultRightCam(rightCamPath.append("detectionID0").append(filename + ".txt"));
         if (!detectionResultRightCam.is_open()) {
             TDO_LOG_DEBUG("Failed to open the right detectionResult (" << filename << ").");
+            frameCount++;
             continue;
         }
         sDetections.clear();
@@ -220,6 +222,10 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
             _tracker.CreateNewLandmarks(pOneKeyframe, _pMapDb, pColorcone);
         }
         else{
+            if (filename == "000647" || filename == "000648"){
+                size_t a = 1;
+            }
+
             Mat44_t nextFrameInCameraTransformBackup = nextFrameInCameraTransform;  // Note: backup in case first track fails and nextFrameInCameraTransform will be set to identity,
             bool isSuccess = _tracker.DoMotionBasedTrack(*pOneFrame, (*_pFrameStack.back()), nextFrameInCameraTransform);
 
