@@ -32,7 +32,9 @@ public:
 
     SLAMSystem(const std::shared_ptr<SystemConfig>& cfg)
     :_cfg(cfg)
-    {}
+    {
+        _pMapDb = std::make_shared<MapDataBase>();
+    }
 
     ~SLAMSystem(){};
 

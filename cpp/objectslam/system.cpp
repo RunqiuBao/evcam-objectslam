@@ -139,7 +139,6 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
     _tracker._sStereoSequencePathForDebug = sStereoSequencePath;
     std::vector<std::shared_ptr<Frame>> _pFrameStack;
     std::vector<std::shared_ptr<KeyFrame>> _pKeyFrameStack;
-    _pMapDb = std::make_shared<MapDataBase>();
     for(const std::string& filename : filenames){
         TDO_LOG_DEBUG(filename);
 
@@ -218,7 +217,6 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
             _pKeyFrameStack.push_back(pOneKeyframe);
             _pMapDb->AddKeyFrame(pOneKeyframe);
             pOneFrame->SetDetectionsAsRefObjects();
-            pOneFrame->SetPose(Eigen::Matrix4f::Identity());
             _tracker.CreateNewLandmarks(pOneKeyframe, _pMapDb, pColorcone);
         }
         else{

@@ -45,7 +45,6 @@ std::vector<std::shared_ptr<LandMark>> MapDataBase::GetVisibleLandmarks(std::sha
 }
 
 std::vector<std::shared_ptr<KeyFrame>> MapDataBase::GetAllKeyframes() const{
-    TDO_LOG_DEBUG_FORMAT("debug: _keyframes.size(): %d.", _keyframes.size());
     std::lock_guard<std::mutex> lock(_mtxMapAccess);
     std::vector<std::shared_ptr<KeyFrame>> keyframes;
     keyframes.reserve(_keyframes.size());

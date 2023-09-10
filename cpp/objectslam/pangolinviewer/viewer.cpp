@@ -1,6 +1,10 @@
 #include "pangolinviewer/viewer.h"
 
 
+#include <logging.h>
+TDO_LOGGER("eventobjectslam.pangolinviewer.viewer")
+
+
 #define PI 3.14159265358979
 #define Cos(th) std::cos(PI/180*(th))
 #define Sin(th) std::sin(PI/180*(th))
@@ -153,10 +157,12 @@ void Viewer::Run(){
     pangolin::View& dCam = pangolin::CreateDisplay()
                                 .SetBounds(0.0, 1.0, pangolin::Attach::Pix(175), 1.0, -mapViewerWidth / mapViewerHeight)
                                 .SetHandler(new pangolin::Handler3D(*_sCam));
-    pangolin::OpenGlMatrix gl_camPoseCurrentInWorld;
-    gl_camPoseCurrentInWorld.SetIdentity();
 
-
+    Mat44_t worldInRenderTransform;
+    worldInRenderTransform << 1, 0, 0, 0,
+                            0, 0, 1, 0,
+                            0, -1, 0, 1.5,  // Note: cam height 1.5 is manually observed.
+                            0, 0, 0, 1;
     while (!pangolin::ShouldQuit())
     {
         // Clear screen and activate view to render into
@@ -169,12 +175,17 @@ void Viewer::Run(){
         std::vector<std::shared_ptr<KeyFrame>> vKeyFrames = _pMapDatabase->GetAllKeyframes();
         std::vector<std::shared_ptr<LandMark>> vLandmarks = _pMapDatabase->GetAllLandmarks();
         for (std::shared_ptr<KeyFrame> oneKeyFrame : vKeyFrames){
-            const pangolin::OpenGlMatrix gl_camPoseCurrentInWorld(oneKeyFrame->_poseCurrentFrameInWorld.eval());
+            Mat44_t camPoseInRender = worldInRenderTransform * oneKeyFrame->_poseCurrentFrameInWorld;
+            const pangolin::OpenGlMatrix gl_camPoseCurrentInWorld(camPoseInRender.eval());
             DrawCurrentCamPose(gl_camPoseCurrentInWorld);
         }
         for (std::shared_ptr<LandMark> oneLandmark : vLandmarks){
-            DrawCylinder(oneLandmark->_poseLandmarkInWorld);
+            Mat44_t landmarkPoseInRender = worldInRenderTransform * oneLandmark->_poseLandmarkInWorld;
+            DrawCylinder(landmarkPoseInRender);
         }
+
+        // Swap frames and Process Events
+        pangolin::FinishFrame();
     }
 
 }

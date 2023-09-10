@@ -1,6 +1,8 @@
 #include <argparser.h>
 #include <system.h>
 #include <pangolinviewer/viewer.h>
+#include <thread>
+#include <chrono>
 
 #include <logging.h>
 TDO_LOGGER("examples.RunObjectSlam")
@@ -27,13 +29,13 @@ int main(int argc, char** argv){
 
     eventobjectslam::SLAMSystem thisSlamSys(pThisSysConfig);
 
-    eventobjectslam::pangolinviewer::Viewer viewer(thisSlamSys._pMapDb);
-
     // run the SLAM in another thread
     std::thread thread([&]() {
         thisSlamSys.TestTrackStereoSequence(argparser.getCmdOption("stereoseqpath"));
     });
     TDO_LOG_DEBUG("until here");
+    std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    eventobjectslam::pangolinviewer::Viewer viewer(thisSlamSys._pMapDb);
     viewer.Run();
 
     thread.join();
