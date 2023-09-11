@@ -49,21 +49,22 @@ void LoadDetections(const std::vector<std::string>& sDetections, std::vector<Two
     for (std::string sDetection : sDetections){
         std::vector<std::string> splitSDetection;
         boost::split(splitSDetection, sDetection, boost::is_any_of(" "));
-        float x, y, bWidth, bHeight, templateScale;
+        float x, y, bWidth, bHeight, templateScale, detectionScore;
         int templateID;
         x = boost::lexical_cast<float>(splitSDetection[1].c_str()) * imageWidth;
         y = boost::lexical_cast<float>(splitSDetection[2].c_str()) * imageHeight;
         bWidth = boost::lexical_cast<float>(splitSDetection[3].c_str()) * imageWidth;
         bHeight = boost::lexical_cast<float>(splitSDetection[4].c_str()) * imageHeight;
         templateID = boost::lexical_cast<size_t>(splitSDetection[5].c_str());
-        splitSDetection[6].erase(
-            std::remove_if(splitSDetection[6].begin(), 
-            splitSDetection[6].end(),
-            [](unsigned char x) { return x == '\n'; }),
-            splitSDetection[6].end()
-        );
         templateScale = boost::lexical_cast<float>(splitSDetection[6].c_str());
-        detections.push_back(TwoDBoundingBox(x, y, bWidth, bHeight, templateID, templateScale, pColorcone));
+        splitSDetection[7].erase(
+            std::remove_if(splitSDetection[7].begin(), 
+            splitSDetection[7].end(),
+            [](unsigned char x) { return x == '\n'; }),
+            splitSDetection[7].end()
+        );
+        detectionScore = boost::lexical_cast<float>(splitSDetection[7].c_str());
+        detections.push_back(TwoDBoundingBox(x, y, bWidth, bHeight, templateID, templateScale, pColorcone, detectionScore));
         TDO_LOG_DEBUG_FORMAT("one detection: %f, %f, template No. %d, at scale %f", x % y % templateID % templateScale);
     }
 }
@@ -222,10 +223,6 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
             _tracker.CreateNewLandmarks(pOneKeyframe, _pMapDb, pColorcone);
         }
         else{
-            if (filename == "000647" || filename == "000648"){
-                size_t a = 1;
-            }
-
             Mat44_t nextFrameInCameraTransformBackup = nextFrameInCameraTransform;  // Note: backup in case first track fails and nextFrameInCameraTransform will be set to identity,
             bool isSuccess = _tracker.DoMotionBasedTrack(*pOneFrame, (*_pFrameStack.back()), nextFrameInCameraTransform);
 

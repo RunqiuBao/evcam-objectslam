@@ -86,7 +86,7 @@ void camera::CameraBase::CreateThreeDDetections(
         objectInCameraTransform(1, 3) = Y;
         objectInCameraTransform(2, 3) = (*matchedLeftCamDetection)._esitmated3DDepth;
         Eigen::MatrixXf vertices3DInCamera = Eigen::MatrixXf::Zero(3, 8);  // fill this later in Frame class member method.
-        ThreeDDetection new3DDetection(objectInCameraTransform, detectionID, vertices3DInCamera, this->_cameraID);
+        ThreeDDetection new3DDetection(objectInCameraTransform, detectionID, vertices3DInCamera, this->_cameraID, matchedLeftCamDetection->_detectionScore);
         threeDDetections.push_back(new3DDetection);
         detectionID++;
     }

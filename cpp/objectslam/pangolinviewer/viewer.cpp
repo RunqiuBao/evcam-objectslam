@@ -140,8 +140,8 @@ void Viewer::Run(){
     static constexpr float mapViewerHeight = 768;
     const float viewpointF = 2000.;
     const float viewpointX = 0.;
-    const float viewpointY = -10.0;
-    const float viewpointZ = -0.1;
+    const float viewpointY = 0.0;
+    const float viewpointZ = 50.;
 
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);

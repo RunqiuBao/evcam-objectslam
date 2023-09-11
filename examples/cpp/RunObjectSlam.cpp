@@ -29,7 +29,7 @@ int main(int argc, char** argv){
 
     eventobjectslam::SLAMSystem thisSlamSys(pThisSysConfig);
 
-    // run the SLAM in another thread
+    // run the viewer in another thread
     std::thread thread([&]() {
         std::this_thread::sleep_for(std::chrono::milliseconds(5));
         eventobjectslam::pangolinviewer::Viewer viewer(thisSlamSys._pMapDb);
