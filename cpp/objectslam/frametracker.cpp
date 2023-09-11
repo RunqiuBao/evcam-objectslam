@@ -339,6 +339,10 @@ void FrameTracker::CreateNewLandmarks(std::shared_ptr<KeyFrame> pRefKeyFrame, st
     std::vector<std::shared_ptr<LandMark>> visibleLandmarks = pMapDb->GetVisibleLandmarks(pRefKeyFrame);
     float minOverlapAreaRatioForCorrespondence = 0.5;
     std::vector<int> indicesLandmarkForRefObjects(pRefKeyFrame->_refObjects.size(), -1);
+    auto smallestAxisObjectExtents = std::min_element(pObjectInfo->_objectExtents.begin(), pObjectInfo->_objectExtents.end());
+    int indexSmallestAxis = std::distance(pObjectInfo->_objectExtents.begin(), smallestAxisObjectExtents);
+    float distanceThreshold = pObjectInfo->_objectExtents[indexSmallestAxis] * 1.5;  // Note: 1.5 is a factor.
+    size_t countNewLandmark = 0;
     for (int indexRefObject=0; indexRefObject < pRefKeyFrame->_refObjects.size(); indexRefObject++){
         std::shared_ptr<RefObject> pRefObject = pRefKeyFrame->_refObjects[indexRefObject];
         std::vector<cv::Point> refObjectPoints2D = mathutils::ProjectPoints3DToPoints2D(pRefObject->_detection._vertices3DInCamera, (*pRefKeyFrame->_pCamera));
@@ -358,18 +362,28 @@ void FrameTracker::CreateNewLandmarks(std::shared_ptr<KeyFrame> pRefKeyFrame, st
             }
         }
         if (indicesLandmarkForRefObjects[indexRefObject] < 0){
-            // if not correspondence, create landmark.
-            Mat44_t poseLandmarkInWorld = pRefKeyFrame->_poseCurrentFrameInWorld * pRefObject->_detection._objectInCameraTransform;
-            std::shared_ptr<LandMark> pOneLandmark = std::make_shared<LandMark>(poseLandmarkInWorld, pObjectInfo);
-            pOneLandmark->AddObservation(pRefKeyFrame, indexRefObject);
-            pMapDb->AddLandMark(pOneLandmark);
+            // if within certain physical distance, still create correspondence.
+            // TODO: need collision check here.
+            Mat44_t poseObjectInWorld = pRefKeyFrame->_poseCurrentFrameInWorld * pRefObject->_detection._objectInCameraTransform;
+            Mat44_t poseExistingLandmark = visibleLandmarks[indicesLandmarkForRefObjects[indexRefObject]]->_poseLandmarkInWorld;
+            Eigen::Vector3f vObjectToLandmark = poseObjectInWorld.block(0, 3, 3, 1) - poseExistingLandmark.block(0, 3, 3, 1);
+            Eigen::Vector3f vSmallestAxisLandmark = poseExistingLandmark.block(0, indexSmallestAxis, 3, 1);
+            float distanceO2L = vObjectToLandmark.dot(vSmallestAxisLandmark) / vObjectToLandmark.norm();
+            if (distanceO2L > distanceThreshold){
+                // if not correspondence, create landmark.
+                std::shared_ptr<LandMark> pOneLandmark = std::make_shared<LandMark>(poseObjectInWorld, pObjectInfo);
+                pOneLandmark->AddObservation(pRefKeyFrame, indexRefObject);
+                pMapDb->AddLandMark(pOneLandmark);
+                TDO_LOG_DEBUG_FORMAT("Failed matching correspondence (distance %f). Creating new landmark...", distanceO2L);
+                countNewLandmark++;
+                continue;
+            }
         }
-        else{
-            // if correspondence, and newdetection has higher score, update landmark orientation.
-            visibleLandmarks[indicesLandmarkForRefObjects[indexRefObject]]->AddObservation(pRefKeyFrame, indexRefObject);
-        }
+        // if correspondence, and newdetection has higher score, update landmark orientation.
+        visibleLandmarks[indicesLandmarkForRefObjects[indexRefObject]]->AddObservation(pRefKeyFrame, indexRefObject);
     }
-    TDO_LOG_DEBUG_FORMAT("%d landmarks currently in MapDb.", pMapDb->_landmarks.size());
+    pRefKeyFrame->_vIdsCorrespLandmarks = indicesLandmarkForRefObjects;
+    TDO_LOG_INFO_FORMAT("Created %d new landmarks in keyframe %d. \nTotally%d landmarks currently in MapDb.", countNewLandmark % pRefKeyFrame->_keyFrameID % pMapDb->_landmarks.size());
 
 }
 

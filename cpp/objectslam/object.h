@@ -23,7 +23,7 @@ class ObjectBase {
 
 public:
     std::string _objectName;
-    ObjectExtents _objectExtents;
+    ObjectExtents _objectExtents;  // Note: full size in X, Y, Z.
     std::vector<ObjectTemplate> _templates;
     std::vector<size_t> _indicesInTemplatesArray;  // Note: input templateID, output index in _templates.
 

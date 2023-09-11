@@ -16,9 +16,16 @@ class LandMark;  // Note: due to mutual reference.
 class KeyFrame {
 
 public:
+    EIGEN_MAKE_ALIGNED_OPERATOR_NEW  // Note: use aligned eigen matrix in following member functions
+
+    // operator overrides
+    bool operator==(const KeyFrame& oneKeyframe) const { return _keyFrameID == oneKeyframe._keyFrameID; }
+    bool operator!=(const KeyFrame& oneKeyframe) const { return !(*this == oneKeyframe); }
+
     KeyFrame(const std::shared_ptr<Frame> pRefFrame, const Mat44_t& refKeyFrameInWorldTransform, const std::shared_ptr<camera::CameraBase> pCamera);
 
     std::vector<std::shared_ptr<RefObject>> _refObjects;
+    std::vector<int> _vIdsCorrespLandmarks;  // Note: same size as _refObjects
 
     Mat44_t _poseCurrentFrameInWorld;  // Note: pose current to world
 
