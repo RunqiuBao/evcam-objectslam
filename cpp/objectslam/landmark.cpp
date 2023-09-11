@@ -25,11 +25,26 @@ void LandMark::AddObservation(std::shared_ptr<KeyFrame> pRefKeyFrame, unsigned i
         return;
     }
     _observations_indices[pRefKeyFrame] = idx;
-    if (CompareDetectionScoreIfBetter("linemod", _bestDetectionScore, pRefKeyFrame->_refObjects[idx]->_detection._detectionScore)){
-        // Note: update landmark orientation.
-        Mat44_t poseLandmarkInWorldNew = pRefKeyFrame->_poseCurrentFrameInWorld * pRefKeyFrame->_refObjects[idx]->_detection._objectInCameraTransform;
-        _poseLandmarkInWorld.block(0, 0, 3, 3) = poseLandmarkInWorldNew.block(0, 0, 3, 3);
+    if (_observations_indices.size() == 1){
+        _bestDetectionScore = pRefKeyFrame->_refObjects[idx]->_detection._detectionScore;
+        _pBestRefKeyFrame = pRefKeyFrame;
     }
+    else{
+        float distanceToCurrentBestRefKeyFrame = _pBestRefKeyFrame->_refObjects[_observations_indices[_pBestRefKeyFrame]]->_detection._objectInCameraTransform.block(0, 3, 3, 1).norm();
+        float distanceToInputKeyFrame = pRefKeyFrame->_refObjects[idx]->_detection._objectInCameraTransform.block(0, 3, 3, 1).norm();
+        if (
+            // CompareDetectionScoreIfBetter("linemod", _bestDetectionScore, pRefKeyFrame->_refObjects[idx]->_detection._detectionScore) &&
+            (distanceToInputKeyFrame < distanceToCurrentBestRefKeyFrame)
+        ){
+            // Note: update landmark pose, if got an closer view from the input keyframe.
+            Mat44_t poseLandmarkInWorldNew = pRefKeyFrame->_poseCurrentFrameInWorld * pRefKeyFrame->_refObjects[idx]->_detection._objectInCameraTransform;
+            _poseLandmarkInWorld = poseLandmarkInWorldNew;
+            TDO_LOG_INFO_FORMAT("updated landmark (%d) bestKeyFrame from %d to %d, due to betterDistance: %f -> %f ; linemod score change: %f -> %f", _landmarkID % _pBestRefKeyFrame->_keyFrameID % pRefKeyFrame->_keyFrameID % distanceToCurrentBestRefKeyFrame % distanceToInputKeyFrame % _bestDetectionScore % pRefKeyFrame->_refObjects[idx]->_detection._detectionScore);
+            _bestDetectionScore = pRefKeyFrame->_refObjects[idx]->_detection._detectionScore;
+            _pBestRefKeyFrame = pRefKeyFrame;
+        }
+    }
+
     _numObservations++;
 }
 

@@ -20,12 +20,14 @@ public:
     Mat44_t _poseLandmarkInWorld;
 
     unsigned int _landmarkID;
-    float _bestDetectionScore;  // if detection score becomes better, update detection orientation. 
 
     const std::shared_ptr<object::ObjectBase> _pObjectInfo;
     Eigen::MatrixXf _vertices3DInLandmark;  // 3D bounding box in landmark frame.
 
     void AddObservation(std::shared_ptr<KeyFrame> pRefKeyFrame, unsigned int idx);
+
+    std::shared_ptr<KeyFrame> _pBestRefKeyFrame;  // Note: closest distances.
+    float _bestDetectionScore;  // (deprecated) if detection score becomes better, update detection orientation. 
 
 private:
     std::unordered_map<std::shared_ptr<KeyFrame>, unsigned int> _observations_indices;  //Note: uint is the refOject index in this keyframe.
