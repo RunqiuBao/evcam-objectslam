@@ -71,14 +71,15 @@ static void DrawHorizontalGrid() {
 
     glBegin(GL_LINES);
 
-    constexpr float interval_ratio = 0.1;
-    constexpr float grid_min = -100.0f * interval_ratio;
-    constexpr float grid_max = 100.0f * interval_ratio;
+    float expandingFactor = 2;
+    float interval_ratio = 0.1;
+    float grid_min = -100.0f * interval_ratio * expandingFactor;
+    float grid_max = 100.0f * interval_ratio * expandingFactor;
 
-    for (int x = -10; x <= 10; x += 1) {
+    for (int x = -10 * expandingFactor; x <= 10 * expandingFactor; x += 1) {
         DrawLine(x * 10.0f * interval_ratio, grid_min, 0, x * 10.0f * interval_ratio, grid_max, 0);
     }
-    for (int y = -10; y <= 10; y += 1) {
+    for (int y = -10 * expandingFactor; y <= 10 * expandingFactor; y += 1) {
         DrawLine(grid_min, y * 10.0f * interval_ratio, 0, grid_max, y * 10.0f * interval_ratio, 0);
     }
 
