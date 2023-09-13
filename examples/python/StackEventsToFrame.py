@@ -47,8 +47,11 @@ def SaveEventStack_ForLoopRoutine(
     else:
         logger.error("no such funcBreak")
         raise
-    
+
     print("left: {}".format(lastTimeStamp))
+    with open(os.path.join(datasetRootPath, 'ts.txt'), 'a') as timestampFile:
+        timestampFile.write(str(lastTimeStamp) + '\n')
+
     # if (i % 10) != 0:
     #     continue
     cc = TransformEventStackToImage(myStack)
@@ -102,6 +105,12 @@ if __name__ == "__main__":
     indexFrame = 0
     imageWidth = 1280
     imageHeight = 720
+    # create timestamp file for stacked frames
+    if os.path.exists(os.path.join(args.datasetRootPath, 'ts.txt')):
+        os.remove(os.path.join(args.datasetRootPath, 'ts.txt'))
+    with open(os.path.join(args.datasetRootPath, 'ts.txt'), "w") as empty_file:
+        pass
+
     while True:
         SaveEventStack_ForLoopRoutine(
             indexFrame,
