@@ -140,14 +140,20 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
     _tracker._sStereoSequencePathForDebug = sStereoSequencePath;
     std::vector<std::shared_ptr<Frame>> _pFrameStack;
     std::vector<std::shared_ptr<KeyFrame>> _pKeyFrameStack;
+    Mat44_t cameraInRealWorld = Eigen::Matrix4f::Identity();  // Note: Pose for comparing to ground truth
     for(const std::string& filename : filenames){
         TDO_LOG_DEBUG(filename);
+        if (filename == "000788"){
+            break;
+        }
 
         std::filesystem::path leftCamPath = sStereoSequencePath;
         leftCamPath.append("leftcam/");
         std::ifstream detectionResult(leftCamPath.append("detectionID0").append(filename + ".txt"));
         if (!detectionResult.is_open()) {
             TDO_LOG_DEBUG("Failed to open the left detectionResult (" << filename << ").");
+            Eigen::Quaternionf myQuaternion(cameraInRealWorld.block<3, 3>(0, 0));
+            outputFile << std::to_string(frameCount) << " " << cameraInRealWorld(0, 3) << " " << cameraInRealWorld(1, 3) << " " << cameraInRealWorld(2, 3) << " " << myQuaternion.x() << " " << myQuaternion.y() << " " << myQuaternion.z() << " " << myQuaternion.w() << std::endl;
             frameCount++;
             continue;
         }
@@ -165,6 +171,8 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
         std::ifstream detectionResultRightCam(rightCamPath.append("detectionID0").append(filename + ".txt"));
         if (!detectionResultRightCam.is_open()) {
             TDO_LOG_DEBUG("Failed to open the right detectionResult (" << filename << ").");
+            Eigen::Quaternionf myQuaternion(cameraInRealWorld.block<3, 3>(0, 0));
+            outputFile << std::to_string(frameCount) << " " << cameraInRealWorld(0, 3) << " " << cameraInRealWorld(1, 3) << " " << cameraInRealWorld(2, 3) << " " << myQuaternion.x() << " " << myQuaternion.y() << " " << myQuaternion.z() << " " << myQuaternion.w() << std::endl;
             frameCount++;
             continue;
         }
@@ -202,7 +210,7 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
         debug3DDetectionPath.append("debug3DDetection/");
         if (!std::filesystem::exists(debug3DDetectionPath) && !std::filesystem::create_directory(debug3DDetectionPath)){
             TDO_LOG_ERROR_FORMAT("Failed to create the folder: %s", debug3DDetectionPath.string());
-            return;
+            throw std::runtime_error("OS Error");
         }
         debug3DDetectionPath.append(filename + ".png");
         cv::imwrite(debug3DDetectionPath.string() , display3DDetections);
@@ -253,17 +261,13 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
 
         }
         TDO_LOG_INFO("------------- End of one frame ------------");
-        Mat44_t cameraInRealWorld = worldInRealWorld * _tracker._pRefKeyframe->_poseCurrentFrameInWorld * pOneFrame->GetPose();  //Note: think like there is a point in current frame, first it will be transformed into keyframe, then to world, then to realWorld.
+        cameraInRealWorld = worldInRealWorld * _tracker._pRefKeyframe->_poseCurrentFrameInWorld * pOneFrame->GetPose();  //Note: think like there is a point in current frame, first it will be transformed into keyframe, then to world, then to realWorld.
         Eigen::Quaternionf myQuaternion(cameraInRealWorld.block<3, 3>(0, 0));
         outputFile << std::to_string(frameCount) << " " << cameraInRealWorld(0, 3) << " " << cameraInRealWorld(1, 3) << " " << cameraInRealWorld(2, 3) << " " << myQuaternion.x() << " " << myQuaternion.y() << " " << myQuaternion.z() << " " << myQuaternion.w() << std::endl;
         TDO_LOG_DEBUG("cameraInRealWorld: \n" << cameraInRealWorld);
         frameCount++;
         pOneFrame->_pRefKeyframe = _tracker._pRefKeyframe;
         _pFrameStack.push_back(pOneFrame);
-
-        if (filename == "000800"){
-            break;
-        }
     }
     outputFile.close();
 }
