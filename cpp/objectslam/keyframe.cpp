@@ -8,7 +8,7 @@ namespace eventobjectslam {
 std::atomic<unsigned int> KeyFrame::_nextID{0};
 
 KeyFrame::KeyFrame(const std::shared_ptr<Frame> pRefFrame, const Mat44_t& refKeyFrameInWorldTransform, const std::shared_ptr<camera::CameraBase> pCamera)
-:_keyFrameID(_nextID++), _pCamera(pCamera) {
+:_keyFrameID(_nextID++), _pCamera(pCamera), _graphNode(std::unique_ptr<GraphNode>(new GraphNode(this))) {
     _poseCurrentFrameInWorld = refKeyFrameInWorldTransform * pRefFrame->GetPose();
     size_t countRefObject = 0;
     for(ThreeDDetection oneDetection : pRefFrame->_threeDDetections){

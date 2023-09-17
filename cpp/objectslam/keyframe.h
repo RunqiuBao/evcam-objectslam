@@ -5,6 +5,7 @@
 #include "object.h"
 #include "landmark.h"
 #include "camera.h"
+#include "graphnode.h"
 
 #include <opencv2/opencv.hpp>
 
@@ -12,6 +13,7 @@ namespace eventobjectslam{
 
 class Frame;  // Note: due to mutual reference.
 class LandMark;  // Note: due to mutual reference.
+class GraphNode;  // Note: due to mutual reference.
 
 class KeyFrame {
 
@@ -37,11 +39,20 @@ public:
     // observed landmarks
     std::vector<std::shared_ptr<LandMark>> _observedLandmarks;
 
+    std::vector<std::shared_ptr<LandMark>> GetLandmarks() { 
+        std::lock_guard<std::mutex> lock(_mtxLandmarks);
+        return _observedLandmarks; 
+    }
+
     // camera instance
     std::shared_ptr<camera::CameraBase> _pCamera;
 
+    //graph node of the covisiblity graph
+    const std::unique_ptr<GraphNode> _graphNode = nullptr;
+
 private:
     mutable std::mutex _mtxLandmarks;
+    mutable std::mutex _mtxKeyframePose;
 
 };
 

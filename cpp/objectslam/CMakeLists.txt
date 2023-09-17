@@ -7,7 +7,9 @@ add_library(ObjectSlam SHARED
         frame.cpp
         keyframe.cpp
         mapdatabase.cpp
-        landmark.cpp)
+        landmark.cpp
+        graphnode.cpp
+        )
 
 add_subdirectory(pangolinviewer)
 

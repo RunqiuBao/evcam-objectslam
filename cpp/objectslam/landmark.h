@@ -5,6 +5,7 @@
 #include "keyframe.h"
 
 #include <mutex>
+#include <map>
 
 namespace eventobjectslam {
 
@@ -14,6 +15,11 @@ class LandMark {
 
 public:
     LandMark(const Mat44_t poseLandmarkInWorld, const std::shared_ptr<object::ObjectBase> pObjectInfo);
+
+    std::map<std::shared_ptr<KeyFrame>, unsigned int> GetObservations() {
+        std::lock_guard<std::mutex> lock(_mtxObservations);
+        return _observations_indices;
+    }
 
     unsigned int _numObservations = 0;
 
@@ -30,7 +36,7 @@ public:
     float _bestDetectionScore;  // (deprecated) if detection score becomes better, update detection orientation. 
 
 private:
-    std::unordered_map<std::shared_ptr<KeyFrame>, unsigned int> _observations_indices;  //Note: uint is the refOject index in this keyframe.
+    std::map<std::shared_ptr<KeyFrame>, unsigned int> _observations_indices;  //Note: uint is the refOject index in this keyframe.
 
     mutable std::mutex _mtxObservations;
 
