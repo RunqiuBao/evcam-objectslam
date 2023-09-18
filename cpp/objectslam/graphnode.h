@@ -28,16 +28,16 @@ public:
      */
     void AddCovisibilityConnection(std::shared_ptr<KeyFrame> pAnotherKeyframe, const unsigned int weight);
 
-    /*
-     *  After adding connection, need to update covisibilities orders by weights.
-     */
-    void UpdateCovisibilityOrders();
-
     std::vector<std::shared_ptr<KeyFrame>> GetOrderedCovisibilities() const;
 
     void UpdateEraseOneCovisibleLandmark(std::map<std::shared_ptr<KeyFrame>, unsigned int> observationsForOneLandmark);
 
 private:
+    /*
+     *  After editing connection, need to update covisibilities orders by weights.
+     */
+    void _UpdateCovisibilityOrders();
+
     std::shared_ptr<KeyFrame> _pHostKeyframe;
 
     // all covisible keyframes and their weights to hostKeyframe. Weights means the number of covisible landmarks.
@@ -49,7 +49,7 @@ private:
     // covisibility keyframes in descending order of weights.
     std::vector<std::shared_ptr<KeyFrame>> _orderedCovisibilities;
 
-    mutable std::mutex _mtxCovisibilityConnections;
+    // mutable std::mutex _mtxCovisibilityConnections;  // !Note: make sure no race condition in keyframe class side.
 
 
 };

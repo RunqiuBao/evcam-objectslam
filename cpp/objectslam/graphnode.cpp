@@ -11,9 +11,7 @@ GraphNode::GraphNode(KeyFrame* pHostKeyframe) {
     _pHostKeyframe = pHostKeyframeShared;
 }
 
-void GraphNode::UpdateCovisibilityOrders() {
-    std::lock_guard<std::mutex> lock(_mtxCovisibilityConnections);
-
+void GraphNode::_UpdateCovisibilityOrders() {
     std::vector<std::pair<unsigned int, std::shared_ptr<KeyFrame>>> weight_keyframe_pairs;
     weight_keyframe_pairs.reserve(_covisibilityKeyframes_and_weights.size());
 
@@ -42,14 +40,12 @@ void GraphNode::UpdateEraseOneCovisibleLandmark(std::map<std::shared_ptr<KeyFram
             _covisibilityKeyframes_and_weights.erase(pKeyframe_indexRefObj.first);
         }
     }
-    UpdateCovisibilityOrders();
+    _UpdateCovisibilityOrders();
 }
 
 void GraphNode::AddCovisibilityConnection(std::shared_ptr<KeyFrame> pAnotherKeyframe, const unsigned int weight){
     bool bNeedUpdateOrder = false;
     {
-        // scope of mutex lock
-        std::lock_guard<std::mutex> lock(_mtxCovisibilityConnections);
         if (!_covisibilityKeyframes_and_weights.count(pAnotherKeyframe)) {
             // if this keyframe did not exist.
             _covisibilityKeyframes_and_weights[pAnotherKeyframe] = weight;
@@ -63,7 +59,7 @@ void GraphNode::AddCovisibilityConnection(std::shared_ptr<KeyFrame> pAnotherKeyf
     }
 
     if (bNeedUpdateOrder) {
-        UpdateCovisibilityOrders();
+        _UpdateCovisibilityOrders();
     }
 }
 
@@ -113,7 +109,7 @@ void GraphNode::ComputeCovisibility() {
     for (const auto& weight_covisibility : vector_weight_covisibility) {
         auto pCovisibilityKeyframe = weight_covisibility.second;
         const auto weight = weight_covisibility.first;
-        pCovisibilityKeyframe->_graphNode->AddCovisibilityConnection(_pHostKeyframe, weight);
+        pCovisibilityKeyframe->AddCovisibilityConnection(_pHostKeyframe, weight);
     }
 
     // sort by weights
@@ -126,9 +122,6 @@ void GraphNode::ComputeCovisibility() {
     }
 
     {
-        // scope of mutex
-        std::lock_guard<std::mutex> lock(_mtxCovisibilityConnections);
-
         _covisibilityKeyframes_and_weights = keyframes_weights;
         _orderedCovisibilities = orderedCovisibilities;
     }

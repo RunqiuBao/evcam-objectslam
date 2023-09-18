@@ -7,8 +7,8 @@ TDO_LOGGER("eventobjectslam.semanticmapper")
 
 namespace eventobjectslam {
 
-SemanticMapper::SemanticMapper(std::shared_ptr<MapDataBase> mapDb)
-    :_mapDb(mapDb) {}
+SemanticMapper::SemanticMapper(std::shared_ptr<MapDataBase> pMapDb)
+    :_pMapDb(pMapDb) {}
 
 void SemanticMapper::SchedulePruneLandmarksTask(std::shared_ptr<KeyFrame> pTargetKeyframe) {
     TDO_LOG_DEBUG_FORMAT("scheduled landmark pruning in keyframe(%d)", pTargetKeyframe->_keyFrameID);
@@ -16,19 +16,17 @@ void SemanticMapper::SchedulePruneLandmarksTask(std::shared_ptr<KeyFrame> pTarge
     _pTargetKeyframeToPruneLandmark = pTargetKeyframe;
 }
 
+void SemanticMapper::SchedulePruneLandmarksTask() {
+    _isPruneLandmarks = true;
+}
+
 void SemanticMapper::_DoPruneLandmarks() {
     TDO_LOG_DEBUG_FORMAT("started landmark pruning in keyframe(%d)", _pTargetKeyframeToPruneLandmark->_keyFrameID);
     auto observedLandmarks_indiceRefObj = _pTargetKeyframeToPruneLandmark->GetObservedLandmarks();
     for (auto pObservedLandmark_indexRefObj : observedLandmarks_indiceRefObj) {
-        auto observableKeyframes = _mapDb->GetObservableKeyframes(pObservedLandmark_indexRefObj.first);
+        auto observableKeyframes = _pMapDb->GetObservableKeyframes(pObservedLandmark_indexRefObj.first);
         if ((observableKeyframes.size() - pObservedLandmark_indexRefObj.first->GetNumObservations()) > _numNegativeCovisibilityToPruneLandmark) {
-            // prune this landmark.
-            for (auto pKeyframe_indexRefObj : pObservedLandmark_indexRefObj.first->GetObservations()) {
-                pKeyframe_indexRefObj.first->_observedLandmarks_indicesRefObj.erase(pObservedLandmark_indexRefObj.first);
-                pKeyframe_indexRefObj.first->_graphNode->UpdateEraseOneCovisibleLandmark(pObservedLandmark_indexRefObj.first->GetObservations());
-            }
-            _mapDb->_landmarks.erase(pObservedLandmark_indexRefObj.first->_landmarkID);
-            TDO_LOG_DEBUG_FORMAT("Erased landmark (%d) from map database and covisibilities of all related keyframes.", pObservedLandmark_indexRefObj.first->_landmarkID);
+            _pMapDb->PruneOneLandmark(pObservedLandmark_indexRefObj.first);
         }
     }
     // finish task
@@ -36,16 +34,80 @@ void SemanticMapper::_DoPruneLandmarks() {
     _isPruneLandmarks = false;
 }
 
+void SemanticMapper::_DoPruneLandmarks2() {
+    TDO_LOG_CRITICAL_FORMAT("------------- NumLandmarks in database before: %d ----------------", _pMapDb->_landmarks.size());
+    std::vector<std::shared_ptr<LandMark>> allLandmarksInDb = _pMapDb->GetAllLandmarks();
+    for (auto pLandmark : allLandmarksInDb) {
+        auto observableKeyframes = _pMapDb->GetObservableKeyframes(pLandmark);
+        TDO_LOG_CRITICAL_FORMAT("landmark(%d): posXYZ %f, %f, %f; numObservs %d; observables %d; bestKeyfrmId %d",
+                                    pLandmark->_landmarkID
+                                    % pLandmark->_poseLandmarkInWorld(0, 3)
+                                    % pLandmark->_poseLandmarkInWorld(1, 3)
+                                    % pLandmark->_poseLandmarkInWorld(2, 3)
+                                    % pLandmark->GetNumObservations()
+                                    % observableKeyframes.size()
+                                    % pLandmark->_pBestRefKeyFrame->_keyFrameID);
+        if (pLandmark->GetNumObservations() < _numMinCovisibilityToPruneLandmark && observableKeyframes.size() > _numMinCovisibilityToPruneLandmark) {
+            _pMapDb->PruneOneLandmark(pLandmark);
+        }
+    }
+    TDO_LOG_CRITICAL_FORMAT("------------ NumLandmarks in database after prune: %d --------------", _pMapDb->_landmarks.size());
+    _isPruneLandmarks = false;
+}
+
+void SemanticMapper::_DoMergeLandmarks() {
+    TDO_LOG_DEBUG_FORMAT("NumLandmarks in database before: %d", _pMapDb->_landmarks.size());
+    std::vector<std::shared_ptr<LandMark>> allLandmarksInDb = _pMapDb->GetAllLandmarks();
+    if (allLandmarksInDb.size() > 1) {
+        // TODO: improve this O(N^2) algorithm
+        auto smallestAxisObjectExtents = std::min_element(allLandmarksInDb[0]->_pObjectInfo->_objectExtents.begin(), allLandmarksInDb[0]->_pObjectInfo->_objectExtents.end());
+        int indexSmallestAxis = std::distance(allLandmarksInDb[0]->_pObjectInfo->_objectExtents.begin(), smallestAxisObjectExtents);
+        float distanceThreshold = allLandmarksInDb[0]->_pObjectInfo->_objectExtents[indexSmallestAxis] * 3.;  // Note: 3.0 is a factor.
+        std::vector<std::vector<std::shared_ptr<LandMark>>> clusters;
+        std::vector<bool> visited(allLandmarksInDb.size(), false);
+        for (size_t indexSrcLandmark = 0; indexSrcLandmark < allLandmarksInDb.size(); indexSrcLandmark++) {
+            if (!visited[indexSrcLandmark]) {
+                std::vector<std::shared_ptr<LandMark>> cluster;
+                cluster.push_back(allLandmarksInDb[indexSrcLandmark]);
+                visited[indexSrcLandmark] = true;
+
+                for (size_t indexDestLandmark = indexSrcLandmark + 1; indexDestLandmark < allLandmarksInDb.size(); indexDestLandmark++) {
+                    if (!visited[indexDestLandmark]) {
+                        float distance = (allLandmarksInDb[indexSrcLandmark]->_poseLandmarkInWorld.block(0, 3, 3, 1) - allLandmarksInDb[indexDestLandmark]->_poseLandmarkInWorld.block(0, 3, 3, 1)).norm();
+                        if (distance < distanceThreshold) {
+                            cluster.push_back(allLandmarksInDb[indexDestLandmark]);
+                            visited[indexDestLandmark] = true;
+                        }
+                        
+                    }
+                }
+
+                clusters.push_back(cluster);
+            }
+        }
+
+        for (auto& cluster : clusters) {
+            if (cluster.size() > 1) {
+                // merge into one landmark.
+                _pMapDb->MergeLandmarkCluster(cluster);
+            }
+        }
+    }
+    TDO_LOG_DEBUG_FORMAT("NumLandmarks in database after merge: %d", _pMapDb->_landmarks.size());
+    _isPruneLandmarks = false;
+}
+
 void SemanticMapper::Run() {
     TDO_LOG_DEBUG("Start semantic mapper thread.");
 
     while (!_isTerminate) {
-        // if (_isPruneLandmarks) {
-        //     auto starttime = std::chrono::steady_clock::now();
-        //     _DoPruneLandmarks();
-        //     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - starttime);
-        //     TDO_LOG_DEBUG_FORMAT("one pruneLandmarks task finished in %d milisec.", duration.count());
-        // }
+        if (_isPruneLandmarks) {
+            auto starttime = std::chrono::steady_clock::now();
+            _DoPruneLandmarks2();
+            _DoMergeLandmarks();
+            auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - starttime);
+            TDO_LOG_DEBUG_FORMAT("one pruneLandmarks task finished in %d milisec.", duration.count());
+        }
     }
     TDO_LOG_DEBUG("Terminate semantic mapper thread.");
 }

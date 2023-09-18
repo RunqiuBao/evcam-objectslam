@@ -17,6 +17,9 @@ LandMark::LandMark(
 :_poseLandmarkInWorld(poseLandmarkInWorld), _landmarkID(_nextID++), _pObjectInfo(pObjectInfo){
     _vertices3DInLandmark = GetVerticesOf3DBoundingBoxFromObject(pObjectInfo);
     _bestDetectionScore = std::numeric_limits<float>::max();
+    if (_landmarkID > 100) {
+        TDO_LOG_CRITICAL_FORMAT("iiregular landmarkID(%d)", _landmarkID);
+    }
 }
 
 void LandMark::AddObservation(std::shared_ptr<KeyFrame> pRefKeyFrame, unsigned int idx){
@@ -28,6 +31,7 @@ void LandMark::AddObservation(std::shared_ptr<KeyFrame> pRefKeyFrame, unsigned i
     if (_observations_indices.size() == 1){
         _bestDetectionScore = pRefKeyFrame->_refObjects[idx]->_detection._detectionScore;
         _pBestRefKeyFrame = pRefKeyFrame;
+        _distanceFromBestRefKeyframe = (_poseLandmarkInWorld.block(0, 3, 3, 1) - _pBestRefKeyFrame->_poseCurrentFrameInWorld.block(0, 3, 3, 1)).norm();
     }
     else{
         float distanceToCurrentBestRefKeyFrame = _pBestRefKeyFrame->_refObjects[_observations_indices[_pBestRefKeyFrame]]->_detection._objectInCameraTransform.block(0, 3, 3, 1).norm();
@@ -42,6 +46,7 @@ void LandMark::AddObservation(std::shared_ptr<KeyFrame> pRefKeyFrame, unsigned i
             TDO_LOG_INFO_FORMAT("updated landmark (%d) bestKeyFrame from %d to %d, due to betterDistance: %f -> %f ; linemod score change: %f -> %f", _landmarkID % _pBestRefKeyFrame->_keyFrameID % pRefKeyFrame->_keyFrameID % distanceToCurrentBestRefKeyFrame % distanceToInputKeyFrame % _bestDetectionScore % pRefKeyFrame->_refObjects[idx]->_detection._detectionScore);
             _bestDetectionScore = pRefKeyFrame->_refObjects[idx]->_detection._detectionScore;
             _pBestRefKeyFrame = pRefKeyFrame;
+            _distanceFromBestRefKeyframe = (_poseLandmarkInWorld.block(0, 3, 3, 1) - _pBestRefKeyFrame->_poseCurrentFrameInWorld.block(0, 3, 3, 1)).norm();
         }
     }
 

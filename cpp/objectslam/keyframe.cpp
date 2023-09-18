@@ -20,21 +20,33 @@ KeyFrame::KeyFrame(const std::shared_ptr<Frame> pRefFrame, const Mat44_t& refKey
     _bContainNewLandmarks = false;
 }
 
+void KeyFrame::AddCovisibilityConnection(std::shared_ptr<KeyFrame> pTargetKeyframe, size_t weight) {
+    std::lock_guard<std::mutex> lock(_mtxCovisibilityGraph);
+    _graphNode->AddCovisibilityConnection(pTargetKeyframe, weight);
+}
+
 void KeyFrame::InitializeObservedLandmarks(std::map<std::shared_ptr<LandMark>, unsigned int> observedLandmarks_indicesRefObj) {
-    decltype(_vIdsCorrespLandmarks) vIdsCorrespLandmarks;
-    for (auto pObservedLandmark_indexRefObj : observedLandmarks_indicesRefObj) {
-        vIdsCorrespLandmarks.push_back(pObservedLandmark_indexRefObj.first->_landmarkID);
-    }
     {
         // scope of adding observed landmarks.
         std::lock_guard<std::mutex> lock(_mtxLandmarks);
-
-        _vIdsCorrespLandmarks = vIdsCorrespLandmarks;
         _observedLandmarks_indicesRefObj = observedLandmarks_indicesRefObj;
     }
     // initialize covisibility graph node.
     _graphNode = std::unique_ptr<GraphNode>(new GraphNode(this));
 
+}
+
+void KeyFrame::DeleteOneObservedLandmark(std::shared_ptr<LandMark> oneLandmarkToPrune) {
+    std::lock_guard<std::mutex> lock(_mtxLandmarks);
+    _observedLandmarks_indicesRefObj.erase(oneLandmarkToPrune);
+    _graphNode->UpdateEraseOneCovisibleLandmark(oneLandmarkToPrune->GetObservations());
+}
+
+void KeyFrame::ReplaceOneObservedLandmark(std::shared_ptr<LandMark> oldLandmark, std::shared_ptr<LandMark> newLandmark) {
+    std::lock_guard<std::mutex> lock(_mtxLandmarks);
+    unsigned int indexRefObj = _observedLandmarks_indicesRefObj[oldLandmark];
+    _observedLandmarks_indicesRefObj.erase(oldLandmark);
+    _observedLandmarks_indicesRefObj[newLandmark] = indexRefObj;
 }
 
 } // end of namespace eventobjectslam

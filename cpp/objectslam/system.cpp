@@ -148,6 +148,7 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
     trackResultPath.append("cameraTrack.txt");
     std::ofstream outputFile(trackResultPath.string());
     int frameCount = 0;
+    size_t keyframeCount = 0;
 
     FrameTracker _tracker(_camera);
     _tracker._sStereoSequencePathForDebug = sStereoSequencePath;
@@ -273,9 +274,13 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
                 TDO_LOG_INFO("keyframe insert! frame number: " << filename);
                 TDO_LOG_INFO("keyframe in world pose: " << pOneKeyframe->_poseCurrentFrameInWorld);
                 _tracker.CreateNewLandmarks(pOneKeyframe, _pMapDb, pColorcone);
-                if (_pKeyFrameStack.size() > 5 && _pKeyFrameStack[_pKeyFrameStack.size() - 5]->_bContainNewLandmarks) {
-                    TDO_LOG_DEBUG_FORMAT("Entered landmark pruning at keyframe(%d).", _pKeyFrameStack[_pKeyFrameStack.size() - 5]->_keyFrameID);
-                    _pMapper->SchedulePruneLandmarksTask(_pKeyFrameStack[_pKeyFrameStack.size() - 5]);
+                // if (_pKeyFrameStack.size() > 5 && _pKeyFrameStack[_pKeyFrameStack.size() - 5]->_bContainNewLandmarks) {
+                //     TDO_LOG_DEBUG_FORMAT("Entered landmark pruning at keyframe(%d).", _pKeyFrameStack[_pKeyFrameStack.size() - 5]->_keyFrameID);
+                //     _pMapper->SchedulePruneLandmarksTask(_pKeyFrameStack[_pKeyFrameStack.size() - 5]);
+                // }
+                if (_pMapDb->_keyframes.size() - _pMapper->_numMinCovisibilityToPruneLandmark > keyframeCount) {
+                    _pMapper->SchedulePruneLandmarksTask();
+                    keyframeCount = _pMapDb->_keyframes.size();
                 }
             }
 

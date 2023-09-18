@@ -37,6 +37,10 @@ public:
     std::vector<std::shared_ptr<KeyFrame>> GetAllKeyframes() const;
     std::vector<std::shared_ptr<LandMark>> GetAllLandmarks() const;
 
+    void PruneOneLandmark(std::shared_ptr<LandMark> oneLandmarkToPrune);
+
+    void MergeLandmarkCluster(std::vector<std::shared_ptr<LandMark>> oneCluster);
+
     size_t _maxKeyFrameID = 0;
     //! IDs and keyframes
     std::unordered_map<unsigned int, std::shared_ptr<KeyFrame>> _keyframes;
@@ -46,7 +50,9 @@ public:
 
 private:
     // mutex for mutal exclusion controll between class methods called in different threads
-    mutable std::mutex _mtxMapAccess;
+    mutable std::mutex _mtxMapKeyframesAccess;
+
+    mutable std::mutex _mtxMapLandmarksAccess;
 
 };
 

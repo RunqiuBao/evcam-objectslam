@@ -25,7 +25,7 @@ public:
 
     Mat44_t _poseLandmarkInWorld;
 
-    unsigned int _landmarkID;
+    const unsigned int _landmarkID;
 
     const std::shared_ptr<object::ObjectBase> _pObjectInfo;
     Eigen::MatrixXf _vertices3DInLandmark;  // 3D bounding box in landmark frame.
@@ -34,11 +34,15 @@ public:
 
     size_t GetNumObservations() { return _observations_indices.size(); }
 
+    float GetDistanceFromBestObserv() { return _distanceFromBestRefKeyframe; }
+
     std::shared_ptr<KeyFrame> _pBestRefKeyFrame;  // Note: closest distances.
-    float _bestDetectionScore;  // (deprecated) if detection score becomes better, update detection orientation. 
 
 private:
     std::map<std::shared_ptr<KeyFrame>, unsigned int> _observations_indices;  //Note: uint is the refOject index in this keyframe.
+
+    float _bestDetectionScore;  // (deprecated) if detection score becomes better, update detection orientation. 
+    float _distanceFromBestRefKeyframe;
 
     mutable std::mutex _mtxObservations;
 
