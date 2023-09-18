@@ -26,8 +26,10 @@ public:
 
     KeyFrame(const std::shared_ptr<Frame> pRefFrame, const Mat44_t& refKeyFrameInWorldTransform, const std::shared_ptr<camera::CameraBase> pCamera);
 
+    void InitializeObservedLandmarks(std::map<std::shared_ptr<LandMark>, unsigned int> observedLandmarks_indicesRefObj);
+
     std::vector<std::shared_ptr<RefObject>> _refObjects;
-    std::vector<int> _vIdsCorrespLandmarks;  // Note: same size as _refObjects
+    std::vector<unsigned int> _vIdsCorrespLandmarks;  // Note: same size as _refObjects
 
     Mat44_t _poseCurrentFrameInWorld;  // Note: pose current to world
 
@@ -37,18 +39,20 @@ public:
     static std::atomic<unsigned int> _nextID;
 
     // observed landmarks
-    std::vector<std::shared_ptr<LandMark>> _observedLandmarks;
+    std::map<std::shared_ptr<LandMark>, unsigned int> _observedLandmarks_indicesRefObj;
 
-    std::vector<std::shared_ptr<LandMark>> GetLandmarks() { 
+    std::map<std::shared_ptr<LandMark>, unsigned int> GetObservedLandmarks() { 
         std::lock_guard<std::mutex> lock(_mtxLandmarks);
-        return _observedLandmarks; 
+        return _observedLandmarks_indicesRefObj;
     }
 
     // camera instance
     std::shared_ptr<camera::CameraBase> _pCamera;
 
     //graph node of the covisiblity graph
-    const std::unique_ptr<GraphNode> _graphNode = nullptr;
+    std::unique_ptr<GraphNode> _graphNode = nullptr;
+
+    bool _bContainNewLandmarks;
 
 private:
     mutable std::mutex _mtxLandmarks;

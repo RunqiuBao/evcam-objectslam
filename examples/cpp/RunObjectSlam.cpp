@@ -29,8 +29,10 @@ int main(int argc, char** argv){
 
     eventobjectslam::SLAMSystem thisSlamSys(pThisSysConfig);
 
+    thisSlamSys.Startup();
+
     // run the viewer in another thread
-    std::thread thread([&]() {
+    std::thread thread1([&]() {
         std::this_thread::sleep_for(std::chrono::milliseconds(5));
         eventobjectslam::pangolinviewer::Viewer viewer(thisSlamSys._pMapDb);
         viewer.Run();
@@ -38,7 +40,7 @@ int main(int argc, char** argv){
 
     thisSlamSys.TestTrackStereoSequence(argparser.getCmdOption("stereoseqpath"));
 
-    thread.join();
+    thread1.join();
 
     return 0;
 }

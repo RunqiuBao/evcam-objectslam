@@ -336,7 +336,8 @@ bool FrameTracker::Do2DTrackingBasedTrack(Frame& currentFrame, const Frame& last
 
 
 void FrameTracker::CreateNewLandmarks(std::shared_ptr<KeyFrame> pRefKeyFrame, std::shared_ptr<MapDataBase> pMapDb, const std::shared_ptr<object::ObjectBase> pObjectInfo){
-    std::vector<std::shared_ptr<LandMark>> visibleLandmarks = pMapDb->GetVisibleLandmarks(pRefKeyFrame);
+    std::vector<std::shared_ptr<LandMark>> visibleLandmarks = pMapDb->GetVisibleLandmarks(pRefKeyFrame);  // Note: find landmarks that might fall within FoV of this keyframe.
+    std::map<std::shared_ptr<LandMark>, unsigned int> observedLandmarks_indicesRefObj;
     float minOverlapAreaRatioForCorrespondence = 0.5;
     std::vector<int> indicesLandmarkForRefObjects(pRefKeyFrame->_refObjects.size(), -1);
     std::vector<float> distancesObjectToClosestLandmark(pRefKeyFrame->_refObjects.size(), std::numeric_limits<float>::max());
@@ -361,6 +362,7 @@ void FrameTracker::CreateNewLandmarks(std::shared_ptr<KeyFrame> pRefKeyFrame, st
             cv::Scalar refObjectPoseMaskArea = cv::sum(refObjectPoseMask);
             if ((overlapArea[0] / refObjectPoseMaskArea[0]) > minOverlapAreaRatioForCorrespondence){
                 indicesLandmarkForRefObjects[indexRefObject] = indexVisibleLandmark;
+                observedLandmarks_indicesRefObj[visibleLandmarks[indexVisibleLandmark]] = indexRefObject;
                 break;
             }
             else if (overlapArea[0] > 0) {
@@ -383,8 +385,10 @@ void FrameTracker::CreateNewLandmarks(std::shared_ptr<KeyFrame> pRefKeyFrame, st
                 std::shared_ptr<LandMark> pOneLandmark = std::make_shared<LandMark>(poseObjectInWorld, pObjectInfo);
                 pOneLandmark->AddObservation(pRefKeyFrame, indexRefObject);
                 pMapDb->AddLandMark(pOneLandmark);
+                observedLandmarks_indicesRefObj[pOneLandmark] = indexRefObject;
                 TDO_LOG_DEBUG_FORMAT("Failed matching correspondence (distance %f). Creating new landmark...", distancesObjectToClosestLandmark[indexRefObject]);
                 countNewLandmark++;
+                pRefKeyFrame->_bContainNewLandmarks = true;
                 continue;
             }
             indicesLandmarkForRefObjects[indexRefObject] = indicesForClosestLandmark[indexRefObject];
@@ -392,8 +396,9 @@ void FrameTracker::CreateNewLandmarks(std::shared_ptr<KeyFrame> pRefKeyFrame, st
         }
         // if correspondence, and new keyframe is closer, update landmark pose.
         visibleLandmarks[indicesLandmarkForRefObjects[indexRefObject]]->AddObservation(pRefKeyFrame, indexRefObject);
+        observedLandmarks_indicesRefObj[visibleLandmarks[indicesLandmarkForRefObjects[indexRefObject]]] = indexRefObject;
     }
-    pRefKeyFrame->_vIdsCorrespLandmarks = indicesLandmarkForRefObjects;
+    pRefKeyFrame->InitializeObservedLandmarks(observedLandmarks_indicesRefObj);
     TDO_LOG_INFO_FORMAT("Created %d new landmarks in keyframe %d. \nTotally%d landmarks currently in MapDb.", countNewLandmark % pRefKeyFrame->_keyFrameID % pMapDb->_landmarks.size());
 
 }

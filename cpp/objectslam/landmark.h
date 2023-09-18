@@ -32,6 +32,8 @@ public:
 
     void AddObservation(std::shared_ptr<KeyFrame> pRefKeyFrame, unsigned int idx);
 
+    size_t GetNumObservations() { return _observations_indices.size(); }
+
     std::shared_ptr<KeyFrame> _pBestRefKeyFrame;  // Note: closest distances.
     float _bestDetectionScore;  // (deprecated) if detection score becomes better, update detection orientation. 
 

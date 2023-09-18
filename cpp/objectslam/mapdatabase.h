@@ -30,6 +30,10 @@ public:
     // scan existing landmarks for ones that are within fov of input keyFrame.
     std::vector<std::shared_ptr<LandMark>> GetVisibleLandmarks(std::shared_ptr<KeyFrame> pRefKeyFrame);
 
+    // scan existing keyframes for ones that can see the landmark with good resolution.
+    std::vector<std::shared_ptr<KeyFrame>> GetObservableKeyframes(std::shared_ptr<LandMark> pRefLandmark);
+    static constexpr size_t _minAreaAsGoodObservation = 666;  //!Note: unit is pixels
+
     std::vector<std::shared_ptr<KeyFrame>> GetAllKeyframes() const;
     std::vector<std::shared_ptr<LandMark>> GetAllLandmarks() const;
 

@@ -9,6 +9,7 @@ add_library(ObjectSlam SHARED
         mapdatabase.cpp
         landmark.cpp
         graphnode.cpp
+        semanticmapper.cpp
         )
 
 add_subdirectory(pangolinviewer)

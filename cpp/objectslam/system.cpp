@@ -6,6 +6,7 @@
 #include "frame.h"
 #include "keyframe.h"
 #include "mapdatabase.h"
+#include "semanticmapper.h"
 
 #include <filesystem>
 #include <functional>
@@ -42,6 +43,18 @@ SystemConfig::SystemConfig(const std::string& configFilePath){
 SystemConfig::SystemConfig(const SystemConfig& config){
     _configFilePath = config._configFilePath;
     _jsonConfigNode.CopyFrom(config._jsonConfigNode, _jsonConfigNode.GetAllocator());
+}
+
+SLAMSystem::SLAMSystem(const std::shared_ptr<SystemConfig>& cfg)
+    :_cfg(cfg)
+{
+    _pMapDb = std::make_shared<MapDataBase>();
+    _pMapper = std::make_unique<SemanticMapper>(_pMapDb);
+}
+
+void SLAMSystem::Startup() {
+    TDO_LOG_DEBUG("Startup SLAM system.");
+    _pMapperThread  = std::unique_ptr<std::thread>(new std::thread(&SemanticMapper::Run, _pMapper.get()));
 }
 
 void LoadDetections(const std::vector<std::string>& sDetections, std::vector<TwoDBoundingBox>& detections, const unsigned int imageWidth, const unsigned int imageHeight, std::shared_ptr<object::ObjectBase> pColorcone){
@@ -146,6 +159,9 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
         if (filename == "000788"){
             break;
         }
+        // if (filename == "000020"){
+        //     break;
+        // }
 
         std::filesystem::path leftCamPath = sStereoSequencePath;
         leftCamPath.append("leftcam/");
@@ -257,6 +273,10 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
                 TDO_LOG_INFO("keyframe insert! frame number: " << filename);
                 TDO_LOG_INFO("keyframe in world pose: " << pOneKeyframe->_poseCurrentFrameInWorld);
                 _tracker.CreateNewLandmarks(pOneKeyframe, _pMapDb, pColorcone);
+                if (_pKeyFrameStack.size() > 5 && _pKeyFrameStack[_pKeyFrameStack.size() - 5]->_bContainNewLandmarks) {
+                    TDO_LOG_DEBUG_FORMAT("Entered landmark pruning at keyframe(%d).", _pKeyFrameStack[_pKeyFrameStack.size() - 5]->_keyFrameID);
+                    _pMapper->SchedulePruneLandmarksTask(_pKeyFrameStack[_pKeyFrameStack.size() - 5]);
+                }
             }
 
         }

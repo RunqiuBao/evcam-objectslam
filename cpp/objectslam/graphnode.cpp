@@ -32,6 +32,19 @@ void GraphNode::UpdateCovisibilityOrders() {
     }
 }
 
+void GraphNode::UpdateEraseOneCovisibleLandmark(std::map<std::shared_ptr<KeyFrame>, unsigned int> observationsForOneLandmark) {
+    for (auto pKeyframe_indexRefObj : observationsForOneLandmark) {
+        if (*pKeyframe_indexRefObj.first == *_pHostKeyframe){
+            continue;
+        }
+        _covisibilityKeyframes_and_weights[pKeyframe_indexRefObj.first] -= 1;
+        if (_covisibilityKeyframes_and_weights[pKeyframe_indexRefObj.first] < _weightThreshold) {
+            _covisibilityKeyframes_and_weights.erase(pKeyframe_indexRefObj.first);
+        }
+    }
+    UpdateCovisibilityOrders();
+}
+
 void GraphNode::AddCovisibilityConnection(std::shared_ptr<KeyFrame> pAnotherKeyframe, const unsigned int weight){
     bool bNeedUpdateOrder = false;
     {
@@ -55,10 +68,10 @@ void GraphNode::AddCovisibilityConnection(std::shared_ptr<KeyFrame> pAnotherKeyf
 }
 
 void GraphNode::ComputeCovisibility() {
-    const auto landmarks = _pHostKeyframe->GetLandmarks();
+    const auto observedLandmarks_indicesRefObj = _pHostKeyframe->GetObservedLandmarks();
     std::map<std::shared_ptr<KeyFrame>, unsigned int> keyframes_weights;
-    for (const auto landmark : landmarks) {
-        const auto observations = landmark->GetObservations();
+    for (const auto pObservedLandmark_indexRefObj : observedLandmarks_indicesRefObj) {
+        const auto observations = pObservedLandmark_indexRefObj.first->GetObservations();
         for (const auto& obs : observations) {
             auto oneKeyframe = obs.first;
             if (*oneKeyframe == *_pHostKeyframe) {
