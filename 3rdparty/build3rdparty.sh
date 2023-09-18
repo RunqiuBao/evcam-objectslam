@@ -58,4 +58,15 @@ if [[ "$answer" == [yY] ]]; then
   echo -e "-------- install python stuff --------"
   cmake --build ./ -t pypangolin_pip_install)
 fi
- 
+
+read -p "Do you want to build g2o?(y/n)" answer
+if [[ "$answer" == [yY] ]]; then
+  # build g2o
+  (cd g2o
+   mkdir -p g2oinstall
+   mkdir -p build && cd build
+   cmake -DCMAKE_INSTALL_PREFIX=../g2oinstall ..
+   make -j8
+   make install
+  )
+fi
