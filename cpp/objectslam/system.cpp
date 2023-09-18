@@ -19,6 +19,7 @@
 #include <Eigen/Core>
 #include <Eigen/Dense>
 #include <cassert>
+#include <chrono>
 
 #include <logging.h>
 TDO_LOGGER("eventobjectslam.system")
@@ -164,6 +165,7 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
         //     break;
         // }
 
+        auto starttime = std::chrono::steady_clock::now();
         std::filesystem::path leftCamPath = sStereoSequencePath;
         leftCamPath.append("leftcam/");
         std::ifstream detectionResult(leftCamPath.append("detectionID0").append(filename + ".txt"));
@@ -286,6 +288,8 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
 
         }
         TDO_LOG_INFO("------------- End of one frame ------------");
+        auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - starttime);
+        TDO_LOG_INFO_FORMAT("frame(%s) tracking finished in %d milisec.", filename % duration.count());
         cameraInRealWorld = worldInRealWorld * _tracker._pRefKeyframe->_poseCurrentFrameInWorld * pOneFrame->GetPose();  //Note: think like there is a point in current frame, first it will be transformed into keyframe, then to world, then to realWorld.
         Eigen::Quaternionf myQuaternion(cameraInRealWorld.block<3, 3>(0, 0));
         outputFile << std::to_string(frameCount) << " " << cameraInRealWorld(0, 3) << " " << cameraInRealWorld(1, 3) << " " << cameraInRealWorld(2, 3) << " " << myQuaternion.x() << " " << myQuaternion.y() << " " << myQuaternion.z() << " " << myQuaternion.w() << std::endl;

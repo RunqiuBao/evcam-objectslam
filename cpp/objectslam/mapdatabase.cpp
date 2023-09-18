@@ -47,7 +47,7 @@ std::vector<std::shared_ptr<LandMark>> MapDataBase::GetVisibleLandmarks(std::sha
     return visibleLandmarks;
 }
 
-std::vector<std::shared_ptr<KeyFrame>> MapDataBase::GetObservableKeyframes(std::shared_ptr<LandMark> pRefLandmark) {
+std::vector<std::shared_ptr<KeyFrame>> MapDataBase::GetObservableKeyframes(std::shared_ptr<LandMark> pRefLandmark, size_t numKeyfrmToStop) {
     std::lock_guard<std::mutex> lock(_mtxMapKeyframesAccess);
     auto starttime = std::chrono::steady_clock::now();
     std::vector<std::shared_ptr<KeyFrame>> observableKeyframes;
@@ -92,6 +92,9 @@ std::vector<std::shared_ptr<KeyFrame>> MapDataBase::GetObservableKeyframes(std::
             TDO_LOG_VERBOSE_FORMAT("projection area: %f", projectionArea);
             if (bIsObservable && projectionArea > _minAreaAsGoodObservation) {
                 observableKeyframes.push_back(id_keyframe.second);
+            }
+            if (numKeyfrmToStop > 0 && observableKeyframes.size() >= numKeyfrmToStop) {
+                break;
             }
         }
     }

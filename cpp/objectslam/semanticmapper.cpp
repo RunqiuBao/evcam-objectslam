@@ -38,7 +38,7 @@ void SemanticMapper::_DoPruneLandmarks2() {
     TDO_LOG_CRITICAL_FORMAT("------------- NumLandmarks in database before: %d ----------------", _pMapDb->_landmarks.size());
     std::vector<std::shared_ptr<LandMark>> allLandmarksInDb = _pMapDb->GetAllLandmarks();
     for (auto pLandmark : allLandmarksInDb) {
-        auto observableKeyframes = _pMapDb->GetObservableKeyframes(pLandmark);
+        auto observableKeyframes = _pMapDb->GetObservableKeyframes(pLandmark, _numMinObservableToPruneLandmark);
         TDO_LOG_CRITICAL_FORMAT("landmark(%d): posXYZ %f, %f, %f; numObservs %d; observables %d; bestKeyfrmId %d",
                                     pLandmark->_landmarkID
                                     % pLandmark->_poseLandmarkInWorld(0, 3)
@@ -47,7 +47,7 @@ void SemanticMapper::_DoPruneLandmarks2() {
                                     % pLandmark->GetNumObservations()
                                     % observableKeyframes.size()
                                     % pLandmark->_pBestRefKeyFrame->_keyFrameID);
-        if (pLandmark->GetNumObservations() < _numMinCovisibilityToPruneLandmark && observableKeyframes.size() > _numMinCovisibilityToPruneLandmark) {
+        if (pLandmark->GetNumObservations() < _numMinCovisibilityToPruneLandmark && observableKeyframes.size() >= _numMinObservableToPruneLandmark) {
             _pMapDb->PruneOneLandmark(pLandmark);
         }
     }
@@ -104,9 +104,12 @@ void SemanticMapper::Run() {
         if (_isPruneLandmarks) {
             auto starttime = std::chrono::steady_clock::now();
             _DoPruneLandmarks2();
-            _DoMergeLandmarks();
             auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - starttime);
             TDO_LOG_DEBUG_FORMAT("one pruneLandmarks task finished in %d milisec.", duration.count());
+            starttime = std::chrono::steady_clock::now();
+            _DoMergeLandmarks();
+            duration = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - starttime);
+            TDO_LOG_DEBUG_FORMAT("one mergelandmarks task finished in %d milisec.", duration.count());
         }
     }
     TDO_LOG_DEBUG("Terminate semantic mapper thread.");
