@@ -14,12 +14,13 @@ endif()
 set(MYLIB_VERSION 0.0.1)
 project(tool_detectobjects
     VERSION ${MYLIB_VERSION}
-    DESCRIPTION "An object detection library for event camera"
+    DESCRIPTION "An object base visual SLAM library for event camera"
     LANGUAGES C CXX
 )
 
 set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_BUILD_TYPE "Debug")
+# set(CMAKE_BUILD_TYPE "Debug") // Note: control build type in the build script.
+message(STATUS "set CMAKE_BUILD_TYPE to ${CMAKE_BUILD_TYPE}")
 
 # thread library
 find_package(Threads REQUIRED)
@@ -61,6 +62,29 @@ if (Pangolin_FOUND)
     message(STATUS "Pangolin Found! - ${Pangolin_INCLUDE_DIRS}")
     message(STATUS "Pangolin Found! - ${Pangolin_LIBRARIES}")
 endif()
+
+# include g2o
+LIST( APPEND CMAKE_MODULE_PATH ${INSTALLED_G2O_LIB_PATH}/../../cmake_modules )
+set( G2O_ROOT ${INSTALLED_G2O_LIB_PATH}/../ )
+find_package(G2O REQUIRED)
+if (G2O_FOUND)
+    set(G2O_INCLUDE_DIRS "${INSTALLED_G2O_LIB_PATH}/../include/")
+    set(G2O_LIBS
+            ${G2O_CORE_LIBRARY}
+            ${G2O_STUFF_LIBRARY}
+            ${G2O_SOLVER_DENSE}
+            ${G2O_SOLVER_EIGEN}
+            ${G2O_SOLVER_CHOLMOD}
+            ${G2O_SOLVER_CSPARSE}
+            ${G2O_SOLVER_CSPARSE_EXTENSION}
+            ${G2O_TYPES_SBA}
+            ${G2O_TYPES_SIM3})
+    message(STATUS "g2o Found! - ${INSTALLED_G2O_LIB_PATH}/../")
+    message(STATUS "g2o Found! - G2O_LIBS - ${G2O_LIBS}")
+else()
+    message(FATAL_ERROR "g2o not Found!")
+endif()
+
 
 set(TDO_INSTALL_PATH "${INSTALL_PATH_ALLTARGETS}")
 set(CMAKE_INSTALL_PREFIX "${TDO_INSTALL_PATH}")

@@ -17,14 +17,16 @@ add_subdirectory(pangolinviewer)
 target_include_directories(ObjectSlam PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}
         ${INSTALLED_RAPIDJSON_LIB_PATH}/../include/
-        ${Pangolin_INCLUDE_DIRS})
+        ${Pangolin_INCLUDE_DIRS}
+        ${G2O_INCLUDE_DIRS})
 
 target_link_libraries(ObjectSlam PRIVATE
         Threads::Threads
         log4cxx
         ${OpenCV_LIBS}
         Eigen3::Eigen
-        ${Boost_LIBRARIES})
+        ${Boost_LIBRARIES}
+        ${G2O_LIBS})
 target_link_libraries(ObjectSlam PUBLIC ${Pangolin_LIBRARIES})
 
 install(TARGETS ObjectSlam

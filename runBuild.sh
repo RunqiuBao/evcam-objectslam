@@ -9,6 +9,7 @@ LOG4CXX_LIB_PATH="/home/runqiu/code/event_camera_repo/tools/tool_detectobjects/3
 RAPIDJSON_LIB_PATH="/home/runqiu/code/event_camera_repo/tools/tool_detectobjects/3rdparty/rapidjson/rapidjsoninstall/lib"
 OPENCV4_LIB_PATH="/home/runqiu/code/event_camera_repo/tools/tool_detectobjects/3rdparty/opencv/opencvinstall/lib"
 PANGOLIN_LIB_PATH="/home/runqiu/code/event_camera_repo/tools/tool_detectobjects/3rdparty/Pangolin/pangolininstall/lib"
+G2O_LIB_PATH="/home/runqiu/code/event_camera_repo/tools/tool_detectobjects/3rdparty/g2o/g2oinstall/lib"
 PYTHONPACKAGE_SRC_PATH="/home/runqiu/code/event_camera_repo/tools/tool_detectobjects/python/src"
 isAddPaths=false
 isInstallPythonPackage=false
@@ -27,6 +28,7 @@ function display_help() {
     echo "       --log4cxxlibpath           Define the path to the installed lib path of log4cxx. By default is ${LOG4CXX_LIB_PATH}"
     echo "       --rapidjsonlibpath         Define the path to the installed lib path of rapidjson. By default is ${RAPIDJSON_LIB_PATH}"
     echo "       --pangolinlibpath          Define the path to the installed lib path of Pangolin. By default is ${PANGOLIN_LIB_PATH}"
+    echo "       --g2olibpath               Define the path to the installed lib path of g2o. By default is ${G2O_LIB_PATH}"
     echo "       --opencv4libpath           Define the path to the installed lib path of opencv4. By default is ${OPENCV4_LIB_PATH}"
     echo "       --pypackagepath            Define the path to the python package source dir. By default is ${PYTHONPACKAGE_SRC_PATH}"
     echo "       --installpythonpackage     Whether to install the python package or not. By default False"
@@ -83,6 +85,10 @@ function parse_args() {
                 OPENCV4_LIB_PATH="$2"
                 shift 2
                 ;;
+            --g2olibpath)
+                G2O_LIB_PATH="$2"
+                shift 2
+                ;;
             --pypackagepath)
                 PYTHONPACKAGE_SRC_PATH="$2"
                 shift 2
@@ -134,6 +140,7 @@ if $isAddPaths; then
     export LD_LIBRARY_PATH=${LOG4CXX_LIB_PATH}:${LD_LIBRARY_PATH}
     export LD_LIBRARY_PATH=${OPENCV4_LIB_PATH}:${LD_LIBRARY_PATH}
     export LD_LIBRARY_PATH=${PANGOLIN_LIB_PATH}:${LD_LIBRARY_PATH}
+    export LD_LIBRARY_PATH=${G2O_LIB_PATH}:${LD_LIBRARY_PATH}
     echo -e "[Add lib path & python src path] LD_LIBRARY_PATH: ${LD_LIBRARY_PATH}"
     # add paths for python packages
     export PYTHONPATH="${PYTHONPACKAGE_SRC_PATH}:$PYTHONPATH"
@@ -143,11 +150,13 @@ fi
 
 (mkdir -p build/ && cd build
 cmake \
+  -DCMAKE_BUILD_TYPE=Debug \
   -DCMAKE_INSTALL_PREFIX=${INSTALL_PATH} \
   -DINSTALLED_LOG4CXX_LIB_PATH=${LOG4CXX_LIB_PATH} \
   -DINSTALLED_RAPIDJSON_LIB_PATH=${RAPIDJSON_LIB_PATH} \
   -DINSTALLED_PANGOLIN_LIB_PATH=${PANGOLIN_LIB_PATH} \
   -DINSTALLED_OPENCV4_LIB_PATH=${OPENCV4_LIB_PATH} \
+  -DINSTALLED_G2O_LIB_PATH=${G2O_LIB_PATH} \
   -DINSTALL_PATH_ALLTARGETS=${INSTALL_PATH} \
   ..
 make
