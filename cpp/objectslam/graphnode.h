@@ -28,7 +28,7 @@ public:
      */
     void AddCovisibilityConnection(std::shared_ptr<KeyFrame> pAnotherKeyframe, const unsigned int weight);
 
-    std::vector<std::shared_ptr<KeyFrame>> GetOrderedCovisibilities() const;
+    std::vector<std::shared_ptr<KeyFrame>> GetOrderedCovisibilities() const { return _orderedCovisibilities; }
 
     void UpdateEraseOneCovisibleLandmark(std::map<std::shared_ptr<KeyFrame>, unsigned int> observationsForOneLandmark);
 

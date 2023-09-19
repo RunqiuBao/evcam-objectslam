@@ -25,6 +25,11 @@ void KeyFrame::AddCovisibilityConnection(std::shared_ptr<KeyFrame> pTargetKeyfra
     _graphNode->AddCovisibilityConnection(pTargetKeyframe, weight);
 }
 
+std::vector<std::shared_ptr<KeyFrame>> KeyFrame::GetOrderedCovisibilities() const {
+    std::lock_guard<std::mutex> lock(_mtxCovisibilityGraph);
+    return _graphNode->GetOrderedCovisibilities();
+}
+
 void KeyFrame::InitializeObservedLandmarks(std::map<std::shared_ptr<LandMark>, unsigned int> observedLandmarks_indicesRefObj) {
     {
         // scope of adding observed landmarks.
@@ -47,6 +52,16 @@ void KeyFrame::ReplaceOneObservedLandmark(std::shared_ptr<LandMark> oldLandmark,
     unsigned int indexRefObj = _observedLandmarks_indicesRefObj[oldLandmark];
     _observedLandmarks_indicesRefObj.erase(oldLandmark);
     _observedLandmarks_indicesRefObj[newLandmark] = indexRefObj;
+}
+
+Mat44_t KeyFrame::GetKeyframePoseInWorld() {
+    std::lock_guard<std::mutex> lock(_mtxKeyframePose);
+    return _poseCurrentFrameInWorld;
+}
+
+void KeyFrame::SetKeyframePoseInWorld(const Mat44_t& poseCurrentFrameInWorld) {
+    std::lock_guard<std::mutex> lock(_mtxKeyframePose);
+    _poseCurrentFrameInWorld = poseCurrentFrameInWorld;
 }
 
 } // end of namespace eventobjectslam

@@ -29,16 +29,21 @@ public:
     // ---------- landmark observation management ----------
     void InitializeObservedLandmarks(std::map<std::shared_ptr<LandMark>, unsigned int> observedLandmarks_indicesRefObj);
 
-    void DeleteOneObservedLandmark(std::shared_ptr<LandMark> oneLandmarkToPrune);
+    void DeleteOneObservedLandmark(std::shared_ptr<LandMark> oneLandmarkToPrune);  // FIXME: could change landmark's bestRefKeyframe
 
     void ReplaceOneObservedLandmark(std::shared_ptr<LandMark> oldLandmark, std::shared_ptr<LandMark> newLandmark);
 
     // --------- covisibility related methods ---------
     void AddCovisibilityConnection(std::shared_ptr<KeyFrame> pTargetKeyframe, size_t weight);
 
-    std::vector<std::shared_ptr<RefObject>> _refObjects;
+    // --------- Keyframe pose ---------
+    Mat44_t GetKeyframePoseInWorld();
 
-    Mat44_t _poseCurrentFrameInWorld;  // Note: pose current to world
+    void SetKeyframePoseInWorld(const Mat44_t& poseCurrentFrameInWorld);  // FIXME: could change landmarks' bestRefKeyframe.
+
+    std::vector<std::shared_ptr<KeyFrame>> GetOrderedCovisibilities() const;
+
+    std::vector<std::shared_ptr<RefObject>> _refObjects;
 
     std::shared_ptr<Frame> _pRefFrame;
 
@@ -58,9 +63,13 @@ public:
 
     bool _bContainNewLandmarks;
 
+    std::vector<std::shared_ptr<Frame>> _vFrames;
+
 private:
     //graph node of the covisiblity graph
     std::unique_ptr<GraphNode> _graphNode = nullptr;
+
+    Mat44_t _poseCurrentFrameInWorld;  // Note: pose current to world
 
     mutable std::mutex _mtxLandmarks;
     mutable std::mutex _mtxKeyframePose;

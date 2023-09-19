@@ -176,12 +176,12 @@ void Viewer::Run(){
         std::vector<std::shared_ptr<KeyFrame>> vKeyFrames = _pMapDatabase->GetAllKeyframes();
         std::vector<std::shared_ptr<LandMark>> vLandmarks = _pMapDatabase->GetAllLandmarks();
         for (std::shared_ptr<KeyFrame> oneKeyFrame : vKeyFrames){
-            Mat44_t camPoseInRender = worldInRenderTransform * oneKeyFrame->_poseCurrentFrameInWorld;
+            Mat44_t camPoseInRender = worldInRenderTransform * oneKeyFrame->GetKeyframePoseInWorld();
             const pangolin::OpenGlMatrix gl_camPoseCurrentInWorld(camPoseInRender.eval());
             DrawCurrentCamPose(gl_camPoseCurrentInWorld);
         }
         for (std::shared_ptr<LandMark> oneLandmark : vLandmarks){
-            Mat44_t landmarkPoseInRender = worldInRenderTransform * oneLandmark->_poseLandmarkInWorld;
+            Mat44_t landmarkPoseInRender = worldInRenderTransform * oneLandmark->GetLandmarkPoseInWorld();
             DrawCylinder(landmarkPoseInRender);
         }
 

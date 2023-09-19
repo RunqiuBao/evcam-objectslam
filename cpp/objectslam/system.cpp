@@ -156,6 +156,9 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
     std::vector<std::shared_ptr<Frame>> _pFrameStack;
     std::vector<std::shared_ptr<KeyFrame>> _pKeyFrameStack;
     Mat44_t cameraInRealWorld = Eigen::Matrix4f::Identity();  // Note: Pose for comparing to ground truth
+
+    // for debug purpose
+    std::vector<size_t> numFramesEachKeyframe;
     for(const std::string& filename : filenames){
         TDO_LOG_DEBUG(filename);
         if (filename == "000788"){
@@ -267,14 +270,16 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
 
             // insert new key frame if detection increased than previous frame
             if (isSuccess && (pOneFrame->_threeDDetections.size() > (*_pFrameStack.back())._threeDDetections.size())){
-                std::shared_ptr<KeyFrame> pOneKeyframe = std::make_shared<KeyFrame>(pOneFrame, _tracker._pRefKeyframe->_poseCurrentFrameInWorld, _camera);
+                TDO_LOG_DEBUG_FORMAT("Last Keyframe(%d) contains %d frames.", _pKeyFrameStack.back()->_keyFrameID % _pKeyFrameStack.back()->_vFrames.size());
+                numFramesEachKeyframe.push_back(_pKeyFrameStack.back()->_vFrames.size());  // debug code
+                std::shared_ptr<KeyFrame> pOneKeyframe = std::make_shared<KeyFrame>(pOneFrame, _tracker._pRefKeyframe->GetKeyframePoseInWorld(), _camera);
                 _tracker._pRefKeyframe = pOneKeyframe;
                 _pMapDb->AddKeyFrame(pOneKeyframe);
                 _pKeyFrameStack.push_back(pOneKeyframe);
                 pOneFrame->SetDetectionsAsRefObjects();
                 pOneFrame->SetPose(Eigen::Matrix4f::Identity());
                 TDO_LOG_INFO("keyframe insert! frame number: " << filename);
-                TDO_LOG_INFO("keyframe in world pose: " << pOneKeyframe->_poseCurrentFrameInWorld);
+                TDO_LOG_INFO("keyframe in world pose: " << pOneKeyframe->GetKeyframePoseInWorld());
                 _tracker.CreateNewLandmarks(pOneKeyframe, _pMapDb, pColorcone);
                 // if (_pKeyFrameStack.size() > 5 && _pKeyFrameStack[_pKeyFrameStack.size() - 5]->_bContainNewLandmarks) {
                 //     TDO_LOG_DEBUG_FORMAT("Entered landmark pruning at keyframe(%d).", _pKeyFrameStack[_pKeyFrameStack.size() - 5]->_keyFrameID);
@@ -284,21 +289,30 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
                     _pMapper->SchedulePruneLandmarksTask();
                     keyframeCount = _pMapDb->_keyframes.size();
                 }
+                // start BA
+                _pMapper->PushKeyframeForBA(pOneKeyframe);
             }
 
         }
         TDO_LOG_INFO("------------- End of one frame ------------");
         auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - starttime);
         TDO_LOG_INFO_FORMAT("frame(%s) tracking finished in %d milisec.", filename % duration.count());
-        cameraInRealWorld = worldInRealWorld * _tracker._pRefKeyframe->_poseCurrentFrameInWorld * pOneFrame->GetPose();  //Note: think like there is a point in current frame, first it will be transformed into keyframe, then to world, then to realWorld.
+        cameraInRealWorld = worldInRealWorld * _tracker._pRefKeyframe->GetKeyframePoseInWorld() * pOneFrame->GetPose();  //Note: think like there is a point in current frame, first it will be transformed into keyframe, then to world, then to realWorld.
         Eigen::Quaternionf myQuaternion(cameraInRealWorld.block<3, 3>(0, 0));
         outputFile << std::to_string(frameCount) << " " << cameraInRealWorld(0, 3) << " " << cameraInRealWorld(1, 3) << " " << cameraInRealWorld(2, 3) << " " << myQuaternion.x() << " " << myQuaternion.y() << " " << myQuaternion.z() << " " << myQuaternion.w() << std::endl;
         TDO_LOG_DEBUG("cameraInRealWorld: \n" << cameraInRealWorld);
         frameCount++;
         pOneFrame->_pRefKeyframe = _tracker._pRefKeyframe;
+        _tracker._pRefKeyframe->_vFrames.push_back(pOneFrame);
         _pFrameStack.push_back(pOneFrame);
     }
     outputFile.close();
+
+    // print debug infos
+    size_t minNumFrames = *std::min_element(numFramesEachKeyframe.begin(), numFramesEachKeyframe.end());
+    size_t maxNumFrames = *std::max_element(numFramesEachKeyframe.begin(), numFramesEachKeyframe.end());
+    TDO_LOG_INFO_FORMAT("keyframes contain maximum %d frames and minimum %d frames.", maxNumFrames % minNumFrames);
+
 }
 
 }

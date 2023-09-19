@@ -35,9 +35,9 @@ std::vector<std::shared_ptr<LandMark>> MapDataBase::GetVisibleLandmarks(std::sha
     TDO_LOG_DEBUG_FORMAT("angleFoVLimit of this camera: %f deg", angleFoVLimitDegree);
     std::vector<std::shared_ptr<LandMark>> visibleLandmarks;
     for (const auto id_landmark : _landmarks){
-        Eigen::Vector3f vCamToLandmark = id_landmark.second->_poseLandmarkInWorld.block(0, 3, 3, 1) - pRefKeyFrame->_poseCurrentFrameInWorld.block(0, 3, 3, 1);
+        Eigen::Vector3f vCamToLandmark = id_landmark.second->GetLandmarkPoseInWorld().block(0, 3, 3, 1) - pRefKeyFrame->GetKeyframePoseInWorld().block(0, 3, 3, 1);
         vCamToLandmark /= vCamToLandmark.norm();
-        Eigen::Vector3f vCamZ = pRefKeyFrame->_poseCurrentFrameInWorld.block(0, 2, 3, 1);
+        Eigen::Vector3f vCamZ = pRefKeyFrame->GetKeyframePoseInWorld().block(0, 2, 3, 1);
         float angleViewRay = std::acos(vCamToLandmark.dot(vCamZ));
         if (angleViewRay < angleFoVLimit){
             visibleLandmarks.push_back(id_landmark.second);
@@ -55,15 +55,15 @@ std::vector<std::shared_ptr<KeyFrame>> MapDataBase::GetObservableKeyframes(std::
         float angleFoVLimit = std::atan(std::max(id_keyframe.second->_pCamera->_cols, id_keyframe.second->_pCamera->_rows) / 2. / id_keyframe.second->_pCamera->_kk(0, 0));
         float angleFoVLimitDegree = angleFoVLimit * (180.0 / M_PI);
         TDO_LOG_VERBOSE_FORMAT("angleFoVLimit of this camera: %f deg", angleFoVLimitDegree);
-        Eigen::Vector3f vCamToLandmark =  pRefLandmark->_poseLandmarkInWorld.block(0, 3, 3, 1) - id_keyframe.second->_poseCurrentFrameInWorld.block(0, 3, 3, 1);
+        Eigen::Vector3f vCamToLandmark =  pRefLandmark->GetLandmarkPoseInWorld().block(0, 3, 3, 1) - id_keyframe.second->GetKeyframePoseInWorld().block(0, 3, 3, 1);
         vCamToLandmark /= vCamToLandmark.norm();
-        Eigen::Vector3f vCamZ = id_keyframe.second->_poseCurrentFrameInWorld.block(0, 2, 3, 1);
+        Eigen::Vector3f vCamZ = id_keyframe.second->GetKeyframePoseInWorld().block(0, 2, 3, 1);
         float angleViewRay = std::acos(vCamToLandmark.dot(vCamZ));
         TDO_LOG_VERBOSE_FORMAT("angleViewRay: %f, angleFoVLimit: %f", angleViewRay % angleFoVLimit);
         if (angleViewRay < angleFoVLimit){
             // check if the projection is within image and large enough
-            Eigen::MatrixXf transformedVerticesInWorld = mathutils::TransformPoints<Eigen::MatrixXf>(pRefLandmark->_poseLandmarkInWorld, pRefLandmark->_vertices3DInLandmark);
-            Eigen::MatrixXf transformedVerticesInCamera = mathutils::TransformPoints<Eigen::MatrixXf>((id_keyframe.second->_poseCurrentFrameInWorld).inverse(), transformedVerticesInWorld);
+            Eigen::MatrixXf transformedVerticesInWorld = mathutils::TransformPoints<Eigen::MatrixXf>(pRefLandmark->GetLandmarkPoseInWorld(), pRefLandmark->_vertices3DInLandmark);
+            Eigen::MatrixXf transformedVerticesInCamera = mathutils::TransformPoints<Eigen::MatrixXf>((id_keyframe.second->GetKeyframePoseInWorld()).inverse(), transformedVerticesInWorld);
             std::vector<cv::Point> oneLandmarkPoints2D = mathutils::ProjectPoints3DToPoints2D(transformedVerticesInCamera, *(id_keyframe.second->_pCamera));
             const size_t cameraCols = id_keyframe.second->_pCamera->_cols;
             const size_t cameraRows = id_keyframe.second->_pCamera->_rows;
@@ -125,6 +125,7 @@ std::vector<std::shared_ptr<LandMark>> MapDataBase::GetAllLandmarks() const{
 
 void MapDataBase::PruneOneLandmark(std::shared_ptr<LandMark> oneLandmarkToPrune) {
     std::lock_guard<std::mutex> lock(_mtxMapLandmarksAccess);
+    oneLandmarkToPrune->DeleteThis();
     // prune this landmark.
     for (auto pKeyframe_indexRefObj : oneLandmarkToPrune->GetObservations()) {
         pKeyframe_indexRefObj.first->DeleteOneObservedLandmark(oneLandmarkToPrune);
@@ -144,6 +145,7 @@ void MapDataBase::MergeLandmarkCluster(std::vector<std::shared_ptr<LandMark>> on
     for (size_t indexLandmark = 0; indexLandmark < oneCluster.size(); indexLandmark++) {
         if (indexLandmark != indexBestLandmark) {
             for (auto pKeyframe_indexRefObj : oneCluster[indexLandmark]->GetObservations()) {
+                oneCluster[indexLandmark]->DeleteThis();
                 pKeyframe_indexRefObj.first->ReplaceOneObservedLandmark(oneCluster[indexLandmark], oneCluster[indexBestLandmark]);
             }
             _landmarks.erase(oneCluster[indexLandmark]->_landmarkID);

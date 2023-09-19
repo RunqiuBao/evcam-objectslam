@@ -48,6 +48,10 @@ public:
     //! IDs and landmarks
     std::unordered_map<unsigned int, std::shared_ptr<LandMark>> _landmarks;
 
+    //! mutex for locking ALL access to the database
+    //!NOTE: cannot be used in map_database class. Only use from outside.
+    static std::mutex _mtxDatabase;
+
 private:
     // mutex for mutal exclusion controll between class methods called in different threads
     mutable std::mutex _mtxMapKeyframesAccess;

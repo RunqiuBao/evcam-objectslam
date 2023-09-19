@@ -41,9 +41,9 @@ void SemanticMapper::_DoPruneLandmarks2() {
         auto observableKeyframes = _pMapDb->GetObservableKeyframes(pLandmark, _numMinObservableToPruneLandmark);
         TDO_LOG_CRITICAL_FORMAT("landmark(%d): posXYZ %f, %f, %f; numObservs %d; observables %d; bestKeyfrmId %d",
                                     pLandmark->_landmarkID
-                                    % pLandmark->_poseLandmarkInWorld(0, 3)
-                                    % pLandmark->_poseLandmarkInWorld(1, 3)
-                                    % pLandmark->_poseLandmarkInWorld(2, 3)
+                                    % pLandmark->GetLandmarkPoseInWorld()(0, 3)
+                                    % pLandmark->GetLandmarkPoseInWorld()(1, 3)
+                                    % pLandmark->GetLandmarkPoseInWorld()(2, 3)
                                     % pLandmark->GetNumObservations()
                                     % observableKeyframes.size()
                                     % pLandmark->_pBestRefKeyFrame->_keyFrameID);
@@ -73,7 +73,7 @@ void SemanticMapper::_DoMergeLandmarks() {
 
                 for (size_t indexDestLandmark = indexSrcLandmark + 1; indexDestLandmark < allLandmarksInDb.size(); indexDestLandmark++) {
                     if (!visited[indexDestLandmark]) {
-                        float distance = (allLandmarksInDb[indexSrcLandmark]->_poseLandmarkInWorld.block(0, 3, 3, 1) - allLandmarksInDb[indexDestLandmark]->_poseLandmarkInWorld.block(0, 3, 3, 1)).norm();
+                        float distance = (allLandmarksInDb[indexSrcLandmark]->GetLandmarkPoseInWorld().block(0, 3, 3, 1) - allLandmarksInDb[indexDestLandmark]->GetLandmarkPoseInWorld().block(0, 3, 3, 1)).norm();
                         if (distance < distanceThreshold) {
                             cluster.push_back(allLandmarksInDb[indexDestLandmark]);
                             visited[indexDestLandmark] = true;
@@ -111,8 +111,32 @@ void SemanticMapper::Run() {
             duration = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - starttime);
             TDO_LOG_DEBUG_FORMAT("one mergelandmarks task finished in %d milisec.", duration.count());
         }
+
+        _keyfrmAcceptability = false;  // stop receiving keyframes until finish current.
+
+        if (_currKeyfrm == nullptr){
+            _keyfrmAcceptability = true;
+            continue;
+        }
+
+        _abortLocalBA = false;
+        optimize::DoLocalBA(_currKeyfrm, &_abortLocalBA);
+
+        _keyfrmAcceptability = true;
+        _currKeyfrm = nullptr;
     }
-    TDO_LOG_DEBUG("Terminate semantic mapper thread.");
+    TDO_LOG_CRITICAL("Terminate semantic mapper thread.");
+}
+
+bool SemanticMapper::PushKeyframeForBA(std::shared_ptr<KeyFrame> pTargetKeyframe){
+    if (_keyfrmAcceptability) {
+        _currKeyfrm = pTargetKeyframe;
+        return _keyfrmAcceptability;
+    }
+    else{
+        TDO_LOG_CRITICAL("localBA is busy now.");
+        return _keyfrmAcceptability;
+    }
 }
 
 }  // end of namespace eventobjectslam

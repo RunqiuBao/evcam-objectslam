@@ -20,6 +20,7 @@ public:
     void Terminate() { _isTerminate = true; }
     void SchedulePruneLandmarksTask(std::shared_ptr<KeyFrame> pTargetKeyframe);
     void SchedulePruneLandmarksTask();
+    bool PushKeyframeForBA(std::shared_ptr<KeyFrame> pTargetKeyframe);
 
     static constexpr size_t _numNegativeCovisibilityToPruneLandmark = 5;  //!Note: if more than this of covisibility can not see the landmark, then prune it.
     static constexpr size_t _numMinCovisibilityToPruneLandmark = 2;
@@ -38,6 +39,21 @@ private:
     bool _isTerminate = false;
     bool _isPruneLandmarks = false;
     std::shared_ptr<KeyFrame> _pTargetKeyframeToPruneLandmark = nullptr;
+
+    //flag to abort local BA
+    bool _abortLocalBA = false;
+
+    // //! queue for keyframes
+    // std::list<std::shared_ptr<KeyFrame>> _keyfrmsQueue;
+
+    // //! mutex for access to keyframe queue
+    // mutable std::mutex _mtxKeyfrmQueue;
+
+    //! current keyframe which is used in the current mapping
+    std::shared_ptr<KeyFrame> _currKeyfrm = nullptr;
+
+    //! flag for keyframe acceptability
+    std::atomic<bool> _keyfrmAcceptability{true};
 
 };
 

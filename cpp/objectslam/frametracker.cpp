@@ -352,8 +352,8 @@ void FrameTracker::CreateNewLandmarks(std::shared_ptr<KeyFrame> pRefKeyFrame, st
         cv::Mat refObjectPoseMask = mathutils::Draw2DHullMaskFrom2DPointsSet(refObjectPoints2D, (*pRefKeyFrame->_pCamera)._rows, (*pRefKeyFrame->_pCamera)._cols);
         for (int indexVisibleLandmark=0; indexVisibleLandmark < visibleLandmarks.size(); indexVisibleLandmark++){
             std::shared_ptr<LandMark> pOneLandmark = visibleLandmarks[indexVisibleLandmark];
-            Eigen::MatrixXf transformedVerticesInWorld = mathutils::TransformPoints<Eigen::MatrixXf>(pOneLandmark->_poseLandmarkInWorld, pOneLandmark->_vertices3DInLandmark);
-            Eigen::MatrixXf transformedVerticesInCamera = mathutils::TransformPoints<Eigen::MatrixXf>((pRefKeyFrame->_poseCurrentFrameInWorld).inverse(), transformedVerticesInWorld);
+            Eigen::MatrixXf transformedVerticesInWorld = mathutils::TransformPoints<Eigen::MatrixXf>(pOneLandmark->GetLandmarkPoseInWorld(), pOneLandmark->_vertices3DInLandmark);
+            Eigen::MatrixXf transformedVerticesInCamera = mathutils::TransformPoints<Eigen::MatrixXf>((pRefKeyFrame->GetKeyframePoseInWorld()).inverse(), transformedVerticesInWorld);
             std::vector<cv::Point> oneLandmarkPoints2D = mathutils::ProjectPoints3DToPoints2D(transformedVerticesInCamera, (*pRefKeyFrame->_pCamera));
             cv::Mat oneLandmarkPoseMask = mathutils::Draw2DHullMaskFrom2DPointsSet(oneLandmarkPoints2D, (*pRefKeyFrame->_pCamera)._rows, (*pRefKeyFrame->_pCamera)._cols);
             cv::Mat overlaps;
@@ -367,8 +367,8 @@ void FrameTracker::CreateNewLandmarks(std::shared_ptr<KeyFrame> pRefKeyFrame, st
             }
             else if (overlapArea[0] > 0) {
                 // TODO: need collision check here.
-                Mat44_t poseObjectInWorld = pRefKeyFrame->_poseCurrentFrameInWorld * pRefObject->_detection._objectInCameraTransform;
-                Mat44_t poseExistingLandmark = visibleLandmarks[indexVisibleLandmark]->_poseLandmarkInWorld;
+                Mat44_t poseObjectInWorld = pRefKeyFrame->GetKeyframePoseInWorld() * pRefObject->_detection._objectInCameraTransform;
+                Mat44_t poseExistingLandmark = visibleLandmarks[indexVisibleLandmark]->GetLandmarkPoseInWorld();
                 Eigen::Vector3f vObjectToLandmark = poseObjectInWorld.block(0, 3, 3, 1) - poseExistingLandmark.block(0, 3, 3, 1);
                 float distanceO2L = vObjectToLandmark.norm();
                 distancesObjectToClosestLandmark[indexRefObject] = distanceO2L;
@@ -381,7 +381,7 @@ void FrameTracker::CreateNewLandmarks(std::shared_ptr<KeyFrame> pRefKeyFrame, st
         if (indicesLandmarkForRefObjects[indexRefObject] < 0){
             if (distancesObjectToClosestLandmark[indexRefObject] > distanceThreshold){  // if within certain physical distance, still create correspondence.
                 // if not correspondence, create landmark.
-                Mat44_t poseObjectInWorld = pRefKeyFrame->_poseCurrentFrameInWorld * pRefObject->_detection._objectInCameraTransform;
+                Mat44_t poseObjectInWorld = pRefKeyFrame->GetKeyframePoseInWorld() * pRefObject->_detection._objectInCameraTransform;
                 std::shared_ptr<LandMark> pOneLandmark = std::make_shared<LandMark>(poseObjectInWorld, pObjectInfo);
                 pOneLandmark->AddObservation(pRefKeyFrame, indexRefObject);
                 pMapDb->AddLandMark(pOneLandmark);
@@ -395,6 +395,7 @@ void FrameTracker::CreateNewLandmarks(std::shared_ptr<KeyFrame> pRefKeyFrame, st
             TDO_LOG_DEBUG_FORMAT("Resurrect correspondence due to close 3d distance (%f m).", distancesObjectToClosestLandmark[indexRefObject]);
         }
         // if correspondence, and new keyframe is closer, update landmark pose.
+        // TODO: should use multi-view stereo to update landmark pose. need stereo rectification and check if object is within FoV after stereo recti.
         visibleLandmarks[indicesLandmarkForRefObjects[indexRefObject]]->AddObservation(pRefKeyFrame, indexRefObject);
         observedLandmarks_indicesRefObj[visibleLandmarks[indicesLandmarkForRefObjects[indexRefObject]]] = indexRefObject;
     }

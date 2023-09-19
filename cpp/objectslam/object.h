@@ -63,9 +63,12 @@ public:
     int _detectionID;
     float _detectionScore;  // Note: used for records of confidence of the detection.
     Eigen::MatrixXf _vertices3DInCamera; // Note: 3x8 matrix, vertex 1, 2, 3, 4 should respectively have a connecting edge with 5, 6, 7, 8.
+    float _centerX;  // 2D coordinates of BBox center in undisted and rectified left camera image. 
+    float _centerY;
+    float _centerXRight;  // 2D coordinates of BBox center in undisted and rectified right camera image.
 
-    ThreeDDetection(const Mat44_t objectInCameraTransform, const int detectionID, const Eigen::MatrixXf& vertices3DInCamera, const unsigned int cameraID, const float detectionScore)
-    : _objectInCameraTransform(objectInCameraTransform), _detectionID(detectionID), _vertices3DInCamera(vertices3DInCamera), _cameraID(cameraID), _detectionScore(detectionScore)
+    ThreeDDetection(const Mat44_t objectInCameraTransform, const int detectionID, const Eigen::MatrixXf& vertices3DInCamera, const unsigned int cameraID, const float detectionScore, const float twoDCenterX, const float twoDCenterY, const float twoDCenterXRight)
+    : _objectInCameraTransform(objectInCameraTransform), _detectionID(detectionID), _vertices3DInCamera(vertices3DInCamera), _cameraID(cameraID), _detectionScore(detectionScore), _centerX(twoDCenterX), _centerY(twoDCenterY), _centerXRight(twoDCenterXRight)
     {}
 
 };
