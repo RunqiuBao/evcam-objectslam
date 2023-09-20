@@ -29,6 +29,8 @@ public:
     ShotVertex()
     : BaseVertex<6, ::g2o::SE3Quat>() {}
 
+    ~ShotVertex() = default;
+
     bool read(std::istream& is) override;
 
     bool write(std::ostream& os) const override;
@@ -50,6 +52,8 @@ public:
 
     LandmarkPointVertex()
         : BaseVertex<3, Vec3_d>() {}
+
+    ~LandmarkPointVertex() = default;
 
     bool read(std::istream& is) override;
 
@@ -73,6 +77,8 @@ public:
 
     StereoPerspectiveReprojEdge()
         : BaseBinaryEdge<3, Vec3_d, LandmarkPointVertex, ShotVertex>() {}
+
+    ~StereoPerspectiveReprojEdge() = default;
 
     bool read(std::istream& is) override;
 
