@@ -4,14 +4,15 @@ namespace eventobjectslam {
 
 namespace optimize {
 
+namespace g2outils {
 
-static ::g2o::SE3Quat ConvertToG2oSE3(const Mat44_t& campose) {
-    const Mat33_t rot = campose.block<3, 3>(0, 0);
-    const Vec3_t trans = campose.block<3, 1>(0, 3);
+static ::g2o::SE3Quat ConvertToG2oSE3(const Mat44_d& campose) {
+    const Mat33_d rot = campose.block<3, 3>(0, 0);
+    const Vec3_d trans = campose.block<3, 1>(0, 3);
     return ::g2o::SE3Quat{rot, trans};
 }
 
-std::shared_ptr<ShotVertex> CreateShotVertex(const unsigned int vtxId, const Mat44_t& worldToShotTransform, const bool isConstant) {
+std::shared_ptr<ShotVertex> CreateShotVertex(const unsigned int vtxId, const Mat44_d& worldToShotTransform, const bool isConstant) {
     // create vertex
     auto vtx = std::make_shared<ShotVertex>();
     vtx->setId(vtxId);
@@ -20,7 +21,7 @@ std::shared_ptr<ShotVertex> CreateShotVertex(const unsigned int vtxId, const Mat
     return vtx;
 }
 
-std::shared_ptr<LandmarkPointVertex> CreateLandmarkPointVertex(const unsigned int vtxId, const Vec3_t& posInWorld, const bool isConstant) {
+std::shared_ptr<LandmarkPointVertex> CreateLandmarkPointVertex(const unsigned int vtxId, const Vec3_d& posInWorld, const bool isConstant) {
     // vertexを作成
     auto vtx = std::make_shared<LandmarkPointVertex>();
     vtx->setId(vtxId);
@@ -31,7 +32,7 @@ std::shared_ptr<LandmarkPointVertex> CreateLandmarkPointVertex(const unsigned in
 }
 
 bool ShotVertex::read(std::istream& is) {
-    Vec7_t estimate;
+    Vec7_d estimate;
     for (unsigned int i = 0; i < 7; ++i) {
         is >> estimate(i);
     }
@@ -42,7 +43,7 @@ bool ShotVertex::read(std::istream& is) {
 }
 
 bool LandmarkPointVertex::read(std::istream& is) {
-    Vec3_t lv;
+    Vec3_d lv;
     for (unsigned int i = 0; i < 3; ++i) {
         is >> _estimate(i);
     }
@@ -50,7 +51,7 @@ bool LandmarkPointVertex::read(std::istream& is) {
 }
 
 bool LandmarkPointVertex::write(std::ostream& os) const {
-    const Vec3_t pos_w = estimate();
+    const Vec3_d pos_w = estimate();
     for (unsigned int i = 0; i < 3; ++i) {
         os << pos_w(i) << " ";
     }
@@ -93,19 +94,19 @@ bool StereoPerspectiveReprojEdge::write(std::ostream& os) const {
 }
 
 void StereoPerspectiveReprojEdge::linearizeOplus() {
-    auto vj = static_cast<shot_vertex*>(_vertices.at(1));
-    const ::g2o::SE3Quat& cam_pose_cw = vj->shot_vertex::estimate();
+    auto vj = static_cast<ShotVertex*>(_vertices.at(1));
+    const ::g2o::SE3Quat& cam_pose_cw = vj->ShotVertex::estimate();
 
-    auto vi = static_cast<landmark_vertex*>(_vertices.at(0));
-    const Vec3_t& pos_w = vi->landmark_vertex::estimate();
-    const Vec3_t pos_c = cam_pose_cw.map(pos_w);
+    auto vi = static_cast<LandmarkPointVertex*>(_vertices.at(0));
+    const Vec3_d& pos_w = vi->LandmarkPointVertex::estimate();
+    const Vec3_d pos_c = cam_pose_cw.map(pos_w);
 
     const auto x = pos_c(0);
     const auto y = pos_c(1);
     const auto z = pos_c(2);
     const auto z_sq = z * z;
 
-    const Mat33_t rot_cw = cam_pose_cw.rotation().toRotationMatrix();
+    const Mat33_d rot_cw = cam_pose_cw.rotation().toRotationMatrix();
 
     _jacobianOplusXi(0, 0) = -fx_ * rot_cw(0, 0) / z + fx_ * x * rot_cw(2, 0) / z_sq;
     _jacobianOplusXi(0, 1) = -fx_ * rot_cw(0, 1) / z + fx_ * x * rot_cw(2, 1) / z_sq;
@@ -140,6 +141,8 @@ void StereoPerspectiveReprojEdge::linearizeOplus() {
     _jacobianOplusXj(2, 4) = 0;
     _jacobianOplusXj(2, 5) = _jacobianOplusXj(0, 5) - focal_x_baseline_ / z_sq;
 }
+
+}  // end of namespace g2outils
 
 }  // end of namespace optimize
 

@@ -13,6 +13,7 @@ add_library(ObjectSlam SHARED
         )
 
 add_subdirectory(pangolinviewer)
+add_subdirectory(optimize)
 
 target_include_directories(ObjectSlam PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}

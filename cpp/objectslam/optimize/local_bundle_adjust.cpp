@@ -37,7 +37,7 @@ void optimize::DoLocalBA(std::shared_ptr<KeyFrame> pCurrKeyframe, bool* const bF
     for (auto id_pLocalKeyframe : ids_localKeyframes) {
         const std::map<std::shared_ptr<LandMark>, unsigned int> landmarks_indices = id_pLocalKeyframe.second->GetObservedLandmarks();
         for (auto& localLandmark_index : landmarks_indices) {
-            if (!localLandmark_index) {
+            if (!localLandmark_index.first) {
                 TDO_LOG_ERROR("got empty plandmark, something is super wrong!");
                 continue;
             }
@@ -79,12 +79,12 @@ void optimize::DoLocalBA(std::shared_ptr<KeyFrame> pCurrKeyframe, bool* const bF
 
     // -------- (2) --------
     // build optimizer
-    auto linearSolver = ::g2o::make_unique<::g2o::LinearSolverCSparse<::g2o::BlockSolver_6_3::PoseMatrixType>>();  // Note: here ::g2o means a global namespace from outside of eventobjectslam.
-    auto blockSolver = ::g2o::make_unique<::g2o::BlockSolver_6_3>(std::move(linearSolver));
-    auto algorithm = new ::g2o::OptimizationAlgorithmLevenberg(std::move(blockSolver));
+    auto linearSolver = std::make_unique<::g2o::LinearSolverCSparse<::g2o::BlockSolver_6_3::PoseMatrixType>>();  // Note: here ::g2o means a global namespace from outside of eventobjectslam.
+    auto blockSolver = std::make_unique<::g2o::BlockSolver_6_3>(std::move(linearSolver));
+    auto algorithm = std::make_unique<::g2o::OptimizationAlgorithmLevenberg>(std::move(blockSolver));
 
     ::g2o::SparseOptimizer optimizer;
-    optimizer.setAlgorithm(algorithm);
+    optimizer.setAlgorithm(algorithm.get());
 
     if (bForceStopFlag) {
         optimizer.setForceStopFlag(bForceStopFlag);
@@ -101,7 +101,7 @@ void optimize::DoLocalBA(std::shared_ptr<KeyFrame> pCurrKeyframe, bool* const bF
     for (auto& id_pLocalKeyframe : ids_localKeyframes) {
         auto pLocalKeyframe = id_pLocalKeyframe.second;
         allKeyframes.emplace(id_pLocalKeyframe);
-        auto pKeyfrmVtx = g2outils::CreateShotVertex(pLocalKeyframe->_keyFrameID, pLocalKeyframe->GetKeyframePoseInWorld().inverse(), false);
+        auto pKeyfrmVtx = g2outils::CreateShotVertex(pLocalKeyframe->_keyFrameID, pLocalKeyframe->GetKeyframePoseInWorld().inverse().cast<double>(), false);
         ids_keyfrmVtx[pLocalKeyframe->_keyFrameID] = pKeyfrmVtx;
         optimizer.addVertex(pKeyfrmVtx.get());
         maxKeyframeID = maxKeyframeID > pLocalKeyframe->_keyFrameID ? maxKeyframeID : pLocalKeyframe->_keyFrameID;
@@ -111,7 +111,7 @@ void optimize::DoLocalBA(std::shared_ptr<KeyFrame> pCurrKeyframe, bool* const bF
     for (auto& id_pFixedKeyframe : ids_fixedKeyframes) {
         auto pFixedKeyframe = id_pFixedKeyframe.second;
         allKeyframes.emplace(id_pFixedKeyframe);
-        auto pKeyfrmVtx = g2outils::CreateShotVertex(pFixedKeyframe->_keyFrameID, pFixedKeyframe->GetKeyframePoseInWorld().inverse(), true);
+        auto pKeyfrmVtx = g2outils::CreateShotVertex(pFixedKeyframe->_keyFrameID, pFixedKeyframe->GetKeyframePoseInWorld().inverse().cast<double>(), true);
         ids_keyfrmVtx[pFixedKeyframe->_keyFrameID] = pKeyfrmVtx;
         optimizer.addVertex(pKeyfrmVtx.get());
         maxKeyframeID = maxKeyframeID > pFixedKeyframe->_keyFrameID ? maxKeyframeID : pFixedKeyframe->_keyFrameID;
@@ -133,7 +133,7 @@ void optimize::DoLocalBA(std::shared_ptr<KeyFrame> pCurrKeyframe, bool* const bF
     for (auto& id_localLm : ids_localLandmarks) {
         auto pLocalLm = id_localLm.second;
         // create g2o vertex from the landmark and set to optimizer.
-        auto pLmVtx = g2outils::CreateLandmarkPointVertex(maxKeyframeID + 1 + pLocalLm->_landmarkID, pLocalLm->GetLandmarkPoseInWorld().block(0, 3, 3, 1), false);
+        auto pLmVtx = g2outils::CreateLandmarkPointVertex(maxKeyframeID + 1 + pLocalLm->_landmarkID, pLocalLm->GetLandmarkPoseInWorld().block(0, 3, 3, 1).cast<double>(), false);
         optimizer.addVertex(pLmVtx.get());
         ids_landmarkPointVtx[pLocalLm->_landmarkID] = pLmVtx;
 
@@ -219,22 +219,22 @@ void optimize::DoLocalBA(std::shared_ptr<KeyFrame> pCurrKeyframe, bool* const bF
         for (auto id_localKeyfrm : ids_localKeyframes) {
             auto pLocalKeyfrm = id_localKeyfrm.second;
             auto pKeyfrmVtx = ids_keyfrmVtx[pLocalKeyfrm->_keyFrameID];
-            pLocalKeyfrm->SetKeyframePoseInWorld(pKeyfrmVtx->estimate().to_homogeneous_matrix().inverse());
+            pLocalKeyfrm->SetKeyframePoseInWorld(pKeyfrmVtx->estimate().to_homogeneous_matrix().inverse().cast<float>());
         }
 
         for (auto id_localLm : ids_localLandmarks) {
             auto pLocalLm = id_localLm.second;
             auto pLmVtx = ids_landmarkPointVtx[pLocalLm->_landmarkID];
             Mat44_t landmarkPoseInWorld = pLocalLm->GetLandmarkPoseInWorld();
-            landmarkPoseInWorld.block(0, 3, 3, 1) = pLmVtx->estimate();
+            landmarkPoseInWorld.block(0, 3, 3, 1) = pLmVtx->estimate().cast<float>();
             pLocalLm->SetLandmarkPoseInWorld(landmarkPoseInWorld);
         }
 
     }
 
     TDO_LOG_CRITICAL_FORMAT("localBA finished with %d keyfrm, %d landmarks updated. %d outlierPairs!", 
-                                    ids_localKeyframes.size(),
-                                    ids_localLandmarks.size(),
+                                    ids_localKeyframes.size() %
+                                    ids_localLandmarks.size() %
                                     outlier_observations_lms.size());
 
 }

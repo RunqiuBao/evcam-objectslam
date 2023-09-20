@@ -1,4 +1,5 @@
 #include "semanticmapper.h"
+#include "optimize/local_bundle_adjust.h"
 
 #include <chrono>
 
@@ -39,14 +40,13 @@ void SemanticMapper::_DoPruneLandmarks2() {
     std::vector<std::shared_ptr<LandMark>> allLandmarksInDb = _pMapDb->GetAllLandmarks();
     for (auto pLandmark : allLandmarksInDb) {
         auto observableKeyframes = _pMapDb->GetObservableKeyframes(pLandmark, _numMinObservableToPruneLandmark);
-        TDO_LOG_CRITICAL_FORMAT("landmark(%d): posXYZ %f, %f, %f; numObservs %d; observables %d; bestKeyfrmId %d",
+        TDO_LOG_CRITICAL_FORMAT("landmark(%d): posXYZ %f, %f, %f; numObservs %d; observables %d",
                                     pLandmark->_landmarkID
                                     % pLandmark->GetLandmarkPoseInWorld()(0, 3)
                                     % pLandmark->GetLandmarkPoseInWorld()(1, 3)
                                     % pLandmark->GetLandmarkPoseInWorld()(2, 3)
                                     % pLandmark->GetNumObservations()
-                                    % observableKeyframes.size()
-                                    % pLandmark->_pBestRefKeyFrame->_keyFrameID);
+                                    % observableKeyframes.size());
         if (pLandmark->GetNumObservations() < _numMinCovisibilityToPruneLandmark && observableKeyframes.size() >= _numMinObservableToPruneLandmark) {
             _pMapDb->PruneOneLandmark(pLandmark);
         }
@@ -114,23 +114,26 @@ void SemanticMapper::Run() {
 
         _keyfrmAcceptability = false;  // stop receiving keyframes until finish current.
 
-        if (_currKeyfrm == nullptr){
+        if (_pCurrKeyfrm == nullptr){
             _keyfrmAcceptability = true;
             continue;
         }
 
         _abortLocalBA = false;
-        optimize::DoLocalBA(_currKeyfrm, &_abortLocalBA);
+        auto starttime = std::chrono::steady_clock::now();
+        optimize::DoLocalBA(_pCurrKeyfrm, &_abortLocalBA);
+        auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - starttime);
+        TDO_LOG_DEBUG_FORMAT("one localBA task finished in %d milisec. keyframe (%d).", duration.count() % _pCurrKeyfrm->_keyFrameID);
 
         _keyfrmAcceptability = true;
-        _currKeyfrm = nullptr;
+        _pCurrKeyfrm = nullptr;
     }
     TDO_LOG_CRITICAL("Terminate semantic mapper thread.");
 }
 
 bool SemanticMapper::PushKeyframeForBA(std::shared_ptr<KeyFrame> pTargetKeyframe){
     if (_keyfrmAcceptability) {
-        _currKeyfrm = pTargetKeyframe;
+        _pCurrKeyfrm = pTargetKeyframe;
         return _keyfrmAcceptability;
     }
     else{

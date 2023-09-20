@@ -11,6 +11,8 @@ TDO_LOGGER("eventobjectslam.mapdatabase")
 
 namespace eventobjectslam{
 
+std::mutex MapDataBase::_mtxDatabase;
+
 MapDataBase::MapDataBase(){
     TDO_LOG_INFO("Construct: MapDataBase");
 }

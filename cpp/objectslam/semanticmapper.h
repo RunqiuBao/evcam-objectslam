@@ -3,6 +3,8 @@
 
 #include "mapdatabase.h"
 
+#include <atomic>
+
 namespace eventobjectslam {
 
 class SemanticMapper {
@@ -50,7 +52,7 @@ private:
     // mutable std::mutex _mtxKeyfrmQueue;
 
     //! current keyframe which is used in the current mapping
-    std::shared_ptr<KeyFrame> _currKeyfrm = nullptr;
+    std::shared_ptr<KeyFrame> _pCurrKeyfrm = nullptr;
 
     //! flag for keyframe acceptability
     std::atomic<bool> _keyfrmAcceptability{true};

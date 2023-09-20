@@ -31,7 +31,7 @@ public:
     float GetDistanceFromBestObserv() { return _distanceFromBestRefKeyframe; }
 
     Mat44_t GetLandmarkPoseInWorld();
-    void SetLandmarkPoseInWorld(const Mat44_t& poseLandmarkInWorld);  // FIXME: could change landmark's bestRefKeyframe
+    void SetLandmarkPoseInWorld(const Mat44_t& poseLandmarkInWorld);
 
     unsigned int _numObservations = 0;
 
@@ -39,8 +39,6 @@ public:
 
     const std::shared_ptr<object::ObjectBase> _pObjectInfo;
     Eigen::MatrixXf _vertices3DInLandmark;  // 3D bounding box in landmark frame.
-
-    std::shared_ptr<KeyFrame> _pBestRefKeyFrame;  // Note: closest distances.
 
     void DeleteThis() { _bIsToDelete = true; }
     bool IsToDelete() { return _bIsToDelete; }
