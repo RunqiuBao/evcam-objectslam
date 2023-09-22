@@ -1,5 +1,8 @@
 #include "g2outils.h"
 
+#include <logging.h>
+TDO_LOGGER("objectslam.optimize.g2outils")
+
 namespace eventobjectslam {
 
 namespace optimize {
@@ -12,18 +15,18 @@ static ::g2o::SE3Quat ConvertToG2oSE3(const Mat44_d& campose) {
     return ::g2o::SE3Quat{rot, trans};
 }
 
-std::shared_ptr<ShotVertex> CreateShotVertex(const unsigned int vtxId, const Mat44_d& worldToShotTransform, const bool isConstant) {
+ShotVertex* CreateShotVertex(const unsigned int vtxId, const Mat44_d& worldToShotTransform, const bool isConstant) {
     // create vertex
-    auto vtx = std::make_shared<ShotVertex>();
+    auto vtx = new ShotVertex();
     vtx->setId(vtxId);
     vtx->setEstimate(ConvertToG2oSE3(worldToShotTransform));
     vtx->setFixed(isConstant);
     return vtx;
 }
 
-std::shared_ptr<LandmarkPointVertex> CreateLandmarkPointVertex(const unsigned int vtxId, const Vec3_d& posInWorld, const bool isConstant) {
+LandmarkPointVertex* CreateLandmarkPointVertex(const unsigned int vtxId, const Vec3_d& posInWorld, const bool isConstant) {
     // vertexを作成
-    auto vtx = std::make_shared<LandmarkPointVertex>();
+    auto vtx = new LandmarkPointVertex();
     vtx->setId(vtxId);
     vtx->setEstimate(posInWorld);
     vtx->setFixed(isConstant);

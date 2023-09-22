@@ -81,10 +81,10 @@ void optimize::DoLocalBA(std::shared_ptr<KeyFrame> pCurrKeyframe, bool* const bF
     // build optimizer
     auto linearSolver = std::make_unique<::g2o::LinearSolverCSparse<::g2o::BlockSolver_6_3::PoseMatrixType>>();  // Note: here ::g2o means a global namespace from outside of eventobjectslam.
     auto blockSolver = std::make_unique<::g2o::BlockSolver_6_3>(std::move(linearSolver));
-    auto algorithm = std::make_unique<::g2o::OptimizationAlgorithmLevenberg>(std::move(blockSolver));
+    auto algorithm = new ::g2o::OptimizationAlgorithmLevenberg(std::move(blockSolver));
 
     ::g2o::SparseOptimizer optimizer;
-    optimizer.setAlgorithm(algorithm.get());
+    optimizer.setAlgorithm(algorithm);
 
     if (bForceStopFlag) {
         optimizer.setForceStopFlag(bForceStopFlag);
@@ -92,7 +92,7 @@ void optimize::DoLocalBA(std::shared_ptr<KeyFrame> pCurrKeyframe, bool* const bF
 
     // -------- (3) --------
     // create g2o vertex from keyframes and set to optimizer.
-    std::unordered_map<unsigned int, std::shared_ptr<g2outils::ShotVertex>> ids_keyfrmVtx;
+    std::unordered_map<unsigned int, g2outils::ShotVertex*> ids_keyfrmVtx;
     ids_keyfrmVtx.reserve(ids_localKeyframes.size() + ids_fixedKeyframes.size());
     // pre-save the keyframes that are used in g2o vertex
     std::unordered_map<unsigned int, std::shared_ptr<KeyFrame>> allKeyframes;
@@ -103,7 +103,7 @@ void optimize::DoLocalBA(std::shared_ptr<KeyFrame> pCurrKeyframe, bool* const bF
         allKeyframes.emplace(id_pLocalKeyframe);
         auto pKeyfrmVtx = g2outils::CreateShotVertex(pLocalKeyframe->_keyFrameID, pLocalKeyframe->GetKeyframePoseInWorld().inverse().cast<double>(), false);
         ids_keyfrmVtx[pLocalKeyframe->_keyFrameID] = pKeyfrmVtx;
-        optimizer.addVertex(pKeyfrmVtx.get());
+        optimizer.addVertex(pKeyfrmVtx);
         maxKeyframeID = maxKeyframeID > pLocalKeyframe->_keyFrameID ? maxKeyframeID : pLocalKeyframe->_keyFrameID;
     }
 
@@ -113,13 +113,13 @@ void optimize::DoLocalBA(std::shared_ptr<KeyFrame> pCurrKeyframe, bool* const bF
         allKeyframes.emplace(id_pFixedKeyframe);
         auto pKeyfrmVtx = g2outils::CreateShotVertex(pFixedKeyframe->_keyFrameID, pFixedKeyframe->GetKeyframePoseInWorld().inverse().cast<double>(), true);
         ids_keyfrmVtx[pFixedKeyframe->_keyFrameID] = pKeyfrmVtx;
-        optimizer.addVertex(pKeyfrmVtx.get());
+        optimizer.addVertex(pKeyfrmVtx);
         maxKeyframeID = maxKeyframeID > pFixedKeyframe->_keyFrameID ? maxKeyframeID : pFixedKeyframe->_keyFrameID;
     }
 
     // -------- (4) --------
     // Connect keyframe and landmark vertices by reprojection edge.
-    std::unordered_map<unsigned int, std::shared_ptr<g2outils::LandmarkPointVertex>> ids_landmarkPointVtx;
+    std::unordered_map<unsigned int, g2outils::LandmarkPointVertex*> ids_landmarkPointVtx;
     ids_landmarkPointVtx.reserve(ids_localLandmarks.size());
     
     using ReprojEdgeWrapper = g2outils::ReprojEdgeWrapper<KeyFrame>;
@@ -130,11 +130,12 @@ void optimize::DoLocalBA(std::shared_ptr<KeyFrame> pCurrKeyframe, bool* const bF
     // 自由度n=3
     constexpr float chi_sq_3D = 7.81473;
     const float sqrt_chi_sq_3D = std::sqrt(chi_sq_3D);
+    unsigned int edgeId = 0;
     for (auto& id_localLm : ids_localLandmarks) {
         auto pLocalLm = id_localLm.second;
         // create g2o vertex from the landmark and set to optimizer.
         auto pLmVtx = g2outils::CreateLandmarkPointVertex(maxKeyframeID + 1 + pLocalLm->_landmarkID, pLocalLm->GetLandmarkPoseInWorld().block(0, 3, 3, 1).cast<double>(), false);
-        optimizer.addVertex(pLmVtx.get());
+        optimizer.addVertex(pLmVtx);
         ids_landmarkPointVtx[pLocalLm->_landmarkID] = pLmVtx;
 
         const std::map<std::shared_ptr<KeyFrame>, unsigned int> observations_indices = pLocalLm->GetObservations();
@@ -150,11 +151,14 @@ void optimize::DoLocalBA(std::shared_ptr<KeyFrame> pCurrKeyframe, bool* const bF
             const float centerX = pKeyframe->_refObjects[idx]->_detection._centerX;
             const float centerY = pKeyframe->_refObjects[idx]->_detection._centerY;
             const float centerXRight = pKeyframe->_refObjects[idx]->_detection._centerXRight;
-            auto reprojEdgeWrap = ReprojEdgeWrapper(pKeyframe, pKeyfrmVtx, pLocalLm, pLmVtx, centerX, centerY, centerXRight, sqrt_chi_sq_3D);
+            ReprojEdgeWrapper reprojEdgeWrap(edgeId, pKeyframe, pKeyfrmVtx, pLocalLm, pLmVtx, centerX, centerY, centerXRight, sqrt_chi_sq_3D);
+            edgeId++;
             reprojEdgeWraps.push_back(reprojEdgeWrap);
-            optimizer.addEdge(reprojEdgeWrap._pEdge.get());
+            TDO_LOG_CRITICAL("delete check-3");
+            optimizer.addEdge(reprojEdgeWrap._pEdge);
         }
     }
+    TDO_LOG_CRITICAL("delete check-2");
 
     // -------- (5) --------
     // 1st round of optimization
@@ -188,7 +192,7 @@ void optimize::DoLocalBA(std::shared_ptr<KeyFrame> pCurrKeyframe, bool* const bF
     }
 
     // -------- (7) --------
-    // colelct outliers
+    // collect outliers
     std::vector<std::pair<std::shared_ptr<KeyFrame>, std::shared_ptr<LandMark>>> outlier_observations_lms;
     outlier_observations_lms.reserve(reprojEdgeWraps.size());
     for (auto& reprojEdgeWrap : reprojEdgeWraps) {

@@ -75,10 +75,12 @@ class StereoPerspectiveReprojEdge final : public ::g2o::BaseBinaryEdge<3, Vec3_d
 public:
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
-    StereoPerspectiveReprojEdge()
-        : BaseBinaryEdge<3, Vec3_d, LandmarkPointVertex, ShotVertex>() {}
+    StereoPerspectiveReprojEdge(const unsigned int edgeId)
+        : _edgeId(edgeId), BaseBinaryEdge<3, Vec3_d, LandmarkPointVertex, ShotVertex>() {}
 
-    ~StereoPerspectiveReprojEdge() = default;
+    ~StereoPerspectiveReprojEdge(){
+        std::cout << "destructing edge (stereo):" << _edgeId << std::endl;
+    }
 
     bool read(std::istream& is) override;
 
@@ -105,6 +107,7 @@ public:
     }
 
     double fx_, fy_, cx_, cy_, focal_x_baseline_;
+    unsigned int _edgeId;
 };
 
 template<typename T>
@@ -112,12 +115,12 @@ class ReprojEdgeWrapper {
 public:
     ReprojEdgeWrapper() = delete;  // Note: delete default constructor.
 
-    ReprojEdgeWrapper(std::shared_ptr<T> pShot, std::shared_ptr<ShotVertex> pShotVtx,
-                        std::shared_ptr<LandMark> pLm, std::shared_ptr<LandmarkPointVertex> pLmVtx,
+    ReprojEdgeWrapper(const unsigned int edgeId, std::shared_ptr<T> pShot, ShotVertex* pShotVtx,
+                        std::shared_ptr<LandMark> pLm, LandmarkPointVertex* pLmVtx,
                         const float refObjX, const float refObjY, const float refObjX_right,
                         const float sqrt_chi_sq, const bool bUseHuberLoss = true);  // Note: sqrt_chi_sq is a strictiness threshold for huber kernel
 
-    ~ReprojEdgeWrapper() = default;
+    ~ReprojEdgeWrapper();
 
     inline bool IsInlier() const {
         return _pEdge->level() == 0;
@@ -137,20 +140,25 @@ public:
 
     inline bool IsDepthPositive() const;
 
-    std::shared_ptr<::g2o::OptimizableGraph::Edge> _pEdge;
-
     std::shared_ptr<camera::CameraBase> _pCamera;
     std::shared_ptr<T> _pShot;
+    ::g2o::OptimizableGraph::Edge* _pEdge;
     std::shared_ptr<LandMark> _pLm;
+    unsigned int _edgeId;
 };
 
 template<typename T>
-ReprojEdgeWrapper<T>::ReprojEdgeWrapper(std::shared_ptr<T> pShot, std::shared_ptr<ShotVertex> pShotVtx,
-                                        std::shared_ptr<LandMark> pLm, std::shared_ptr<LandmarkPointVertex> pLmVtx,
+ReprojEdgeWrapper<T>::~ReprojEdgeWrapper(){
+    std::cout << "destructing edge:" << _edgeId << std::endl;
+}
+
+template<typename T>
+ReprojEdgeWrapper<T>::ReprojEdgeWrapper(const unsigned int edgeId, std::shared_ptr<T> pShot, ShotVertex* pShotVtx,
+                                        std::shared_ptr<LandMark> pLm, LandmarkPointVertex* pLmVtx,
                                         const float refObjX, const float refObjY, const float refObjX_right,
                                         const float sqrt_chi_sq, const bool bUseHuberLoss)
-    : _pCamera(pShot->_pCamera), _pShot(pShot), _pLm(pLm) {
-    std::shared_ptr<StereoPerspectiveReprojEdge> edge = std::make_shared<StereoPerspectiveReprojEdge>();
+    : _edgeId(edgeId), _pCamera(pShot->_pCamera), _pShot(pShot), _pLm(pLm) {
+    StereoPerspectiveReprojEdge* edge = new StereoPerspectiveReprojEdge(edgeId);
 
     const Vec3_d obs{refObjX, refObjY, refObjX_right};
     edge->setMeasurement(obs);
@@ -162,8 +170,8 @@ ReprojEdgeWrapper<T>::ReprojEdgeWrapper(std::shared_ptr<T> pShot, std::shared_pt
     edge->cy_ = _pCamera->_kk(1, 2);
     edge->focal_x_baseline_ = _pCamera->_baseline;
 
-    edge->setVertex(0, pLmVtx.get());
-    edge->setVertex(1, pShotVtx.get());
+    edge->setVertex(0, pLmVtx);
+    edge->setVertex(1, pShotVtx);
 
     _pEdge = edge;
 
@@ -177,11 +185,11 @@ ReprojEdgeWrapper<T>::ReprojEdgeWrapper(std::shared_ptr<T> pShot, std::shared_pt
 
 template<typename T>
 bool ReprojEdgeWrapper<T>::IsDepthPositive() const {
-    return static_cast<StereoPerspectiveReprojEdge*>(_pEdge.get())->StereoPerspectiveReprojEdge::depth_is_positive();
+    return static_cast<StereoPerspectiveReprojEdge*>(_pEdge)->StereoPerspectiveReprojEdge::depth_is_positive();
 }
 
-std::shared_ptr<ShotVertex> CreateShotVertex(const unsigned int vtxId, const Mat44_d& worldToShotTransform, const bool isConstant);
-std::shared_ptr<LandmarkPointVertex> CreateLandmarkPointVertex(const unsigned int vtxId, const Vec3_d& posInWorld, const bool isConstant);
+ShotVertex* CreateShotVertex(const unsigned int vtxId, const Mat44_d& worldToShotTransform, const bool isConstant);
+LandmarkPointVertex* CreateLandmarkPointVertex(const unsigned int vtxId, const Vec3_d& posInWorld, const bool isConstant);
 
 }  // end of namespace g2outils
 }  // end of namspace optimize
