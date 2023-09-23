@@ -164,8 +164,8 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
         if (filename == "000788"){
             break;
         }
-        // if (filename == "000100"){
-            // break;
+        // if (filename == "000010"){
+        //     break;
         // }
 
         auto starttime = std::chrono::steady_clock::now();

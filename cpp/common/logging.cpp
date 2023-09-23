@@ -171,7 +171,8 @@ static log4cxx::LevelPtr _GetLogLevel(const std::string& levelName) {
     return level;
 }
 
-void tooldetectobject::ConfigureRootLogger(const std::string& level, const std::string& outputformat, const std::string& logFilePath)
+
+void ConfigureRootLogger(const std::string& level, const std::string& outputformat, const std::string& logFilePath)
 {
     //
     // Parse log level.

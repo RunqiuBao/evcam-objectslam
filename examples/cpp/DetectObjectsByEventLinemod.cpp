@@ -15,7 +15,7 @@ int main(int argc, char** argv){
     py::module sys = py::module::import("sys");
     py::print(sys.attr("version"));
 
-    tooldetectobject::ConfigureRootLogger("DEBUG", "", "./detector.log");  // need to execute at the beginning before any logging call.
+    ConfigureRootLogger("DEBUG", "", "./detector.log");  // need to execute at the beginning before any logging call.
     /**
      *  argv:
      *    - inputdata: path to the event database

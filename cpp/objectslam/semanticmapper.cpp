@@ -36,11 +36,11 @@ void SemanticMapper::_DoPruneLandmarks() {
 }
 
 void SemanticMapper::_DoPruneLandmarks2() {
-    TDO_LOG_CRITICAL_FORMAT("------------- NumLandmarks in database before: %d ----------------", _pMapDb->_landmarks.size());
+    TDO_LOG_DEBUG_FORMAT("------------- NumLandmarks in database before: %d ----------------", _pMapDb->_landmarks.size());
     std::vector<std::shared_ptr<LandMark>> allLandmarksInDb = _pMapDb->GetAllLandmarks();
     for (auto pLandmark : allLandmarksInDb) {
         auto observableKeyframes = _pMapDb->GetObservableKeyframes(pLandmark, _numMinObservableToPruneLandmark);
-        TDO_LOG_CRITICAL_FORMAT("landmark(%d): posXYZ %f, %f, %f; numObservs %d; observables %d",
+        TDO_LOG_DEBUG_FORMAT("landmark(%d): posXYZ %f, %f, %f; numObservs %d; observables %d",
                                     pLandmark->_landmarkID
                                     % pLandmark->GetLandmarkPoseInWorld()(0, 3)
                                     % pLandmark->GetLandmarkPoseInWorld()(1, 3)
@@ -51,7 +51,7 @@ void SemanticMapper::_DoPruneLandmarks2() {
             _pMapDb->PruneOneLandmark(pLandmark);
         }
     }
-    TDO_LOG_CRITICAL_FORMAT("------------ NumLandmarks in database after prune: %d --------------", _pMapDb->_landmarks.size());
+    TDO_LOG_DEBUG_FORMAT("------------ NumLandmarks in database after prune: %d --------------", _pMapDb->_landmarks.size());
     _isPruneLandmarks = false;
 }
 
@@ -99,7 +99,6 @@ void SemanticMapper::_DoMergeLandmarks() {
 
 void SemanticMapper::Run() {
     TDO_LOG_DEBUG("Start semantic mapper thread.");
-
     while (!_isTerminate) {
         if (_isPruneLandmarks) {
             auto starttime = std::chrono::steady_clock::now();
@@ -127,18 +126,18 @@ void SemanticMapper::Run() {
         _keyfrmAcceptability = true;
         _pCurrKeyfrm = nullptr;
     }
-    TDO_LOG_CRITICAL("Terminate semantic mapper thread.");
+    TDO_LOG_DEBUG("Terminate semantic mapper thread.");
 }
 
 bool SemanticMapper::PushKeyframeForBA(std::shared_ptr<KeyFrame> pTargetKeyframe){
     if (_keyfrmAcceptability) {
         _pCurrKeyfrm = pTargetKeyframe;
         _keyfrmAcceptability = false;  // stop receiving keyframes until finish current.
-        TDO_LOG_CRITICAL_FORMAT("localBA set for keyframe(%d)", _pCurrKeyfrm->_keyFrameID);
+        TDO_LOG_DEBUG_FORMAT("localBA set for keyframe(%d)", _pCurrKeyfrm->_keyFrameID);
         return true;
     }
     else{
-        TDO_LOG_CRITICAL("localBA is busy now.");
+        TDO_LOG_DEBUG("localBA is busy now.");
         return false;
     }
 }

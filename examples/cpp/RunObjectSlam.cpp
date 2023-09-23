@@ -9,7 +9,7 @@ TDO_LOGGER("examples.RunObjectSlam")
 
 
 int main(int argc, char** argv){
-    tooldetectobject::ConfigureRootLogger("DEBUG", "", "./detector.log");
+    ConfigureRootLogger("DEBUG", "", "./detector.log");
     /**
      *  argv:
      *    - stereoseqpath: path to the stereo sequence.

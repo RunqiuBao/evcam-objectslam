@@ -110,10 +110,6 @@ Logs a message to a specified logger with the FATAL level.
         logger->forcedLog(log4cxx::Level::getFatal(), boost::str(boost::format(fmt)%params), LOG4CXX_LOCATION); }}
 
 
-namespace tooldetectobject{ 
-
-void ConfigureRootLogger(const std::string& level, const std::string &outputformat, const std::string& logFilePath);
-
-}; // end of namespace tooldetectobject
+void ConfigureRootLogger(const std::string& level, const std::string& outputformat, const std::string& logFilePath);
 
 #endif
