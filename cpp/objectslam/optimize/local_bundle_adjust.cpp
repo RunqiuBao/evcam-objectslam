@@ -10,6 +10,9 @@
 #include <logging.h>
 TDO_LOGGER("objectslam.optimize.localBA")
 
+// #define USE_KEYFRAMEUPDATEMODE_CURRENTONLY
+// #define USE_KEYFRAMEUPDATEMODE_COVISIBILITY
+
 namespace eventobjectslam {
 
 void optimize::DoLocalBA(std::shared_ptr<KeyFrame> pCurrKeyframe, bool* const bForceStopFlag, const size_t numFirstIter, const size_t numSecondIter) {
@@ -19,7 +22,9 @@ void optimize::DoLocalBA(std::shared_ptr<KeyFrame> pCurrKeyframe, bool* const bF
     // collect local keyframes of the current keyframe.
     std::unordered_map<unsigned int, std::shared_ptr<KeyFrame>> ids_localKeyframes;  // Note: keyframes that are within covisibilities of current keyframe.
     ids_localKeyframes[pCurrKeyframe->_keyFrameID] = pCurrKeyframe;
+#ifdef USE_KEYFRAMEUPDATEMODE_COVISIBILITY
     const auto currCovisibilities = pCurrKeyframe->GetOrderedCovisibilities();
+    TDO_LOG_CRITICAL_FORMAT("num of covisibilities of keyframe(%d): %d", pCurrKeyframe->_keyFrameID % currCovisibilities.size());
     for (auto pLocalKeyFrame : currCovisibilities) {
         if (!pLocalKeyFrame) {
             TDO_LOG_ERROR("got empty pkeyframe, something is super wrong!");
@@ -31,6 +36,7 @@ void optimize::DoLocalBA(std::shared_ptr<KeyFrame> pCurrKeyframe, bool* const bF
         }
         ids_localKeyframes[pLocalKeyFrame->_keyFrameID] = pLocalKeyFrame;
     }
+#endif
 
     // collect local landmarks seen in local keyframes.
     std::unordered_map<unsigned int, std::shared_ptr<LandMark>> ids_localLandmarks;
@@ -154,11 +160,9 @@ void optimize::DoLocalBA(std::shared_ptr<KeyFrame> pCurrKeyframe, bool* const bF
             ReprojEdgeWrapper reprojEdgeWrap(edgeId, pKeyframe, pKeyfrmVtx, pLocalLm, pLmVtx, centerX, centerY, centerXRight, sqrt_chi_sq_3D);
             edgeId++;
             reprojEdgeWraps.push_back(reprojEdgeWrap);
-            TDO_LOG_CRITICAL("delete check-3");
             optimizer.addEdge(reprojEdgeWrap._pEdge);
         }
     }
-    TDO_LOG_CRITICAL("delete check-2");
 
     // -------- (5) --------
     // 1st round of optimization
@@ -202,6 +206,11 @@ void optimize::DoLocalBA(std::shared_ptr<KeyFrame> pCurrKeyframe, bool* const bF
             continue;
         }
 
+        TDO_LOG_VERBOSE_FORMAT("Edge between keyframe(%d), landmark(%d), chi2 %f, depthPosi %s",
+                                    reprojEdgeWrap._pShot->_keyFrameID
+                                    % reprojEdgeWrap._pLm->_landmarkID
+                                    % pEdge->chi2()
+                                    % std::to_string(reprojEdgeWrap.IsDepthPositive()));
         if (chi_sq_3D < pEdge->chi2() || !reprojEdgeWrap.IsDepthPositive()) {
             outlier_observations_lms.push_back(std::make_pair(reprojEdgeWrap._pShot, reprojEdgeWrap._pLm));
         }
@@ -215,6 +224,7 @@ void optimize::DoLocalBA(std::shared_ptr<KeyFrame> pCurrKeyframe, bool* const bF
             for (auto& outlier_obs_lm : outlier_observations_lms) {
                 auto pKeyfrm = outlier_obs_lm.first;
                 auto pLm = outlier_obs_lm.second;
+                TDO_LOG_CRITICAL_FORMAT("outlier pair keyframe(%d), landmark(%d)", pKeyfrm->_keyFrameID % pLm->_landmarkID);
                 pKeyfrm->DeleteOneObservedLandmark(pLm);
                 pLm->DeleteObservation(pKeyfrm);
             }
@@ -223,6 +233,7 @@ void optimize::DoLocalBA(std::shared_ptr<KeyFrame> pCurrKeyframe, bool* const bF
         for (auto id_localKeyfrm : ids_localKeyframes) {
             auto pLocalKeyfrm = id_localKeyfrm.second;
             auto pKeyfrmVtx = ids_keyfrmVtx[pLocalKeyfrm->_keyFrameID];
+            TDO_LOG_CRITICAL_FORMAT("updating pose of keyframe(%d)", pLocalKeyfrm->_keyFrameID);
             pLocalKeyfrm->SetKeyframePoseInWorld(pKeyfrmVtx->estimate().to_homogeneous_matrix().inverse().cast<float>());
         }
 
@@ -231,6 +242,7 @@ void optimize::DoLocalBA(std::shared_ptr<KeyFrame> pCurrKeyframe, bool* const bF
             auto pLmVtx = ids_landmarkPointVtx[pLocalLm->_landmarkID];
             Mat44_t landmarkPoseInWorld = pLocalLm->GetLandmarkPoseInWorld();
             landmarkPoseInWorld.block(0, 3, 3, 1) = pLmVtx->estimate().cast<float>();
+            TDO_LOG_CRITICAL_FORMAT("updating pose of landmark(%d)", pLocalLm->_landmarkID);
             pLocalLm->SetLandmarkPoseInWorld(landmarkPoseInWorld);
         }
 

@@ -400,7 +400,7 @@ void FrameTracker::CreateNewLandmarks(std::shared_ptr<KeyFrame> pRefKeyFrame, st
         observedLandmarks_indicesRefObj[visibleLandmarks[indicesLandmarkForRefObjects[indexRefObject]]] = indexRefObject;
     }
     pRefKeyFrame->InitializeObservedLandmarks(observedLandmarks_indicesRefObj);
-    TDO_LOG_INFO_FORMAT("Created %d new landmarks in keyframe %d. \nTotally%d landmarks currently in MapDb.", countNewLandmark % pRefKeyFrame->_keyFrameID % pMapDb->_landmarks.size());
+    TDO_LOG_INFO_FORMAT("Created %d new landmarks in keyframe %d. \nTotally %d landmarks currently in MapDb.", countNewLandmark % pRefKeyFrame->_keyFrameID % pMapDb->_landmarks.size());
 
 }
 

@@ -57,6 +57,8 @@ private:
     //! flag for keyframe acceptability
     std::atomic<bool> _keyfrmAcceptability{true};
 
+    size_t _countBA = 0;
+
 };
 
 }  // end of namespace eventobjectslam

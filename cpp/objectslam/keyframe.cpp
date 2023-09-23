@@ -38,6 +38,7 @@ void KeyFrame::InitializeObservedLandmarks(std::map<std::shared_ptr<LandMark>, u
     }
     // initialize covisibility graph node.
     _graphNode = std::unique_ptr<GraphNode>(new GraphNode(this));
+    _graphNode->ComputeCovisibility();  // Note: initialize the node in covisibility graph.
 
 }
 

@@ -79,7 +79,8 @@ public:
         : _edgeId(edgeId), BaseBinaryEdge<3, Vec3_d, LandmarkPointVertex, ShotVertex>() {}
 
     ~StereoPerspectiveReprojEdge(){
-        std::cout << "destructing edge (stereo):" << _edgeId << std::endl;
+        // Note: First all the member variables will be destructed in reverse order. Then this destructor will be called.
+        // std::cout << "destructing edge (stereo):" << _edgeId << std::endl;
     }
 
     bool read(std::istream& is) override;
@@ -90,7 +91,9 @@ public:
         const auto v1 = static_cast<const ShotVertex*>(_vertices.at(1));
         const auto v2 = static_cast<const LandmarkPointVertex*>(_vertices.at(0));
         const Vec3_d obs(_measurement);
-        _error = obs - cam_project(v1->estimate().map(v2->estimate()));
+        auto obsUpdate = cam_project(v1->estimate().map(v2->estimate()));
+        _error = obs - obsUpdate;
+        // std::cout << "edgeId: " << _edgeId << ", obs: {" << obs[0] << ", " << obs[1] << ", " << obs[2] << "}, update: {" << obsUpdate[0] << ", " << obsUpdate[1] << ", " << obsUpdate[2] << "}." << std::endl;
     }
 
     void linearizeOplus() override;
@@ -120,7 +123,7 @@ public:
                         const float refObjX, const float refObjY, const float refObjX_right,
                         const float sqrt_chi_sq, const bool bUseHuberLoss = true);  // Note: sqrt_chi_sq is a strictiness threshold for huber kernel
 
-    ~ReprojEdgeWrapper();
+    ~ReprojEdgeWrapper() = default;
 
     inline bool IsInlier() const {
         return _pEdge->level() == 0;
@@ -148,11 +151,6 @@ public:
 };
 
 template<typename T>
-ReprojEdgeWrapper<T>::~ReprojEdgeWrapper(){
-    std::cout << "destructing edge:" << _edgeId << std::endl;
-}
-
-template<typename T>
 ReprojEdgeWrapper<T>::ReprojEdgeWrapper(const unsigned int edgeId, std::shared_ptr<T> pShot, ShotVertex* pShotVtx,
                                         std::shared_ptr<LandMark> pLm, LandmarkPointVertex* pLmVtx,
                                         const float refObjX, const float refObjY, const float refObjX_right,
@@ -168,7 +166,7 @@ ReprojEdgeWrapper<T>::ReprojEdgeWrapper(const unsigned int edgeId, std::shared_p
     edge->fy_ = _pCamera->_kk(1, 1);
     edge->cx_ = _pCamera->_kk(0, 2);
     edge->cy_ = _pCamera->_kk(1, 2);
-    edge->focal_x_baseline_ = _pCamera->_baseline;
+    edge->focal_x_baseline_ = _pCamera->_kk(0, 0) * _pCamera->_baseline;
 
     edge->setVertex(0, pLmVtx);
     edge->setVertex(1, pShotVtx);

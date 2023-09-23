@@ -149,7 +149,7 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
     trackResultPath.append("cameraTrack.txt");
     std::ofstream outputFile(trackResultPath.string());
     int frameCount = 0;
-    size_t keyframeCount = 0;
+    size_t keyframeCount = 0;  // Note: for pruning keyframe count. 
 
     FrameTracker _tracker(_camera);
     _tracker._sStereoSequencePathForDebug = sStereoSequencePath;
@@ -164,8 +164,8 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
         if (filename == "000788"){
             break;
         }
-        // if (filename == "000020"){
-        //     break;
+        // if (filename == "000100"){
+            // break;
         // }
 
         auto starttime = std::chrono::steady_clock::now();
@@ -290,7 +290,10 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
                     keyframeCount = _pMapDb->_keyframes.size();
                 }
                 // start BA
-                _pMapper->PushKeyframeForBA(pOneKeyframe);
+                while (!_pMapper->PushKeyframeForBA(pOneKeyframe)){
+                    // Note: Force optimize every keyframe.
+                    std::this_thread::sleep_for(std::chrono::microseconds(static_cast<unsigned int>(0.05 * 1e6)));
+                }
             }
 
         }
@@ -305,6 +308,7 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
         pOneFrame->_pRefKeyframe = _tracker._pRefKeyframe;
         _tracker._pRefKeyframe->_vFrames.push_back(pOneFrame);
         _pFrameStack.push_back(pOneFrame);
+
     }
     outputFile.close();
 

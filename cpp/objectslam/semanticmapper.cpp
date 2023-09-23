@@ -112,8 +112,6 @@ void SemanticMapper::Run() {
             TDO_LOG_DEBUG_FORMAT("one mergelandmarks task finished in %d milisec.", duration.count());
         }
 
-        _keyfrmAcceptability = false;  // stop receiving keyframes until finish current.
-
         if (_pCurrKeyfrm == nullptr){
             _keyfrmAcceptability = true;
             continue;
@@ -123,7 +121,8 @@ void SemanticMapper::Run() {
         auto starttime = std::chrono::steady_clock::now();
         optimize::DoLocalBA(_pCurrKeyfrm, &_abortLocalBA);
         auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - starttime);
-        TDO_LOG_DEBUG_FORMAT("one localBA task finished in %d milisec. keyframe (%d).", duration.count() % _pCurrKeyfrm->_keyFrameID);
+        TDO_LOG_DEBUG_FORMAT("one localBA(%d) task finished in %d milisec. keyframe (%d).", _countBA % duration.count() % _pCurrKeyfrm->_keyFrameID);
+        _countBA++;
 
         _keyfrmAcceptability = true;
         _pCurrKeyfrm = nullptr;
@@ -134,11 +133,13 @@ void SemanticMapper::Run() {
 bool SemanticMapper::PushKeyframeForBA(std::shared_ptr<KeyFrame> pTargetKeyframe){
     if (_keyfrmAcceptability) {
         _pCurrKeyfrm = pTargetKeyframe;
-        return _keyfrmAcceptability;
+        _keyfrmAcceptability = false;  // stop receiving keyframes until finish current.
+        TDO_LOG_CRITICAL_FORMAT("localBA set for keyframe(%d)", _pCurrKeyfrm->_keyFrameID);
+        return true;
     }
     else{
         TDO_LOG_CRITICAL("localBA is busy now.");
-        return _keyfrmAcceptability;
+        return false;
     }
 }
 
