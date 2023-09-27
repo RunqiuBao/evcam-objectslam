@@ -99,7 +99,7 @@ void SaveOptimizedTraj(const std::string datasetRoot, std::vector<std::shared_pt
 
     size_t frameCount = 0;
     for (auto pFrame : pFrameStack) {
-        if (pFrame->_isTracked) {
+        if (pFrame->_isToSave) {
             Mat44_t frameInRealWorld = worldInReadworldTransform * pFrame->_pRefKeyframe->GetKeyframePoseInWorld() * pFrame->GetPose();
             Eigen::Quaternionf myQuaternion(frameInRealWorld.block<3, 3>(0, 0));
             trajFile << std::to_string(frameCount) << " " << frameInRealWorld(0, 3) << " " << frameInRealWorld(1, 3) << " " << frameInRealWorld(2, 3) << " " << myQuaternion.x() << " " << myQuaternion.y() << " " << myQuaternion.z() << " " << myQuaternion.w() << std::endl;
@@ -343,6 +343,7 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
         pOneFrame->_pRefKeyframe = _tracker._pRefKeyframe;
         _tracker._pRefKeyframe->_vFrames.push_back(pOneFrame);
         _pFrameStack.push_back(pOneFrame);
+        pOneFrame->_isToSave = true;
 
     }
     outputFile.close();

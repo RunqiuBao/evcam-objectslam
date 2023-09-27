@@ -65,6 +65,7 @@ public:
     double _timestamp;
 
     bool _isTracked = false; // Note: whether tracking succeeded or not on this frame.
+    bool _isToSave = false;  // for saving to traj.
 
 private:
     FrameType _frameType;
