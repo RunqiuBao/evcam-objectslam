@@ -64,7 +64,7 @@ public:
     std::vector<std::shared_ptr<TwoDBoundingBox>> _matchedRightCamDetections;
     double _timestamp;
 
-    bool _isTracked; // Note: whether tracking succeeded or not on this frame.
+    bool _isTracked = false; // Note: whether tracking succeeded or not on this frame.
 
 private:
     FrameType _frameType;

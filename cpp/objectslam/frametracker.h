@@ -33,12 +33,18 @@ public:
 
     void CreateNewLandmarks(std::shared_ptr<KeyFrame> pRefKeyFrame, std::shared_ptr<MapDataBase> mapDb, const std::shared_ptr<object::ObjectBase> pObjectInfo);
 
+    void SetTrackerStatus(const bool isInitialized){ _isInitialized = isInitialized; }
+
+    bool GetTrackerStatus() { return _isInitialized; }
+
     std::shared_ptr<KeyFrame> _pRefKeyframe;
 
     std::string _sStereoSequencePathForDebug;
 
 private:
     std::shared_ptr<camera::CameraBase> _camera;
+
+    bool _isInitialized = false;
 
 
 };

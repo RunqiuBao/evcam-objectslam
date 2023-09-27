@@ -89,6 +89,35 @@ void LoadDetections(const std::vector<std::string>& sDetections, std::vector<Two
 //     return cam_pose_cw;
 // }
 
+void SaveOptimizedTraj(const std::string datasetRoot, std::vector<std::shared_ptr<Frame>> pFrameStack, const Mat44_t worldInReadworldTransform){
+    std::filesystem::path trajFilePath = datasetRoot;
+    trajFilePath.append("cameraTrackOptimized.txt");
+    std::filesystem::path trajMaskFilePath = datasetRoot;
+    trajMaskFilePath.append("cameraTrackOptimized_mask.txt");
+    std::ofstream trajFile(trajFilePath.string());
+    std::ofstream trajMaskFile(trajMaskFilePath.string());
+
+    size_t frameCount = 0;
+    for (auto pFrame : pFrameStack) {
+        if (pFrame->_isTracked) {
+            Mat44_t frameInRealWorld = worldInReadworldTransform * pFrame->_pRefKeyframe->GetKeyframePoseInWorld() * pFrame->GetPose();
+            Eigen::Quaternionf myQuaternion(frameInRealWorld.block<3, 3>(0, 0));
+            trajFile << std::to_string(frameCount) << " " << frameInRealWorld(0, 3) << " " << frameInRealWorld(1, 3) << " " << frameInRealWorld(2, 3) << " " << myQuaternion.x() << " " << myQuaternion.y() << " " << myQuaternion.z() << " " << myQuaternion.w() << std::endl;
+            trajMaskFile << "1" << std::endl;
+        }
+        else {
+            trajFile << std::to_string(frameCount) << " 0 0 0 0 0 0 1" << std::endl;
+            trajMaskFile << "0" << std::endl;
+        }
+        frameCount++;
+    }
+    
+    TDO_LOG_DEBUG("saved " << std::to_string(frameCount) << " frames pose. (optimized)");
+
+    trajFile.close();
+    trajMaskFile.close();
+}
+
 void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
     // the dataset dir includes `leftcam` and `rightcam` and `colorconeInfo.json`
     // in each cam folder, it includes `*.png`, `detectionId*/(yolos, including linemod based template selection)`
@@ -146,14 +175,16 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
     worldInRealWorld.block(0, 3, 3, 1) = tWorldToRealWorld;
 
     std::filesystem::path trackResultPath = sStereoSequencePath;
-    trackResultPath.append("cameraTrack.txt");
+    trackResultPath.append("cameraTrackRealTime.txt");
     std::ofstream outputFile(trackResultPath.string());
+    
     int frameCount = 0;
     size_t keyframeCount = 0;  // Note: for pruning keyframe count. 
 
     FrameTracker _tracker(_camera);
     _tracker._sStereoSequencePathForDebug = sStereoSequencePath;
     std::vector<std::shared_ptr<Frame>> _pFrameStack;
+    std::vector<std::shared_ptr<Frame>> _allFramesStack;
     std::vector<std::shared_ptr<KeyFrame>> _pKeyFrameStack;
     Mat44_t cameraInRealWorld = Eigen::Matrix4f::Identity();  // Note: Pose for comparing to ground truth
 
@@ -161,14 +192,17 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
     std::vector<size_t> numFramesEachKeyframe;
     for(const std::string& filename : filenames){
         TDO_LOG_DEBUG(filename);
-        if (filename == "000788"){
-            break;
-        }
+        // if (filename == "000788"){
+        //     break;
+        // }
         // if (filename == "000010"){
         //     break;
         // }
 
         auto starttime = std::chrono::steady_clock::now();
+        std::shared_ptr<Frame> pOneFrame = std::make_shared<Frame>(FrameType::Stereo, static_cast<double>(frameCount), _camera);
+        _allFramesStack.push_back(pOneFrame);
+
         std::filesystem::path leftCamPath = sStereoSequencePath;
         leftCamPath.append("leftcam/");
         std::ifstream detectionResult(leftCamPath.append("detectionID0").append(filename + ".txt"));
@@ -206,7 +240,6 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
         std::vector<TwoDBoundingBox> rightCamDetections;
         LoadDetections(sDetections, rightCamDetections, myStereoCamera._cols, myStereoCamera._rows, pColorcone);
 
-        std::shared_ptr<Frame> pOneFrame = std::make_shared<Frame>(FrameType::Stereo, static_cast<double>(frameCount), _camera);
         pOneFrame->SetDetectionsFromExternalSrc(std::move(leftCamDetections), std::move(rightCamDetections));
 
         std::vector<std::shared_ptr<TwoDBoundingBox>> matchedLeftCamDetections, matchedRightCamDetections;
@@ -242,11 +275,13 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
 
         // // input the correct detections to frameTracker, get pose return from frameTracker and print.
 
-        if (filename == "000000"){
+        if (!_tracker.GetTrackerStatus()){
             pOneFrame->SetPose(Eigen::Matrix4f::Identity());
+            pOneFrame->_isTracked = true;
             TDO_LOG_INFO("keyframe insert! frame number: " << filename);
             std::shared_ptr<KeyFrame> pOneKeyframe = std::make_shared<KeyFrame>(pOneFrame, Eigen::Matrix4f::Identity(), _camera);  // Note: allocated on heap. will not disappear due to out of scope.
             _tracker._pRefKeyframe = pOneKeyframe;
+            _tracker.SetTrackerStatus(true);
             _pKeyFrameStack.push_back(pOneKeyframe);
             _pMapDb->AddKeyFrame(pOneKeyframe);
             pOneFrame->SetDetectionsAsRefObjects();
@@ -311,6 +346,7 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
 
     }
     outputFile.close();
+    SaveOptimizedTraj(sStereoSequencePath, _allFramesStack, worldInRealWorld);
 
     // print debug infos
     size_t minNumFrames = *std::min_element(numFramesEachKeyframe.begin(), numFramesEachKeyframe.end());
