@@ -11,7 +11,7 @@
 TDO_LOGGER("objectslam.optimize.localBA")
 
 // #define USE_KEYFRAMEUPDATEMODE_CURRENTONLY
-// #define USE_KEYFRAMEUPDATEMODE_COVISIBILITY
+#define USE_KEYFRAMEUPDATEMODE_COVISIBILITY
 
 namespace eventobjectslam {
 

@@ -118,6 +118,22 @@ void SaveOptimizedTraj(const std::string datasetRoot, std::vector<std::shared_pt
     trajMaskFile.close();
 }
 
+void SaveLandmarks(const std::string datasetRoot, std::shared_ptr<MapDataBase> mapDb, const Mat44_t worldInReadworldTransform) {
+    std::filesystem::path landmarksFilePath = datasetRoot;
+    landmarksFilePath.append("landmarks.txt");
+    std::ofstream landmarksFile(landmarksFilePath.string());
+
+    size_t landmarkCount = 0;
+    for (auto id_pLandmark : mapDb->_landmarks) {
+        Mat44_t landmarkPoseInWorld = id_pLandmark.second->GetLandmarkPoseInWorld();
+        Mat44_t landmarkPoseInRealWorld = worldInReadworldTransform * landmarkPoseInWorld;
+        landmarksFile << std::to_string(id_pLandmark.first) << " " << landmarkPoseInRealWorld(0, 3) << " " << landmarkPoseInRealWorld(1, 3) << " " << landmarkPoseInRealWorld(2, 3) << " " << landmarkPoseInRealWorld(0, 2) << " " << landmarkPoseInRealWorld(1, 2) << " " << landmarkPoseInRealWorld(2, 2) << std::endl;
+        landmarkCount++;
+    }
+    TDO_LOG_DEBUG("saved " << std::to_string(landmarkCount) << " landmarks. (optimized)");
+    landmarksFile.close();
+}
+
 void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
     // the dataset dir includes `leftcam` and `rightcam` and `colorconeInfo.json`
     // in each cam folder, it includes `*.png`, `detectionId*/(yolos, including linemod based template selection)`
@@ -304,7 +320,22 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
             }
 
             // insert new key frame if detection increased than previous frame
-            if (isSuccess && (pOneFrame->_threeDDetections.size() > (*_pFrameStack.back())._threeDDetections.size())){
+            // if (isSuccess && (pOneFrame->_threeDDetections.size() > (*_pFrameStack.back())._threeDDetections.size())){
+            bool bAddKeyframe = false;
+            if (_pFrameStack.size() < 2) {
+                if (isSuccess && (pOneFrame->_threeDDetections.size() > (*_pFrameStack.back())._threeDDetections.size())) {
+                    bAddKeyframe = true;
+                }
+            }
+            else if (_pFrameStack.size() >= 2){
+                if (isSuccess
+                    && (pOneFrame->_threeDDetections.size() > (*_pFrameStack.back())._threeDDetections.size())
+                    && (pOneFrame->_threeDDetections.size() > (*_pFrameStack[_pFrameStack.size() - 2])._threeDDetections.size())
+                ) {
+                    bAddKeyframe = true;
+                }
+            }
+            if (bAddKeyframe){  // for vibration
                 TDO_LOG_DEBUG_FORMAT("Last Keyframe(%d) contains %d frames.", _pKeyFrameStack.back()->_keyFrameID % _pKeyFrameStack.back()->_vFrames.size());
                 numFramesEachKeyframe.push_back(_pKeyFrameStack.back()->_vFrames.size());  // debug code
                 std::shared_ptr<KeyFrame> pOneKeyframe = std::make_shared<KeyFrame>(pOneFrame, _tracker._pRefKeyframe->GetKeyframePoseInWorld(), _camera);
@@ -347,6 +378,7 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
     }
     outputFile.close();
     SaveOptimizedTraj(sStereoSequencePath, _allFramesStack, worldInRealWorld);
+    SaveLandmarks(sStereoSequencePath, _pMapDb, worldInRealWorld);
 
     // print debug infos
     size_t minNumFrames = *std::min_element(numFramesEachKeyframe.begin(), numFramesEachKeyframe.end());

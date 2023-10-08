@@ -21,6 +21,11 @@ void SemanticMapper::SchedulePruneLandmarksTask() {
     _isPruneLandmarks = true;
 }
 
+void SemanticMapper::_DoPruneKeyframes() {
+    TDO_LOG_DEBUG_FORMAT("NumKeyframes in database before: %d", _pMapDb->_keyframes.size());
+    
+}
+
 void SemanticMapper::_DoPruneLandmarks() {
     TDO_LOG_DEBUG_FORMAT("started landmark pruning in keyframe(%d)", _pTargetKeyframeToPruneLandmark->_keyFrameID);
     auto observedLandmarks_indiceRefObj = _pTargetKeyframeToPruneLandmark->GetObservedLandmarks();
