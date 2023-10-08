@@ -30,6 +30,9 @@ void optimize::DoLocalBA(std::shared_ptr<KeyFrame> pCurrKeyframe, bool* const bF
             TDO_LOG_ERROR("got empty pkeyframe, something is super wrong!");
             continue;
         }
+        if (pLocalKeyFrame->IsToDelete()){
+            continue;
+        }
         if (pLocalKeyFrame->_keyFrameID == 0) {
             // do not optimize the first keyframe, which is the first frame as well.
             continue;
@@ -70,7 +73,9 @@ void optimize::DoLocalBA(std::shared_ptr<KeyFrame> pCurrKeyframe, bool* const bF
                 TDO_LOG_ERROR("got empty pkeyframe, something is super wrong!");
                 continue;
             }
-            
+            if (pFixedKeyframe->IsToDelete()){
+                continue;
+            }
             // don't add keyframes that belong to local keyframes.
             if (ids_localKeyframes.count(pFixedKeyframe->_keyFrameID)) {
                 continue;
@@ -150,6 +155,9 @@ void optimize::DoLocalBA(std::shared_ptr<KeyFrame> pCurrKeyframe, bool* const bF
             auto idx = pObs_idx.second;
             if (!pKeyframe) {
                 TDO_LOG_ERROR("got empty pkeyframe, something is super wrong!");
+                continue;
+            }
+            if (!allKeyframes.count(pKeyframe->_keyFrameID)) {
                 continue;
             }
 

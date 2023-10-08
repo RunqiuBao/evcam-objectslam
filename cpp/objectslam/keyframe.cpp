@@ -1,5 +1,7 @@
 #include "keyframe.h"
 
+#include <set>
+#include <algorithm>
 #include <logging.h>
 TDO_LOGGER("eventobjectslam.keyframe")
 
@@ -25,9 +27,42 @@ void KeyFrame::AddCovisibilityConnection(std::shared_ptr<KeyFrame> pTargetKeyfra
     _graphNode->AddCovisibilityConnection(pTargetKeyframe, weight);
 }
 
+void KeyFrame::DeleteCovisibilityConnection(std::shared_ptr<KeyFrame> pTargetKeyframe) {
+    std::lock_guard<std::mutex> lock(_mtxCovisibilityGraph);
+    _graphNode->DeleteCovisibilityConnection(pTargetKeyframe);
+}
+
 std::vector<std::shared_ptr<KeyFrame>> KeyFrame::GetOrderedCovisibilities() const {
     std::lock_guard<std::mutex> lock(_mtxCovisibilityGraph);
     return _graphNode->GetOrderedCovisibilities();
+}
+
+std::vector<std::shared_ptr<KeyFrame>> KeyFrame::GetOrderedFullCovisibilities() const {
+    std::lock_guard<std::mutex> lock(_mtxCovisibilityGraph);
+    std::vector<std::shared_ptr<KeyFrame>> vFullCovisibilities = _graphNode->GetOrderedCovisibilities();
+    std::set<unsigned int> profileOfObservedLandmarks = GetProfileOfObservedLandmarks();
+    for (auto pFullCovisible : vFullCovisibilities) {
+        if (!pFullCovisible) {
+            continue; // empty pointer
+        }
+        auto theOtherProfile = pFullCovisible->GetProfileOfObservedLandmarks();
+        if (
+            profileOfObservedLandmarks == theOtherProfile
+            || std::includes(profileOfObservedLandmarks.begin(), profileOfObservedLandmarks.end(), theOtherProfile.begin(), theOtherProfile.end())     
+        ) {
+            vFullCovisibilities.push_back(pFullCovisible);
+        }
+    }
+    return vFullCovisibilities;
+}
+
+std::set<unsigned int> KeyFrame::GetProfileOfObservedLandmarks() const {
+    std::lock_guard<std::mutex> lock(_mtxLandmarks);
+    std::set<unsigned int> profileObservedLandmarks;
+    for (auto pObservedLandmark_indexRefObj: _observedLandmarks_indicesRefObj) {
+        profileObservedLandmarks.insert(pObservedLandmark_indexRefObj.first->_landmarkID);
+    }
+    return profileObservedLandmarks;
 }
 
 void KeyFrame::InitializeObservedLandmarks(std::map<std::shared_ptr<LandMark>, unsigned int> observedLandmarks_indicesRefObj) {

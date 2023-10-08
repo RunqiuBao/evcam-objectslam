@@ -35,6 +35,9 @@ public:
     static constexpr size_t _minAreaAsGoodObservation = 666;  //!Note: unit is pixels
 
     std::vector<std::shared_ptr<KeyFrame>> GetAllKeyframes() const;
+
+    void PruneOneKeyframe(std::shared_ptr<KeyFrame> pOneKeyframeToPrune);
+
     std::vector<std::shared_ptr<LandMark>> GetAllLandmarks() const;
 
     void PruneOneLandmark(std::shared_ptr<LandMark> oneLandmarkToPrune);

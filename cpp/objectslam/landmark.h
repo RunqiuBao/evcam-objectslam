@@ -23,6 +23,8 @@ public:
 
     void AddObservation(std::shared_ptr<KeyFrame> pRefKeyFrame, unsigned int idx);
 
+    bool CheckIfObservation(std::shared_ptr<KeyFrame> pRefKeyFrame);
+
     // !Note: it is programmer's responsibility to keep the covisibility graph in keyframe side clean.
     void DeleteObservation(std::shared_ptr<KeyFrame> pRefKeyFrame);
 

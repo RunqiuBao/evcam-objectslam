@@ -1,5 +1,7 @@
 #include "semanticmapper.h"
 #include "optimize/local_bundle_adjust.h"
+#include "keyframe.h"
+#include "mathutils.h"
 
 #include <chrono>
 
@@ -21,23 +23,31 @@ void SemanticMapper::SchedulePruneLandmarksTask() {
     _isPruneLandmarks = true;
 }
 
-void SemanticMapper::_DoPruneKeyframes() {
-    TDO_LOG_DEBUG_FORMAT("NumKeyframes in database before: %d", _pMapDb->_keyframes.size());
-    
-}
-
-void SemanticMapper::_DoPruneLandmarks() {
-    TDO_LOG_DEBUG_FORMAT("started landmark pruning in keyframe(%d)", _pTargetKeyframeToPruneLandmark->_keyFrameID);
-    auto observedLandmarks_indiceRefObj = _pTargetKeyframeToPruneLandmark->GetObservedLandmarks();
-    for (auto pObservedLandmark_indexRefObj : observedLandmarks_indiceRefObj) {
-        auto observableKeyframes = _pMapDb->GetObservableKeyframes(pObservedLandmark_indexRefObj.first);
-        if ((observableKeyframes.size() - pObservedLandmark_indexRefObj.first->GetNumObservations()) > _numNegativeCovisibilityToPruneLandmark) {
-            _pMapDb->PruneOneLandmark(pObservedLandmark_indexRefObj.first);
+void SemanticMapper::_DoPruneKeyframes(std::shared_ptr<KeyFrame> pCurrKeyfrm, const size_t maxNumKeyfrm) {
+    float ratioToPrune = 0.5;  // inline parameter
+    TDO_LOG_CRITICAL_FORMAT("NumKeyframes in database before: %d", _pMapDb->GetAllKeyframes().size());
+    // when a new keyframe becomes the best keyframe in a subset of covisibility. Those other keyframes in this subset (fullCovisibleSubset) can be pruned.
+    std::vector<std::shared_ptr<KeyFrame>> vFullCovisibilities = pCurrKeyfrm->GetOrderedFullCovisibilities();
+    size_t numToPrune = std::min(_pMapDb->GetAllKeyframes().size() - maxNumKeyfrm, static_cast<size_t>(vFullCovisibilities.size() * ratioToPrune));
+    std::vector<size_t>  indiciesToPrune = mathutils::GetListOfRandomIndex(0, vFullCovisibilities.size(), numToPrune);
+    std::vector<std::shared_ptr<KeyFrame>> keyframesToPrune(indiciesToPrune.size()); 
+    for (size_t indexToPrune : indiciesToPrune) {
+        if (!vFullCovisibilities[indexToPrune]){
+            TDO_LOG_CRITICAL_FORMAT("get one empty pKeyfram in covisibilities. (%d)", vFullCovisibilities.size());
+            continue;
         }
+        keyframesToPrune.push_back(vFullCovisibilities[indexToPrune]);
     }
-    // finish task
-    _pTargetKeyframeToPruneLandmark = nullptr;
-    _isPruneLandmarks = false;
+    for (auto pKeyframe : keyframesToPrune) {
+        if (!pKeyframe) {
+            continue;  // empty pointer
+        }
+        if (pKeyframe->_keyFrameID == 0){  // Note: do not delete the first keyframe.
+            continue;
+        }
+        _pMapDb->PruneOneKeyframe(pKeyframe);
+    }
+    TDO_LOG_CRITICAL_FORMAT("NumKeyframes in database after: %d", _pMapDb->GetAllKeyframes().size());
 }
 
 void SemanticMapper::_DoPruneLandmarks2() {
@@ -52,7 +62,10 @@ void SemanticMapper::_DoPruneLandmarks2() {
                                     % pLandmark->GetLandmarkPoseInWorld()(2, 3)
                                     % pLandmark->GetNumObservations()
                                     % observableKeyframes.size());
-        if (pLandmark->GetNumObservations() < _numMinCovisibilityToPruneLandmark && observableKeyframes.size() >= _numMinObservableToPruneLandmark) {
+        if (
+            pLandmark->GetNumObservations() < _numMinCovisibilityToPruneLandmark && observableKeyframes.size() >= _numMinObservableToPruneLandmark  // more than _numMinObservableToPruneLandmark of keyframes can see it, but only _numMinCovisibilityToPruneLandmark saw it.
+            || pLandmark->GetNumObservations() == 0  // no keyframe saw it.
+        ) {
             _pMapDb->PruneOneLandmark(pLandmark);
         }
     }
@@ -104,6 +117,7 @@ void SemanticMapper::_DoMergeLandmarks() {
 
 void SemanticMapper::Run() {
     TDO_LOG_DEBUG("Start semantic mapper thread.");
+    size_t maxNumKeyframesInFullCovisibleSubset = 50;  // inline parameter
     while (!_isTerminate) {
         if (_isPruneLandmarks) {
             auto starttime = std::chrono::steady_clock::now();
@@ -127,6 +141,13 @@ void SemanticMapper::Run() {
         auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - starttime);
         TDO_LOG_DEBUG_FORMAT("one localBA(%d) task finished in %d milisec. keyframe (%d).", _countBA % duration.count() % _pCurrKeyfrm->_keyFrameID);
         _countBA++;
+
+        if (_pMapDb->GetAllKeyframes().size() > maxNumKeyframesInFullCovisibleSubset){
+            starttime = std::chrono::steady_clock::now();
+            _DoPruneKeyframes(_pCurrKeyfrm, maxNumKeyframesInFullCovisibleSubset);
+            duration = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - starttime);
+            TDO_LOG_DEBUG_FORMAT("one pruneKeyframes task finished in %d milisec.", duration.count());
+        }
 
         _keyfrmAcceptability = true;
         _pCurrKeyfrm = nullptr;

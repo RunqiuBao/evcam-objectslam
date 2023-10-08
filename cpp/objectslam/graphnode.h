@@ -28,6 +28,8 @@ public:
      */
     void AddCovisibilityConnection(std::shared_ptr<KeyFrame> pAnotherKeyframe, const unsigned int weight);
 
+    void DeleteCovisibilityConnection(std::shared_ptr<KeyFrame> pTargetKeyframe);
+
     std::vector<std::shared_ptr<KeyFrame>> GetOrderedCovisibilities() const { return _orderedCovisibilities; }
 
     void UpdateEraseOneCovisibleLandmark(std::map<std::shared_ptr<KeyFrame>, unsigned int> observationsForOneLandmark);
@@ -44,7 +46,7 @@ private:
     std::map<std::shared_ptr<KeyFrame>, unsigned int> _covisibilityKeyframes_and_weights;
 
     // minumum thresholds for covisibility graph connection.
-    static constexpr unsigned int _weightThreshold = 4;
+    static constexpr unsigned int _weightThreshold = 4;  // inline parameter
 
     // covisibility keyframes in descending order of weights.
     std::vector<std::shared_ptr<KeyFrame>> _orderedCovisibilities;

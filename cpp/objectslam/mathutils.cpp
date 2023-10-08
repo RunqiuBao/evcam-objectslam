@@ -1,5 +1,7 @@
 #include "mathutils.h"
 
+#include <random>
+
 namespace eventobjectslam {
 
 std::vector<cv::Point> mathutils::ProjectPoints3DToPoints2D(Eigen::MatrixXf& mPoints3D, camera::CameraBase& camera){
@@ -101,6 +103,20 @@ std::string mathutils::FillZeros(const std::string& str, const int width)
   std::stringstream ss;
   ss << std::setw(width) << std::setfill('0') << str;
   return ss.str();
+}
+
+std::vector<size_t> mathutils::GetListOfRandomIndex(const size_t iStart, const size_t iEnd, const size_t numElements) {
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_int_distribution<size_t> distribution(iStart, iEnd - 1);
+
+    std::vector<size_t> randomIndicies;
+    randomIndicies.reserve(numElements);
+
+    for (int i = 0; i < numElements; i++) {
+        randomIndicies.push_back(distribution(gen));
+    }
+    return randomIndicies;
 }
 
 

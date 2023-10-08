@@ -40,6 +40,8 @@ Eigen::Matrix4f ConvertMatrixFromQuat(const Eigen::Vector4f quat);
 
 std::string FillZeros(const std::string& str, const int width);
 
+std::vector<size_t> GetListOfRandomIndex(const size_t iStart, const size_t iEnd, const size_t numElements);
+
 } // end of mathutils
 
 } // end of eventobjectslam

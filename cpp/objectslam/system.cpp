@@ -195,7 +195,8 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
     std::ofstream outputFile(trackResultPath.string());
     
     int frameCount = 0;
-    size_t keyframeCount = 0;  // Note: for pruning keyframe count. 
+    size_t keyframeCount = 0;  // Note: for pruning keyframe count.
+    float minDistanceToCreateKeyframe = 0.2;  // inline parameter
 
     FrameTracker _tracker(_camera);
     _tracker._sStereoSequencePathForDebug = sStereoSequencePath;
@@ -336,8 +337,8 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
                 }
             }
             if (bAddKeyframe){  // for vibration
-                TDO_LOG_DEBUG_FORMAT("Last Keyframe(%d) contains %d frames.", _pKeyFrameStack.back()->_keyFrameID % _pKeyFrameStack.back()->_vFrames.size());
-                numFramesEachKeyframe.push_back(_pKeyFrameStack.back()->_vFrames.size());  // debug code
+                TDO_LOG_DEBUG_FORMAT("Last Keyframe(%d) contains %d frames.", _pKeyFrameStack.back()->_keyFrameID % _pKeyFrameStack.back()->_vFrames_ids.size());
+                numFramesEachKeyframe.push_back(_pKeyFrameStack.back()->_vFrames_ids.size());  // debug code
                 std::shared_ptr<KeyFrame> pOneKeyframe = std::make_shared<KeyFrame>(pOneFrame, _tracker._pRefKeyframe->GetKeyframePoseInWorld(), _camera);
                 _tracker._pRefKeyframe = pOneKeyframe;
                 _pMapDb->AddKeyFrame(pOneKeyframe);
@@ -372,7 +373,7 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
         TDO_LOG_DEBUG("cameraInRealWorld: \n" << cameraInRealWorld);
         frameCount++;
         pOneFrame->_pRefKeyframe = _tracker._pRefKeyframe;
-        _tracker._pRefKeyframe->_vFrames.push_back(pOneFrame);
+        _tracker._pRefKeyframe->_vFrames_ids[pOneFrame] = pOneFrame->_frameID;
         _pFrameStack.push_back(pOneFrame);
 
     }

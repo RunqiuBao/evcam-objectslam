@@ -26,10 +26,12 @@ public:
     // ~Frame();
 
     void SetPose(const Mat44_t pose_kc){
+        std::lock_guard<std::mutex> lock(_mtxFramePose);
         _pose_kc = pose_kc;
     }
 
     Mat44_t GetPose() const{
+        std::lock_guard<std::mutex> lock(_mtxFramePose);
         return _pose_kc;
     }
 
@@ -66,6 +68,9 @@ public:
 
     bool _isTracked = false; // Note: whether tracking succeeded or not on this frame.
 
+    unsigned int _frameID;
+    static std::atomic<unsigned int> _nextID;
+
 private:
     FrameType _frameType;
     cv::Mat _leftImage;
@@ -75,6 +80,8 @@ private:
     Mat44_t _pose_kc;  // current in refKeyrame transform
     // camera instance that took this frame
     std::shared_ptr<camera::CameraBase> _pCamera;
+
+    mutable std::mutex _mtxFramePose;
 
 };
 

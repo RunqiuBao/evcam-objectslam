@@ -22,6 +22,11 @@ LandMark::LandMark(
     }
 }
 
+bool LandMark::CheckIfObservation(std::shared_ptr<KeyFrame> pRefKeyFrame) {
+    std::lock_guard<std::mutex> lock(_mtxObservations);
+    return _observations_indices.count(pRefKeyFrame);
+}
+
 void LandMark::AddObservation(std::shared_ptr<KeyFrame> pRefKeyFrame, unsigned int idx){
     std::lock_guard<std::mutex> lock(_mtxObservations);
     if (_observations_indices.count(pRefKeyFrame)) {

@@ -115,6 +115,66 @@ std::vector<std::shared_ptr<KeyFrame>> MapDataBase::GetAllKeyframes() const{
     return keyframes;
 }
 
+void MapDataBase::PruneOneKeyframe(std::shared_ptr<KeyFrame> pOneKeyframeToPrune) {
+    size_t rangeToSearchNeighbor = 5;  // inline parameter
+    float maxDistanceToPrune = 0.2;  // inline parameter
+    if (pOneKeyframeToPrune->_bShouldNotPrune) {
+        TDO_LOG_CRITICAL("once a good neighbor, skip. pruneKeyframe failed");
+        return;
+    }
+    pOneKeyframeToPrune->DeleteThis();
+    // prune this keyframe from refered frames, landmarks, covisibilities of other keyframes, map database.
+    {
+        std::lock_guard<std::mutex> lock(_mtxMapKeyframesAccess);
+        _keyframes.erase(pOneKeyframeToPrune->_keyFrameID);
+    }
+    auto covisibilities = pOneKeyframeToPrune->GetOrderedCovisibilities();
+    if (covisibilities.size() < rangeToSearchNeighbor) {
+        TDO_LOG_CRITICAL_FORMAT("not enough covisibilities. pruneKeyframe failed. (numCovisible: %d / %d)", covisibilities.size() % rangeToSearchNeighbor);
+        return;
+    }
+    size_t indexClosest = 0;
+    std::shared_ptr<KeyFrame> pKeyframeNeighbor;
+    float distance = std::numeric_limits<float>::max();
+    for (size_t indexCovisible = 0; indexCovisible < rangeToSearchNeighbor; indexCovisible++) {
+        float newDistance = (covisibilities[indexCovisible]->GetKeyframePoseInWorld().block(0, 3, 3, 1) - pOneKeyframeToPrune->GetKeyframePoseInWorld().block(0, 3, 3, 1)).norm();
+        if (newDistance < distance) {
+            distance = newDistance;
+            pKeyframeNeighbor = covisibilities[indexCovisible];
+        }
+    }
+    // check if the neighbor is full covisible to the one to prune and within a physical range. If not, stop pruning.
+    auto profileNeighbor = pKeyframeNeighbor->GetProfileOfObservedLandmarks();
+    auto profileKfmToPrune = pOneKeyframeToPrune->GetProfileOfObservedLandmarks();
+    if (!std::includes(profileNeighbor.begin(), profileNeighbor.end(), profileKfmToPrune.begin(), profileKfmToPrune.end())  // best neighbor is not covisible to the one to prune
+        || distance >= maxDistanceToPrune  // best neighbor is too far away from the one to prune
+    ) {
+        TDO_LOG_CRITICAL_FORMAT("can't find a good neighbor. pruneKeyframe failed. (distance: %f / %f)", distance % maxDistanceToPrune);
+        return;  // prune failed.
+    }
+    pKeyframeNeighbor->_bShouldNotPrune = true;  // hack to keep keyframes distributed.
+    for (auto pFrame_id : pOneKeyframeToPrune->_vFrames_ids) {
+        Mat44_t pose_nk = pKeyframeNeighbor->GetKeyframePoseInWorld().inverse() * pOneKeyframeToPrune->GetKeyframePoseInWorld();
+        Mat44_t pose_nc = pose_nk * pFrame_id.first->GetPose();
+        pFrame_id.first->SetPose(pose_nc);
+        pFrame_id.first->_pRefKeyframe = pKeyframeNeighbor;
+        if (!pKeyframeNeighbor->_vFrames_ids.count(pFrame_id.first)){
+            pKeyframeNeighbor->_vFrames_ids[pFrame_id.first] = pFrame_id.second;
+        }
+    }
+
+    for(auto pLandmark_indexRefObj : pOneKeyframeToPrune->GetObservedLandmarks()) {
+        pLandmark_indexRefObj.first->DeleteObservation(pOneKeyframeToPrune);
+    }
+
+    for (auto pKeyframe : covisibilities) {
+        if (!pKeyframe->IsToDelete()) {
+            pKeyframe->DeleteCovisibilityConnection(pOneKeyframeToPrune);
+        }
+    }
+    TDO_LOG_CRITICAL_FORMAT("Erased keyframe (%d) from refered frames, landmarks, covisibilities of other keyframes, map database", pOneKeyframeToPrune->_keyFrameID);
+}
+
 std::vector<std::shared_ptr<LandMark>> MapDataBase::GetAllLandmarks() const{
     std::lock_guard<std::mutex> lock(_mtxMapLandmarksAccess);
     std::vector<std::shared_ptr<LandMark>> landmarks;

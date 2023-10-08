@@ -63,6 +63,16 @@ void GraphNode::AddCovisibilityConnection(std::shared_ptr<KeyFrame> pAnotherKeyf
     }
 }
 
+void GraphNode::DeleteCovisibilityConnection(std::shared_ptr<KeyFrame> pTargetKeyframe) {
+    _covisibilityKeyframes_and_weights.erase(pTargetKeyframe);
+    for (size_t indexCovisible=0; indexCovisible < _orderedCovisibilities.size(); indexCovisible++) {
+        if (_orderedCovisibilities[indexCovisible] == pTargetKeyframe){
+            _orderedCovisibilities.erase(_orderedCovisibilities.begin() + indexCovisible);
+            break;
+        }
+    }
+}
+
 void GraphNode::ComputeCovisibility() {
     const auto observedLandmarks_indicesRefObj = _pHostKeyframe->GetObservedLandmarks();
     std::map<std::shared_ptr<KeyFrame>, unsigned int> keyframes_weights;

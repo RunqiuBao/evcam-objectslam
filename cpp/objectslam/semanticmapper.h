@@ -36,7 +36,7 @@ private:
      */
     void _DoMergeLandmarks();  // every Nth keyframes created, scan once if there are landmarks suspiciouly close to each other. If so, then merge.
 
-    void _DoPruneKeyframes();
+    void _DoPruneKeyframes(std::shared_ptr<KeyFrame> pCurrKeyfrm, const size_t maxNumKeyfrm);
     const std::shared_ptr<MapDataBase> _pMapDb;
 
     bool _isTerminate = false;

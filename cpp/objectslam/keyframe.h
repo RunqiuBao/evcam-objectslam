@@ -26,6 +26,9 @@ public:
 
     KeyFrame(const std::shared_ptr<Frame> pRefFrame, const Mat44_t& refKeyFrameInWorldTransform, const std::shared_ptr<camera::CameraBase> pCamera);
 
+    void DeleteThis() { _bIsToDelete = true; }
+    bool IsToDelete() { return _bIsToDelete; }
+
     // ---------- landmark observation management ----------
     void InitializeObservedLandmarks(std::map<std::shared_ptr<LandMark>, unsigned int> observedLandmarks_indicesRefObj);
 
@@ -36,12 +39,15 @@ public:
     // --------- covisibility related methods ---------
     void AddCovisibilityConnection(std::shared_ptr<KeyFrame> pTargetKeyframe, size_t weight);
 
+    void DeleteCovisibilityConnection(std::shared_ptr<KeyFrame> pTargetKeyframe);
+
     // --------- Keyframe pose ---------
     Mat44_t GetKeyframePoseInWorld();
 
     void SetKeyframePoseInWorld(const Mat44_t& poseCurrentFrameInWorld);  // FIXME: could change landmarks' bestRefKeyframe.
 
     std::vector<std::shared_ptr<KeyFrame>> GetOrderedCovisibilities() const;
+    std::vector<std::shared_ptr<KeyFrame>> GetOrderedFullCovisibilities() const;  // Note: full covisibilities means those keyframes whose observs are just a subset of current keyframe.
 
     std::vector<std::shared_ptr<RefObject>> _refObjects;
 
@@ -50,26 +56,32 @@ public:
     unsigned int _keyFrameID;
     static std::atomic<unsigned int> _nextID;
 
-    // observed landmarks
+    // --------- observed landmarks ---------
     std::map<std::shared_ptr<LandMark>, unsigned int> _observedLandmarks_indicesRefObj;
 
-    std::map<std::shared_ptr<LandMark>, unsigned int> GetObservedLandmarks() { 
+    std::map<std::shared_ptr<LandMark>, unsigned int> GetObservedLandmarks() {
         std::lock_guard<std::mutex> lock(_mtxLandmarks);
         return _observedLandmarks_indicesRefObj;
     }
+    
+    std::set<unsigned int> GetProfileOfObservedLandmarks() const;
 
     // camera instance
     std::shared_ptr<camera::CameraBase> _pCamera;
 
     bool _bContainNewLandmarks;
 
-    std::vector<std::shared_ptr<Frame>> _vFrames;
+    std::map<std::shared_ptr<Frame>, unsigned int> _vFrames_ids;  // ids means IDs of the frame
+
+    bool _bShouldNotPrune = false; // hack to keep keyframes distributed
 
 private:
     //graph node of the covisiblity graph
     std::unique_ptr<GraphNode> _graphNode = nullptr;
 
     Mat44_t _poseCurrentFrameInWorld;  // Note: pose current to world
+
+    bool _bIsToDelete;
 
     mutable std::mutex _mtxLandmarks;
     mutable std::mutex _mtxKeyframePose;
