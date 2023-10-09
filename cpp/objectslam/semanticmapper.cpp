@@ -117,7 +117,7 @@ void SemanticMapper::_DoMergeLandmarks() {
 
 void SemanticMapper::Run() {
     TDO_LOG_DEBUG("Start semantic mapper thread.");
-    size_t maxNumKeyframesInFullCovisibleSubset = 50;  // inline parameter
+    size_t maxNumKeyframesInFullCovisibleSubset = 100000;  // inline parameter
     while (!_isTerminate) {
         if (_isPruneLandmarks) {
             auto starttime = std::chrono::steady_clock::now();

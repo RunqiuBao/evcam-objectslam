@@ -177,18 +177,27 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
 
     Mat44_t cameraInWorldTransform = Eigen::Matrix4f::Identity();
     Mat44_t nextFrameInCameraTransform = Eigen::Matrix4f::Identity();
-    Eigen::Quaternionf q;
-    q.x() = -0.49999999999999956;
-    q.y() = 0.5000000218556936;
-    q.z() = 0.49999999999999956;
-    q.w() = -0.49999997814430636; 
-    Eigen::Matrix3f rWorldToRealWorld = q.toRotationMatrix();
-    Mat44_t worldInRealWorld = Eigen::Matrix4f::Identity();
-    worldInRealWorld.block(0, 0, 3, 3) = rWorldToRealWorld;
-    worldInRealWorld.block(0, 2, 3, 1) *= -1;
-    TDO_LOG_DEBUG("rWorldToRealWorld: " << rWorldToRealWorld);
-    Eigen::Vector3f tWorldToRealWorld(-9.255331993103027, 7.211221218109131, 2.187476634979248);
-    worldInRealWorld.block(0, 3, 3, 1) = tWorldToRealWorld;
+
+    // se10, seq2
+    // Eigen::Quaternionf q;
+    // q.x() = -0.49999999999999956;
+    // q.y() = 0.5000000218556936;
+    // q.z() = 0.49999999999999956;
+    // q.w() = -0.49999997814430636; 
+    // Eigen::Matrix3f rWorldToRealWorld = q.toRotationMatrix();
+    // Mat44_t worldInRealWorld = Eigen::Matrix4f::Identity();
+    // worldInRealWorld.block(0, 0, 3, 3) = rWorldToRealWorld;
+    // worldInRealWorld.block(0, 2, 3, 1) *= -1;
+    // TDO_LOG_DEBUG("rWorldToRealWorld: " << rWorldToRealWorld);
+    // Eigen::Vector3f tWorldToRealWorld(-9.255331993103027, 7.211221218109131, 2.187476634979248);
+    // worldInRealWorld.block(0, 3, 3, 1) = tWorldToRealWorld;
+    
+    //seq1
+    Mat44_t worldInRealWorld;
+    worldInRealWorld << -4.371139e-8, 1.736483e-1, -9.848077e-1, 4.,
+                        1., 7.590408e-9,-4.304732e-8, -2.2000,
+                        -0., -9.848077e-1, -1.736483e-1, 2.3650,
+                        0., 0., 0., 1.;
 
     std::filesystem::path trackResultPath = sStereoSequencePath;
     trackResultPath.append("cameraTrackRealTime.txt");
@@ -321,22 +330,22 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
             }
 
             // insert new key frame if detection increased than previous frame
-            // if (isSuccess && (pOneFrame->_threeDDetections.size() > (*_pFrameStack.back())._threeDDetections.size())){
-            bool bAddKeyframe = false;
-            if (_pFrameStack.size() < 2) {
-                if (isSuccess && (pOneFrame->_threeDDetections.size() > (*_pFrameStack.back())._threeDDetections.size())) {
-                    bAddKeyframe = true;
-                }
-            }
-            else if (_pFrameStack.size() >= 2){
-                if (isSuccess
-                    && (pOneFrame->_threeDDetections.size() > (*_pFrameStack.back())._threeDDetections.size())
-                    && (pOneFrame->_threeDDetections.size() > (*_pFrameStack[_pFrameStack.size() - 2])._threeDDetections.size())
-                ) {
-                    bAddKeyframe = true;
-                }
-            }
-            if (bAddKeyframe){  // for vibration
+            if (isSuccess && (pOneFrame->_threeDDetections.size() > (*_pFrameStack.back())._threeDDetections.size())){
+            // bool bAddKeyframe = false;
+            // if (_pFrameStack.size() < 2) {
+            //     if (isSuccess && (pOneFrame->_threeDDetections.size() > (*_pFrameStack.back())._threeDDetections.size())) {
+            //         bAddKeyframe = true;
+            //     }
+            // }
+            // else if (_pFrameStack.size() >= 2){
+            //     if (isSuccess
+            //         && (pOneFrame->_threeDDetections.size() > (*_pFrameStack.back())._threeDDetections.size())
+            //         && (pOneFrame->_threeDDetections.size() > (*_pFrameStack[_pFrameStack.size() - 2])._threeDDetections.size())
+            //     ) {
+            //         bAddKeyframe = true;
+            //     }
+            // }
+            // if (bAddKeyframe){  // for vibration
                 TDO_LOG_DEBUG_FORMAT("Last Keyframe(%d) contains %d frames.", _pKeyFrameStack.back()->_keyFrameID % _pKeyFrameStack.back()->_vFrames_ids.size());
                 numFramesEachKeyframe.push_back(_pKeyFrameStack.back()->_vFrames_ids.size());  // debug code
                 std::shared_ptr<KeyFrame> pOneKeyframe = std::make_shared<KeyFrame>(pOneFrame, _tracker._pRefKeyframe->GetKeyframePoseInWorld(), _camera);
