@@ -19,7 +19,7 @@ project(tool_detectobjects
 )
 
 set(CMAKE_CXX_STANDARD 17)
-# set(CMAKE_BUILD_TYPE "Debug") // Note: control build type in the build script.
+# set(CMAKE_BUILD_TYPE "Debug") # Note: control build type in the build script.
 message(STATUS "set CMAKE_BUILD_TYPE to ${CMAKE_BUILD_TYPE}")
 
 # thread library
