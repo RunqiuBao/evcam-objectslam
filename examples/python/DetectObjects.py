@@ -146,7 +146,11 @@ def SelectTemplateByEventLinemod(sceneImage, bbox, myTemplateManager, sceneImage
         oneTemplate = copy.deepcopy(myTemplateManager.GetTemplate(indexTemplate))
         # use eventlinemod to select template
         newbbox, additionalScaleFactorForTemplate = ResizeBBoxAccordingToTemplate(bbox, oneTemplate)
-        oneTemplate.RescaleThisTemplate(oneTemplate.scaleFactor * additionalScaleFactorForTemplate)
+        try:
+            oneTemplate.RescaleThisTemplate(oneTemplate.scaleFactor * additionalScaleFactorForTemplate)
+        except Exception as e:
+            print("template rescale failed: \n{}".format(e))
+            continue
         templateH, templateW = oneTemplate.templateH, oneTemplate.templateW
         minY = round(newbbox[1] - templateH * 0.5)
         maxY = minY + templateH
@@ -337,6 +341,18 @@ if __name__ == "__main__":
     for indexImage, imageName in enumerate(imageNames):
         starttime = time.time()
         imageName = os.path.basename(imageName)
+        # if not (int(imageName.split('.png')[0]) <= 2100 and int(imageName.split('.png')[0]) >=2044):
+        #     continue
+        # if not (int(imageName.split('.png')[0]) <= 2200 and int(imageName.split('.png')[0]) > 2100):
+        #     continue
+        # if not (int(imageName.split('.png')[0]) <= 2300 and int(imageName.split('.png')[0]) >2200):
+        #     continue
+        # if not (int(imageName.split('.png')[0]) <= 2400 and int(imageName.split('.png')[0]) > 2300):
+            # continue
+        # if not (int(imageName.split('.png')[0]) <= 2000 and int(imageName.split('.png')[0]) > 1600):
+            # continue
+        if not (int(imageName.split('.png')[0]) > 2400):
+            continue
         if not (os.path.isfile(os.path.join(args.yoloresultpath, 'leftcam', 'labelsYolo', imageName.split('.png')[0] + '.txt')) and os.path.isfile(os.path.join(args.yoloresultpath, 'rightcam', 'labelsYolo', imageName.split('.png')[0] + '.txt'))):
             continue
 
