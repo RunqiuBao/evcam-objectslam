@@ -4,13 +4,13 @@ readonly YELLOW="\033[1;33m"
 readonly WHITE="\033[1;37m"
 readonly NC="\033[0m" # No Color
 
-INSTALL_PATH="/home/runqiu/code/event_camera_repo/tools/tool_detectobjects/tdoinstall"
-LOG4CXX_LIB_PATH="/home/runqiu/code/event_camera_repo/tools/tool_detectobjects/3rdparty/log4cxx/install/lib"
-RAPIDJSON_LIB_PATH="/home/runqiu/code/event_camera_repo/tools/tool_detectobjects/3rdparty/rapidjson/rapidjsoninstall/lib"
-OPENCV4_LIB_PATH="/home/runqiu/code/event_camera_repo/tools/tool_detectobjects/3rdparty/opencv/opencvinstall/lib"
-PANGOLIN_LIB_PATH="/home/runqiu/code/event_camera_repo/tools/tool_detectobjects/3rdparty/Pangolin/pangolininstall/lib"
-G2O_LIB_PATH="/home/runqiu/code/event_camera_repo/tools/tool_detectobjects/3rdparty/g2o/g2oinstall/lib"
-PYTHONPACKAGE_SRC_PATH="/home/runqiu/code/event_camera_repo/tools/tool_detectobjects/python/src"
+INSTALL_PATH="/home/runqiu/code/event_camera_repo/tools/tool_eventbasedobjectslam/tdoinstall"
+LOG4CXX_LIB_PATH="/home/runqiu/code/event_camera_repo/tools/tool_eventbasedobjectslam/3rdparty/log4cxx/install/lib"
+RAPIDJSON_LIB_PATH="/home/runqiu/code/event_camera_repo/tools/tool_eventbasedobjectslam/3rdparty/rapidjson/rapidjsoninstall/lib"
+OPENCV4_LIB_PATH="/home/runqiu/code/event_camera_repo/tools/tool_eventbasedobjectslam/3rdparty/opencv/opencvinstall/lib"
+PANGOLIN_LIB_PATH="/home/runqiu/code/event_camera_repo/tools/tool_eventbasedobjectslam/3rdparty/Pangolin/pangolininstall/lib"
+G2O_LIB_PATH="/home/runqiu/code/event_camera_repo/tools/tool_eventbasedobjectslam/3rdparty/g2o/g2oinstall/lib"
+PYTHONPACKAGE_SRC_PATH="/home/runqiu/code/event_camera_repo/tools/tool_eventbasedobjectslam/python/src"
 isAddPaths=false
 isInstallPythonPackage=false
 
@@ -18,13 +18,13 @@ isInstallPythonPackage=false
 # ================================================================= Displays usage ================================================================= #
 # ================================================================================================================================================== #
 function display_help() {
-    echo "Build the executables and set environment variables for testing this library (tool_detectobjects)."
+    echo "Build the executables and set environment variables for testing this library (tool_eventbasedobjectslam)."
     echo -e "${YELLOW}Note: assuming all 3rdparty libs are built in ./3rdparty; assume python3.8 exists. ${NC}"
     echo
     echo "Syntax: runBuild.bash [-h] [-i installpath] "
     echo "options:"
     echo "-h,    --help                     Display this help"
-    echo "-i,    --installpath              Define the path to install the library. By default is '/home/runqiu/code/event_camera_repo/tools/tool_detectobjects/tdoinstall'"
+    echo "-i,    --installpath              Define the path to install the library. By default is '/home/runqiu/code/event_camera_repo/tools/tool_eventbasedobjectslam/tdoinstall'"
     echo "       --log4cxxlibpath           Define the path to the installed lib path of log4cxx. By default is ${LOG4CXX_LIB_PATH}"
     echo "       --rapidjsonlibpath         Define the path to the installed lib path of rapidjson. By default is ${RAPIDJSON_LIB_PATH}"
     echo "       --pangolinlibpath          Define the path to the installed lib path of Pangolin. By default is ${PANGOLIN_LIB_PATH}"
@@ -35,7 +35,7 @@ function display_help() {
     echo "-a,    --addpaths                 Add shared library paths to LD_LIBRARY_PATH. By default is false."
     echo
     echo -e "${GREEN}Example usages: ${NC}"
-    echo -e "${GREEN}  source runBuild.sh -a --installpythonpackage -i /home/runqiu/code/event_camera_repo/tools/tool_detectobjects/tdoinstall ${NC}"
+    echo -e "${GREEN}  source runBuild.sh -a --installpythonpackage -i /home/runqiu/code/event_camera_repo/tools/tool_eventbasedobjectslam/tdoinstall ${NC}"
     echo -e "${GREEN}  Note: source runBuild.sh at the first build to make addPaths global; -a to add shared libs paths to LD_LIBRARY_PATH ${NC}"
     echo -e "${GREEN}  Note: If you want to run executable in one terminal, need to source this script in that terminal. ${NC}"
 
