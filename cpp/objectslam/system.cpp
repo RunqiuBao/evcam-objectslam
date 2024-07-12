@@ -160,11 +160,11 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
     TDO_LOG_DEBUG_FORMAT("myStereoCamera imageWidth: %d", myStereoCamera._cols);
 
     std::filesystem::path leftCamPath = sStereoSequencePath;
-    leftCamPath.append("leftcam/");
+    leftCamPath.append("leftcam/detectionID0");
     TDO_LOG_DEBUG("entered test track");
     std::vector<std::string> filenames;
     for (const std::filesystem::directory_entry& oneFilePath : std::filesystem::directory_iterator(leftCamPath)) {
-        if (std::filesystem::is_regular_file(oneFilePath) && oneFilePath.path().extension() == ".png") {
+        if (std::filesystem::is_regular_file(oneFilePath) && oneFilePath.path().extension() == ".txt") {
             filenames.push_back(oneFilePath.path().filename().stem());
         }
     }
@@ -178,7 +178,7 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
     Mat44_t cameraInWorldTransform = Eigen::Matrix4f::Identity();
     Mat44_t nextFrameInCameraTransform = Eigen::Matrix4f::Identity();
 
-    // se10, seq2
+    // // se10, seq2
     // Eigen::Quaternionf q;
     // q.x() = -0.49999999999999956;
     // q.y() = 0.5000000218556936;
@@ -192,12 +192,12 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
     // Eigen::Vector3f tWorldToRealWorld(-9.255331993103027, 7.211221218109131, 2.187476634979248);
     // worldInRealWorld.block(0, 3, 3, 1) = tWorldToRealWorld;
     
-    //seq1
-    Mat44_t worldInRealWorld;
-    worldInRealWorld << -4.371139e-8, 1.736483e-1, -9.848077e-1, 4.,
-                        1., 7.590408e-9,-4.304732e-8, -2.2000,
-                        -0., -9.848077e-1, -1.736483e-1, 2.3650,
-                        0., 0., 0., 1.;
+    // //seq1
+    // Mat44_t worldInRealWorld;
+    // worldInRealWorld << -4.371139e-8, 1.736483e-1, -9.848077e-1, 4.,
+    //                     1., 7.590408e-9,-4.304732e-8, -2.2000,
+    //                     -0., -9.848077e-1, -1.736483e-1, 2.3650,
+    //                     0., 0., 0., 1.;
 
     std::filesystem::path trackResultPath = sStereoSequencePath;
     trackResultPath.append("cameraTrackRealTime.txt");
@@ -215,15 +215,10 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
     Mat44_t cameraInRealWorld = Eigen::Matrix4f::Identity();  // Note: Pose for comparing to ground truth
 
     // for debug purpose
+    bool isDebug = false;
     std::vector<size_t> numFramesEachKeyframe;
     for(const std::string& filename : filenames){
         TDO_LOG_DEBUG(filename);
-        // if (filename == "000788"){
-        //     break;
-        // }
-        // if (filename == "000010"){
-        //     break;
-        // }
 
         auto starttime = std::chrono::steady_clock::now();
         std::shared_ptr<Frame> pOneFrame = std::make_shared<Frame>(FrameType::Stereo, static_cast<double>(frameCount), _camera);
@@ -273,28 +268,30 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
         matchedLeftCamDetections = std::get<0>(matchedDetections);
         matchedRightCamDetections = std::get<1>(matchedDetections);
 
-        std::filesystem::path leftCamImagePath = sStereoSequencePath;
-        leftCamImagePath.append("leftcam/").append(filename + ".png");
-        cv::Mat display3DDetections = cv::imread(leftCamImagePath.string(), cv::IMREAD_GRAYSCALE);
-        std::vector<ThreeDDetection> threeDDetections = pOneFrame->_threeDDetections;
-        int countThreeDDetection = 0;
-        cv::Mat testBinaryTracking(myStereoCamera._rows, myStereoCamera._cols, CV_8UC1, cv::Scalar(0));
-        for (ThreeDDetection oneDetection : threeDDetections){
-            Eigen::Matrix<float, 2, Eigen::Dynamic> dstPoints = Eigen::Matrix<float, 2, Eigen::Dynamic>::Zero(2, oneDetection._vertices3DInCamera.cols());
-            myStereoCamera.ProjectPoints(oneDetection._vertices3DInCamera, dstPoints);
-            viszutils::Draw3DBoundingBox(dstPoints, display3DDetections);
+        if (isDebug){
+            std::filesystem::path leftCamImagePath = sStereoSequencePath;
+            leftCamImagePath.append("leftcam/").append(filename + ".png");
+            cv::Mat display3DDetections = cv::imread(leftCamImagePath.string(), cv::IMREAD_GRAYSCALE);
+            std::vector<ThreeDDetection> threeDDetections = pOneFrame->_threeDDetections;
+            int countThreeDDetection = 0;
+            cv::Mat testBinaryTracking(myStereoCamera._rows, myStereoCamera._cols, CV_8UC1, cv::Scalar(0));
+            for (ThreeDDetection oneDetection : threeDDetections){
+                Eigen::Matrix<float, 2, Eigen::Dynamic> dstPoints = Eigen::Matrix<float, 2, Eigen::Dynamic>::Zero(2, oneDetection._vertices3DInCamera.cols());
+                myStereoCamera.ProjectPoints(oneDetection._vertices3DInCamera, dstPoints);
+                viszutils::Draw3DBoundingBox(dstPoints, display3DDetections);
 
-            countThreeDDetection++;
-        }
+                countThreeDDetection++;
+            }
 
-        std::filesystem::path debug3DDetectionPath = sStereoSequencePath;
-        debug3DDetectionPath.append("debug3DDetection/");
-        if (!std::filesystem::exists(debug3DDetectionPath) && !std::filesystem::create_directory(debug3DDetectionPath)){
-            TDO_LOG_ERROR_FORMAT("Failed to create the folder: %s", debug3DDetectionPath.string());
-            throw std::runtime_error("OS Error");
+            std::filesystem::path debug3DDetectionPath = sStereoSequencePath;
+            debug3DDetectionPath.append("debug3DDetection/");
+            if (!std::filesystem::exists(debug3DDetectionPath) && !std::filesystem::create_directory(debug3DDetectionPath)){
+                TDO_LOG_ERROR_FORMAT("Failed to create the folder: %s", debug3DDetectionPath.string());
+                throw std::runtime_error("OS Error");
+            }
+            debug3DDetectionPath.append(filename + ".png");
+            cv::imwrite(debug3DDetectionPath.string() , display3DDetections);
         }
-        debug3DDetectionPath.append(filename + ".png");
-        cv::imwrite(debug3DDetectionPath.string() , display3DDetections);
 
         // // ransac based plane estimation
            // at the same time, ground plane based detection filtering
