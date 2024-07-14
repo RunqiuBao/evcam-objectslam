@@ -30,14 +30,14 @@ set(CMAKE_PREFIX_PATH "${INSTALLED_LOG4CXX_LIB_PATH}/cmake/" ${CMAKE_PREFIX_PATH
 find_package(log4cxx REQUIRED)
 
 # include Eigen
-set(Eigen3_DIR ${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/eigen/cmake/)
-find_package (Eigen3 REQUIRED NO_MODULE)
+set(EIGEN3_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/eigen")
+find_package (Eigen3 3.4 REQUIRED)
 
 # include pybind11
-set(pybind11_DIR "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/pybind11/build/pybind11install/share/cmake/pybind11/")
+set(pybind11_DIR "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/pybind11/pybind11install/share/cmake/pybind11/")
 find_package(pybind11 REQUIRED)
 # include_directories("${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/pybind11/build/pybind11install/include/")
-message(STATUS "Found pybind11 v${pybind11_VERSION}: ${pybind11_INCLUDE_DIRS}")
+# message(STATUS "Found pybind11 v${pybind11_VERSION}: ${pybind11_INCLUDE_DIRS}")
 
 # include opencv
 set(CMAKE_PREFIX_PATH "${INSTALLED_OPENCV4_LIB_PATH}/cmake/" ${CMAKE_PREFIX_PATH})
@@ -51,6 +51,11 @@ find_package(RapidJSON)
 # include boost
 find_package(Boost REQUIRED)
 include_directories(${Boost_INCLUDE_DIRS})
+
+# include pcl
+find_package(PCL REQUIRED)
+include_directories(${PCL_INCLUDE_DIRS})
+link_directories(${PCL_LIBRARY_DIRS})
 
 # include pangolin
 list(INSERT CMAKE_PREFIX_PATH 0 "${INSTALLED_PANGOLIN_LIB_PATH}/cmake/")  # Add your preferred directory to the beginning of CMAKE_PREFIX_PATH

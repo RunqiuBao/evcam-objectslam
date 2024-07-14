@@ -41,7 +41,7 @@ public:
 
     std::tuple<std::vector<std::shared_ptr<TwoDBoundingBox>>, std::vector<std::shared_ptr<TwoDBoundingBox>>> GetMatchedDetections();
 
-    void Refine3DDetections();
+    // void Refine3DDetections();
 
     void Draw3DVerticesFor3DDetections(
         const std::shared_ptr<object::ObjectBase> pObjectInfo,

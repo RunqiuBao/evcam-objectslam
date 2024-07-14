@@ -5,11 +5,81 @@
 #include <opencv2/opencv.hpp>
 #include <cassert>
 
+#include <pcl/point_types.h>
+#include <pcl/sample_consensus/model_types.h>
+#include <pcl/sample_consensus/method_types.h>
+#include <pcl/segmentation/sac_segmentation.h>
+
 #include <logging.h>
 TDO_LOGGER("objectslam.camera")
 
 
 namespace eventobjectslam{
+
+static const bool CheckTooCloseToImageBorder(
+    const float borderDistanceThreshold,
+    const float centerX,
+    const float centerY,
+    const float bWidth,
+    const float bHeight,
+    const int imgWidth,
+    const int imgHeight
+){
+    TDO_LOG_VERBOSE_FORMAT("borderDistanceThreshold: %f, centerX: %f, centerY: %f, bWidth: %f, bHeight: %f, imgWidth: %f, imgHeight: %f", borderDistanceThreshold % centerX % centerY % bWidth % bHeight % imgWidth % imgHeight);
+    if ((centerX - bWidth / 2) < borderDistanceThreshold){
+        return true;
+    }
+    else if ((centerX + bWidth / 2) > (imgWidth - borderDistanceThreshold)){
+        return true;
+    }
+    else if ((centerY - bHeight / 2) < borderDistanceThreshold) {
+        return true;
+    }
+    else if ((centerY + bHeight / 2) > (imgHeight - borderDistanceThreshold)) {
+        return true;
+    }
+    else {
+        return false;
+    }
+}
+
+static void FilterNonPlanePoints(
+    const std::vector<Vec3_t> points,
+    std::vector<int>& indicesPoints
+){
+    const float planeDistanceThreshold = 0.5;
+    pcl::PointCloud<pcl::PointXYZ>::Ptr pPoints(new pcl::PointCloud<pcl::PointXYZ>);
+    pPoints->width = 1;
+    pPoints->height = points.size();
+    pPoints->points.resize(points.size());
+    for (size_t indexPoint = 0; indexPoint < points.size(); indexPoint++){
+        pPoints->points[indexPoint] = pcl::PointXYZ(points[indexPoint](0), points[indexPoint](1), points[indexPoint](2));
+    }
+    // use pcl ransac segmentation to estimate the plane
+    pcl::SACSegmentation<pcl::PointXYZ> seg;
+    seg.setOptimizeCoefficients(true);
+    seg.setModelType(pcl::SACMODEL_PLANE);
+    seg.setMethodType(pcl::SAC_RANSAC);
+    seg.setMaxIterations(3);
+    seg.setDistanceThreshold(planeDistanceThreshold);  // unit is meter.
+    pcl::ModelCoefficients::Ptr planeCoeff(new pcl::ModelCoefficients);
+    pcl::PointIndices::Ptr pIndicesInliers(new pcl::PointIndices);
+    
+    seg.setInputCloud(pPoints);
+    seg.segment(*pIndicesInliers, *planeCoeff);
+
+    if (pIndicesInliers->indices.size() == 0){
+        TDO_LOG_DEBUG_FORMAT("plane fitting zero inliers from %d points, plane distance threshold = %f", points.size() % planeDistanceThreshold);
+        return;
+    }
+    else {
+        for (const auto& ii : pIndicesInliers->indices){
+            indicesPoints.push_back(static_cast<int>(ii));
+        }
+        TDO_LOG_DEBUG_FORMAT("plane fitting found %d inliers from %d points, plane distance threshold = %f", indicesPoints.size() % points.size() % planeDistanceThreshold);
+        return;
+    }
+}
 
 void camera::CameraBase::ProjectPointTo3DByDepth(const float Z, const float u, const float v, float& X, float& Y){
     X = (u - _kk(0, 2)) /_kk(0, 0) * Z;
@@ -23,49 +93,34 @@ float camera::CameraBase::TriangulateDepthInStereoCamera(const float disparity){
 }
 
 void camera::CameraBase::MatchStereoBBoxes(
-    std::vector<TwoDBoundingBox>& leftCamDetections,
-    std::vector<TwoDBoundingBox>& rightCamDetections,
+    const std::vector<TwoDBoundingBox>& leftCamDetections,
+    const std::vector<TwoDBoundingBox>& rightCamDetections,
     std::vector<std::shared_ptr<TwoDBoundingBox>>& matchedLeftCamDetections,
     std::vector<std::shared_ptr<TwoDBoundingBox>>& matchedRightCamDetections
 ){
-    size_t yMarginForMatch = 20;  //unit is pixel
-    float distanceErrorToReject = 2.0;  // unit is m
-    std::vector<size_t> indicesMatchedDetectionInRightCam;  // Note: to prevent repeated match to same detection
+    float yMarginForMatch  = 20.;  // threshold to reject stereo detection
+    float cleanMarginFromImageBorder = 20;
     if (leftCamDetections.size() == 0)
         return;
 
-    const object::ObjectBase& objectInfo = (*leftCamDetections[0]._pObjectInfo);
-    for (TwoDBoundingBox& oneDetectionLeftCam : leftCamDetections){
-        int indexsmallestDepthError = -1;
-        float smallestDepthError = std::numeric_limits<float>::max();
-        float estimatedDepth = -1.;
-        float depthByScale = objectInfo._templates[objectInfo._indicesInTemplatesArray[oneDetectionLeftCam._templateID]]._simulationCameraInObjectTransform.block(0, 3, 3, 1).norm() / oneDetectionLeftCam._templateScale;
-        for (size_t indexDetectionInRightCam=0; indexDetectionInRightCam < rightCamDetections.size(); indexDetectionInRightCam++){
-            std::shared_ptr<TwoDBoundingBox> pOneDetectionRightCam = std::make_shared<TwoDBoundingBox>(rightCamDetections[indexDetectionInRightCam]);
-            if (std::abs(oneDetectionLeftCam._centerY - (*pOneDetectionRightCam)._centerY) < yMarginForMatch){
-                // filter false match by comparing scale distance with triangulation distance
-                float depthByTriangulation = this->TriangulateDepthInStereoCamera(oneDetectionLeftCam._centerX - (*pOneDetectionRightCam)._centerX);
-                float distanceError = std::abs(depthByScale - depthByTriangulation);
-                if (distanceError < distanceErrorToReject && distanceError < smallestDepthError){
-                    indexsmallestDepthError = indexDetectionInRightCam;
-                    smallestDepthError = distanceError;
-                    estimatedDepth = depthByTriangulation;
-                }
-            }
-        }
-        TDO_LOG_DEBUG_FORMAT("indexsmallestDepthError: %d, smallestDepthError: %f, estimatedDepth: %f, depthByScale: %f", indexsmallestDepthError % smallestDepthError % estimatedDepth % depthByScale);
-        if (
-            indexsmallestDepthError >= 0 && 
-            std::find(indicesMatchedDetectionInRightCam.begin(), indicesMatchedDetectionInRightCam.end(), indexsmallestDepthError) == indicesMatchedDetectionInRightCam.end()
-        ){
-            oneDetectionLeftCam.Set3DDepth(estimatedDepth);
-            std::shared_ptr<TwoDBoundingBox> matchedLeftCamDetection = std::make_shared<TwoDBoundingBox>(oneDetectionLeftCam);
-            std::shared_ptr<TwoDBoundingBox> matchedRightCamDetection = std::make_shared<TwoDBoundingBox>(rightCamDetections[indexsmallestDepthError]);
-            matchedLeftCamDetections.push_back(matchedLeftCamDetection);
-            matchedRightCamDetections.push_back(matchedRightCamDetection);
-            indicesMatchedDetectionInRightCam.push_back(indexsmallestDepthError);
+    const std::shared_ptr<object::ObjectBase> pObjectInfo = leftCamDetections[0]._pObjectInfo;
+
+    for (size_t indexDetection=0; indexDetection < leftCamDetections.size(); indexDetection++){
+        std::shared_ptr<TwoDBoundingBox> pOneDetectionLeftCam = std::make_shared<TwoDBoundingBox>(leftCamDetections[indexDetection]);
+        std::shared_ptr<TwoDBoundingBox> pOneDetectionRightCam = std::make_shared<TwoDBoundingBox>(rightCamDetections[indexDetection]);
+        bool isBadStereo = std::abs(pOneDetectionLeftCam->_centerY - (*pOneDetectionRightCam)._centerY) > yMarginForMatch;
+        bool isTooCloseToImageBorder = CheckTooCloseToImageBorder(cleanMarginFromImageBorder, pOneDetectionLeftCam->_centerX, pOneDetectionLeftCam->_centerY, pOneDetectionLeftCam->_bWidth, pOneDetectionLeftCam->_bHeight, _cols, _rows)
+                                       || CheckTooCloseToImageBorder(cleanMarginFromImageBorder, pOneDetectionRightCam->_centerX, pOneDetectionRightCam->_centerY, pOneDetectionRightCam->_bWidth, pOneDetectionRightCam->_bHeight, _cols, _rows);
+        float depthByTriangulation = this->TriangulateDepthInStereoCamera(pOneDetectionLeftCam->_centerX - pOneDetectionRightCam->_centerX);
+        TDO_LOG_DEBUG_FORMAT("detection (%f), isBadStereo %s, isTooCloseToImageBorder %s", indexDetection % (isBadStereo?"True":"False") % (isTooCloseToImageBorder?"True":"False"));
+        if (!isBadStereo && !isTooCloseToImageBorder){            
+            pOneDetectionLeftCam->Set3DDepth(depthByTriangulation);
+            pOneDetectionRightCam->Set3DDepth(depthByTriangulation);
+            matchedLeftCamDetections.push_back(pOneDetectionLeftCam);
+            matchedRightCamDetections.push_back(pOneDetectionRightCam);
         }
     }
+
     TDO_LOG_DEBUG_FORMAT("Found %d matched detection in this frame.", matchedLeftCamDetections.size());
     return;
 }
@@ -77,26 +132,48 @@ void camera::CameraBase::CreateThreeDDetections(
     std::vector<ThreeDDetection>& threeDDetections
 ){
     int detectionID = 0;
-    for (const std::shared_ptr<TwoDBoundingBox> matchedLeftCamDetection : matchedLeftCamDetections){
-        size_t templateID = (*matchedLeftCamDetection)._templateID;
-        Mat44_t objectInCameraTransform = objectInfo._templates[objectInfo._indicesInTemplatesArray[templateID]]._simulationCameraInObjectTransform.inverse();
+    std::vector<Vec3_t> threeDPoints;
+    std::vector<ThreeDDetection> threeDDetectionCandidates;
+    for (size_t ii = 0; ii < matchedLeftCamDetections.size(); ii++){
+        const std::shared_ptr<TwoDBoundingBox> pMatchedLeftCamDetection = matchedLeftCamDetections[ii];
+        const std::shared_ptr<TwoDBoundingBox> pMatchedRightCamDetection = matchedRightCamDetections[ii];
         float X, Y;
-        this->ProjectPointTo3DByDepth((*matchedLeftCamDetection)._esitmated3DDepth, (*matchedLeftCamDetection)._centerX, (*matchedLeftCamDetection)._centerY, X, Y);
-        objectInCameraTransform(0, 3) = X;
-        objectInCameraTransform(1, 3) = Y;
-        objectInCameraTransform(2, 3) = (*matchedLeftCamDetection)._esitmated3DDepth;
-        Eigen::MatrixXf vertices3DInCamera = Eigen::MatrixXf::Zero(3, 8);  // fill this later in Frame class member method.
-        ThreeDDetection new3DDetection(objectInCameraTransform, detectionID, vertices3DInCamera, this->_cameraID, matchedLeftCamDetection->_detectionScore, (*matchedLeftCamDetection)._centerX, (*matchedLeftCamDetection)._centerY, matchedRightCamDetections[detectionID]->_centerX);
-        threeDDetections.push_back(new3DDetection);
+        this->ProjectPointTo3DByDepth((*pMatchedLeftCamDetection)._esitmated3DDepth, (*pMatchedLeftCamDetection)._centerX, (*pMatchedLeftCamDetection)._centerY, X, Y);
+        Vec3_t objectCenterInRefFrame(X, Y, (*pMatchedLeftCamDetection)._esitmated3DDepth);
+        // get keypt1 in 3D
+        float keypt1_x = (*pMatchedLeftCamDetection)._centerX - (*pMatchedLeftCamDetection)._bWidth * (0.5 - (*pMatchedLeftCamDetection)._keypts[0][0]);
+        float keypt1_y = (*pMatchedLeftCamDetection)._centerY - (*pMatchedLeftCamDetection)._bHeight * (0.5 - (*pMatchedLeftCamDetection)._keypts[0][1]);
+        this->ProjectPointTo3DByDepth((*pMatchedLeftCamDetection)._esitmated3DDepth, keypt1_x, keypt1_y, X, Y);
+        Vec3_t keypt1InCam(X, Y, pMatchedLeftCamDetection->_esitmated3DDepth);
+        float horizontalSize = pMatchedLeftCamDetection->_bWidth * pMatchedLeftCamDetection->_esitmated3DDepth / _kk(0, 0);
+        ThreeDDetection new3DDetection(
+            objectCenterInRefFrame,
+            detectionID,
+            this->_cameraID,
+            pMatchedLeftCamDetection->_detectionScore,
+            pMatchedLeftCamDetection,
+            pMatchedRightCamDetection,
+            keypt1InCam,
+            horizontalSize,
+            pMatchedLeftCamDetection->_pObjectInfo
+        );
+        threeDDetectionCandidates.push_back(new3DDetection);
+        threeDPoints.push_back(objectCenterInRefFrame);
         detectionID++;
+    }
+    // filter non-plane 3d detections
+    std::vector<int> indicesThreeDPoints;
+    FilterNonPlanePoints(threeDPoints, indicesThreeDPoints);
+    for (const int indexPoint : indicesThreeDPoints){
+        threeDDetections.push_back(threeDDetectionCandidates[indexPoint]);
     }
     TDO_LOG_DEBUG_FORMAT("created %d threeD detections in camera %d", threeDDetections.size() % this->_cameraID);
     return;
 }
 
 void camera::CameraBase::ProjectPoints(
-    const Eigen::Ref<const Eigen::Matrix<float, 3, Eigen::Dynamic>, 0, Eigen::Stride<3, 1>> points,  // Note: stride<3, 1> is verified correct by getting toprows(3) from a 4*5 matrix.
-    Eigen::Ref<Eigen::Matrix<float, 2, Eigen::Dynamic>, 0, Eigen::Stride<2, 1> > dstPoints
+    const Eigen::Ref<const Eigen::Matrix<float, 3, Eigen::Dynamic>> points,  // Note: stride<3, 1> is verified correct by getting toprows(3) from a 4*5 matrix.
+    Eigen::Ref<Eigen::Matrix<float, 2, Eigen::Dynamic>> dstPoints
 ){
     const size_t N = points.cols();
     // Allocate dstPoints if it is not preallocated
@@ -110,7 +187,7 @@ void camera::CameraBase::ProjectPoints(
     cv::Mat cvDst(N, 1, CV_32FC2, dstPoints.data());
     cv::projectPoints(cvSrc, rvec, tvec, cvKK, _distortCoef, cvDst);
     if ( dstPoints.data() != reinterpret_cast<float*>(cvDst.data) ) {
-        dstPoints = Eigen::Map<Eigen::Matrix<float, 2, Eigen::Dynamic>, 0, Eigen::Stride<2, 1> >(reinterpret_cast<float*>(cvDst.data), 2, N);
+        dstPoints = Eigen::Map<Eigen::Matrix<float, 2, Eigen::Dynamic>>(reinterpret_cast<float*>(cvDst.data), 2, N);
     }
 }
 

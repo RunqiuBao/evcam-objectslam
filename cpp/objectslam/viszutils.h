@@ -27,6 +27,21 @@ void Draw3DBoundingBox(
 
 }
 
+/*
+ * @param       detections is a (2, 2) shape matrix, first column is 2d coordinates of keypoint1, the second is keypoint2.
+ */
+void Draw5DDetections(
+    const Eigen::Matrix<float, 2, 2>& detections,
+    cv::Mat& displayImage 
+){
+    assert(displayImage.channels() == 3);
+    cv::Point keypt1 = cv::Point(detections(0, 0), detections(1, 0));
+    cv::circle(displayImage, keypt1, 3, cv::Scalar(0, 255, 0), cv::FILLED);
+    cv::Point keypt2 = cv::Point(detections(0, 1), detections(1, 1));
+    cv::circle(displayImage, keypt2, 3, cv::Scalar(255, 0, 0), cv::FILLED);
+    cv::line(displayImage, keypt1, keypt2, cv::Scalar(0, 255, 255), 2);
+}
+
 } // end of viszutils
 
 } // end of eventobjectslam

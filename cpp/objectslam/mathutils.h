@@ -24,6 +24,8 @@ MatrixType TransformPoints(const MatrixType& transform, const MatrixType& points
     }
 }
 
+
+
 /**
  *   mPoints3D: 3xn Eigen matrix
  * 

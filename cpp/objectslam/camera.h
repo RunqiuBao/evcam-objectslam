@@ -33,8 +33,8 @@ public:
     {}
 
     void MatchStereoBBoxes(
-        std::vector<TwoDBoundingBox>& leftCamDetections,
-        std::vector<TwoDBoundingBox>& rightCamDetections,
+        const std::vector<TwoDBoundingBox>& leftCamDetections,
+        const std::vector<TwoDBoundingBox>& rightCamDetections,
         std::vector<std::shared_ptr<TwoDBoundingBox>>& matchedLeftCamDetections,
         std::vector<std::shared_ptr<TwoDBoundingBox>>& matchedRightCamDetections
     );
@@ -44,8 +44,8 @@ public:
     void ProjectPointTo3DByDepth(const float Z, const float u, const float v, float& X, float& Y);
 
     void ProjectPoints(
-        const Eigen::Ref<const Eigen::Matrix<float, 3, Eigen::Dynamic>, 0, Eigen::Stride<3, 1>> points,
-        Eigen::Ref<Eigen::Matrix<float, 2, Eigen::Dynamic>, 0, Eigen::Stride<2, 1> > dstPoints
+        const Eigen::Ref<const Eigen::Matrix<float, 3, Eigen::Dynamic>> points,
+        Eigen::Ref<Eigen::Matrix<float, 2, Eigen::Dynamic>> dstPoints
     );
 
     void CreateThreeDDetections(

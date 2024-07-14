@@ -117,20 +117,20 @@ sudo apt-get install python3-dev
 # install deps
 pip install -r requirementspy.txt
 
-# read -p "DO you want to install the python package 'tool_eventdetectobjects' with pip?(y/n)" answer
+# read -p "DO you want to install the python package 'tool_eventbasedobjectslam' with pip?(y/n)" answer
 # if [[ "$answer" == [yY] ]]; then
 if $isInstallPythonPackage; then
   (cd python
   python3 -m build
   cd dist/
-  if python3 -c 'import pkgutil; exit(not pkgutil.find_loader("tool_eventdetectobjects"))'; then
+  if python3 -c 'import pkgutil; exit(not pkgutil.find_loader("tool_eventbasedobjectslam"))'; then
       echo 'delete existing one'
-      python3 -m pip uninstall tool_eventdetectobjects
+      python3 -m pip uninstall tool_eventbasedobjectslam
   fi
-  echo '[Install python package] installing tool_eventdetectobjects...'
-  python3 -m pip install tool_eventdetectobjects-0.0.1-py3-none-any.whl)
+  echo '[Install python package] installing tool_eventbasedobjectslam...'
+  python3 -m pip install tool_eventbasedobjectslam-0.0.1-py3-none-any.whl)
 else
-  echo '[Install python package] skipping pip install 'tool_eventdetectobjects''
+  echo '[Install python package] skipping pip install 'tool_eventbasedobjectslam''
 fi
 
 
@@ -141,7 +141,7 @@ if $isAddPaths; then
     export LD_LIBRARY_PATH=${OPENCV4_LIB_PATH}:${LD_LIBRARY_PATH}
     export LD_LIBRARY_PATH=${PANGOLIN_LIB_PATH}:${LD_LIBRARY_PATH}
     export LD_LIBRARY_PATH=${G2O_LIB_PATH}:${LD_LIBRARY_PATH}
-    echo -e "[Add lib path & python src path] LD_LIBRARY_PATH: ${LD_LIBRARY_PATH}"
+    # echo -e "[Add lib path & python src path] LD_LIBRARY_PATH: ${LD_LIBRARY_PATH}"
     # add paths for python packages
     export PYTHONPATH="${PYTHONPACKAGE_SRC_PATH}:$PYTHONPATH"
 else

@@ -162,9 +162,9 @@ void optimize::DoLocalBA(std::shared_ptr<KeyFrame> pCurrKeyframe, bool* const bF
             }
 
             const auto pKeyfrmVtx = ids_keyfrmVtx[pKeyframe->_keyFrameID];
-            const float centerX = pKeyframe->_refObjects[idx]->_detection._centerX;
-            const float centerY = pKeyframe->_refObjects[idx]->_detection._centerY;
-            const float centerXRight = pKeyframe->_refObjects[idx]->_detection._centerXRight;
+            const float centerX = pKeyframe->_refObjects[idx]->_detection._pLeftBbox->_centerX;
+            const float centerY = pKeyframe->_refObjects[idx]->_detection._pLeftBbox->_centerY;
+            const float centerXRight = pKeyframe->_refObjects[idx]->_detection._pRightBbox->_centerX;
             ReprojEdgeWrapper reprojEdgeWrap(edgeId, pKeyframe, pKeyfrmVtx, pLocalLm, pLmVtx, centerX, centerY, centerXRight, sqrt_chi_sq_3D);
             edgeId++;
             reprojEdgeWraps.push_back(reprojEdgeWrap);

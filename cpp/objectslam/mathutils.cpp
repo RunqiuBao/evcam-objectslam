@@ -5,7 +5,7 @@
 namespace eventobjectslam {
 
 std::vector<cv::Point> mathutils::ProjectPoints3DToPoints2D(Eigen::MatrixXf& mPoints3D, camera::CameraBase& camera){
-    Eigen::Matrix<float, 2, Eigen::Dynamic> mPoints2D = Eigen::Matrix<float, 2, Eigen::Dynamic>::Zero(2, mPoints3D.cols());
+    Eigen::Matrix<float, 2, Eigen::Dynamic> mPoints2D(2, mPoints3D.cols());
     // TDO_LOG_DEBUG_FORMAT("mPoints3D rows: %d, mPoints3D cols: %d", mPoints3D.rows() % mPoints3D.cols());
     camera.ProjectPoints(
         mPoints3D,

@@ -49,7 +49,7 @@ public:
     std::vector<std::shared_ptr<KeyFrame>> GetOrderedCovisibilities() const;
     std::vector<std::shared_ptr<KeyFrame>> GetOrderedFullCovisibilities() const;  // Note: full covisibilities means those keyframes whose observs are just a subset of current keyframe.
 
-    std::vector<std::shared_ptr<RefObject>> _refObjects;
+    std::vector<std::shared_ptr<RefObject>> _refObjects;  // Note: objects that are observed in this frame (this keyframe or the refFrame).
 
     std::shared_ptr<Frame> _pRefFrame;
 

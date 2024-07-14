@@ -58,28 +58,42 @@ void SLAMSystem::Startup() {
     _pMapperThread  = std::unique_ptr<std::thread>(new std::thread(&SemanticMapper::Run, _pMapper.get()));
 }
 
-void LoadDetections(const std::vector<std::string>& sDetections, std::vector<TwoDBoundingBox>& detections, const unsigned int imageWidth, const unsigned int imageHeight, std::shared_ptr<object::ObjectBase> pColorcone){
-    detections.reserve(sDetections.size());
+void LoadDetections(
+    const std::vector<std::string>& sDetections,
+    std::vector<TwoDBoundingBox>& leftDetections,
+    std::vector<TwoDBoundingBox>& rightDetections,
+    const unsigned int imageWidth,
+    const unsigned int imageHeight,
+    std::shared_ptr<object::ObjectBase> pColorcone
+){
+    leftDetections.reserve(sDetections.size());
+    rightDetections.reserve(sDetections.size());
     for (std::string sDetection : sDetections){
         std::vector<std::string> splitSDetection;
         boost::split(splitSDetection, sDetection, boost::is_any_of(" "));
-        float x, y, bWidth, bHeight, templateScale, detectionScore;
-        int templateID;
+        float x, y, bWidth, bHeight, x_r, y_r, bWidth_r, bHeight_r, detectionScore;
         x = boost::lexical_cast<float>(splitSDetection[1].c_str()) * imageWidth;
         y = boost::lexical_cast<float>(splitSDetection[2].c_str()) * imageHeight;
         bWidth = boost::lexical_cast<float>(splitSDetection[3].c_str()) * imageWidth;
         bHeight = boost::lexical_cast<float>(splitSDetection[4].c_str()) * imageHeight;
-        templateID = boost::lexical_cast<size_t>(splitSDetection[5].c_str());
-        templateScale = boost::lexical_cast<float>(splitSDetection[6].c_str());
-        splitSDetection[7].erase(
-            std::remove_if(splitSDetection[7].begin(), 
-            splitSDetection[7].end(),
-            [](unsigned char x) { return x == '\n'; }),
-            splitSDetection[7].end()
+        x_r = boost::lexical_cast<float>(splitSDetection[5].c_str()) * imageWidth;
+        y_r = boost::lexical_cast<float>(splitSDetection[6].c_str()) * imageWidth;
+        bWidth_r = boost::lexical_cast<float>(splitSDetection[7].c_str()) * imageWidth;
+        bHeight_r = boost::lexical_cast<float>(splitSDetection[8].c_str()) * imageWidth;
+        Vec2_t keypt1(
+            boost::lexical_cast<float>(splitSDetection[9].c_str()),
+            boost::lexical_cast<float>(splitSDetection[10].c_str())
         );
-        detectionScore = boost::lexical_cast<float>(splitSDetection[7].c_str());
-        detections.push_back(TwoDBoundingBox(x, y, bWidth, bHeight, templateID, templateScale, pColorcone, detectionScore));
-        TDO_LOG_DEBUG_FORMAT("one detection: %f, %f, template No. %d, at scale %f", x % y % templateID % templateScale);
+        Vec2_t keypt2(
+            boost::lexical_cast<float>(splitSDetection[11].c_str()),
+            boost::lexical_cast<float>(splitSDetection[12].c_str())
+        );
+        std::vector<Vec2_t> keypts = {keypt1, keypt2};
+        detectionScore = boost::lexical_cast<float>(splitSDetection[13].c_str());
+
+        leftDetections.push_back(TwoDBoundingBox(x, y, bWidth, bHeight, pColorcone, detectionScore, keypts));
+        rightDetections.push_back(TwoDBoundingBox(x_r, y, bWidth_r, bHeight, pColorcone, detectionScore, keypts));
+        TDO_LOG_DEBUG_FORMAT("one 2d detection (confi %f): %f, %f", detectionScore % x % y);
     }
 }
 
@@ -135,9 +149,7 @@ void SaveLandmarks(const std::string datasetRoot, std::shared_ptr<MapDataBase> m
 }
 
 void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
-    // the dataset dir includes `leftcam` and `rightcam` and `colorconeInfo.json`
-    // in each cam folder, it includes `*.png`, `detectionId*/(yolos, including linemod based template selection)`
-    // relocalization: when relocalization happens, assume it always see old objects.
+    // the dataset dir includes `detections` and `sysconfig.json`
 
     rapidjson::Document& sysConfigJson = _cfg->_jsonConfigNode;
     Eigen::Matrix3f kk;
@@ -159,38 +171,38 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
     _camera = std::make_shared<camera::CameraBase>(myStereoCamera);
     TDO_LOG_DEBUG_FORMAT("myStereoCamera imageWidth: %d", myStereoCamera._cols);
 
-    std::filesystem::path leftCamPath = sStereoSequencePath;
-    leftCamPath.append("leftcam/detectionID0");
+    std::filesystem::path detectionsPath = sStereoSequencePath;
+    detectionsPath.append("detections");
     TDO_LOG_DEBUG("entered test track");
+
     std::vector<std::string> filenames;
-    for (const std::filesystem::directory_entry& oneFilePath : std::filesystem::directory_iterator(leftCamPath)) {
+    for (const std::filesystem::directory_entry& oneFilePath : std::filesystem::directory_iterator(detectionsPath)) {
         if (std::filesystem::is_regular_file(oneFilePath) && oneFilePath.path().extension() == ".txt") {
             filenames.push_back(oneFilePath.path().filename().stem());
         }
     }
     std::sort(filenames.begin(), filenames.end());
 
-    std::filesystem::path templatesPath = sStereoSequencePath;
-    templatesPath.append("templates/");
-    object::ObjectBase colorcone(templatesPath.string());
+    std::string objectName = sysConfigJson["objects"]["0"]["objectName"].GetString();
+    object::ObjectBase colorcone(objectName);
     std::shared_ptr<object::ObjectBase> pColorcone = std::make_shared<object::ObjectBase>(colorcone);
 
     Mat44_t cameraInWorldTransform = Eigen::Matrix4f::Identity();
     Mat44_t nextFrameInCameraTransform = Eigen::Matrix4f::Identity();
 
-    // // se10, seq2
-    // Eigen::Quaternionf q;
-    // q.x() = -0.49999999999999956;
-    // q.y() = 0.5000000218556936;
-    // q.z() = 0.49999999999999956;
-    // q.w() = -0.49999997814430636; 
-    // Eigen::Matrix3f rWorldToRealWorld = q.toRotationMatrix();
-    // Mat44_t worldInRealWorld = Eigen::Matrix4f::Identity();
-    // worldInRealWorld.block(0, 0, 3, 3) = rWorldToRealWorld;
-    // worldInRealWorld.block(0, 2, 3, 1) *= -1;
-    // TDO_LOG_DEBUG("rWorldToRealWorld: " << rWorldToRealWorld);
-    // Eigen::Vector3f tWorldToRealWorld(-9.255331993103027, 7.211221218109131, 2.187476634979248);
-    // worldInRealWorld.block(0, 3, 3, 1) = tWorldToRealWorld;
+    // seq0, seq2
+    Eigen::Quaternionf q;
+    q.x() = -0.49999999999999956;
+    q.y() = 0.5000000218556936;
+    q.z() = 0.49999999999999956;
+    q.w() = -0.49999997814430636; 
+    Eigen::Matrix3f rWorldToRealWorld = q.toRotationMatrix();
+    Mat44_t worldInRealWorld = Eigen::Matrix4f::Identity();
+    worldInRealWorld.block(0, 0, 3, 3) = rWorldToRealWorld;
+    worldInRealWorld.block(0, 2, 3, 1) *= -1;
+    TDO_LOG_DEBUG("rWorldToRealWorld: " << rWorldToRealWorld);
+    Eigen::Vector3f tWorldToRealWorld(-9.255331993103027, 7.211221218109131, 2.187476634979248);
+    worldInRealWorld.block(0, 3, 3, 1) = tWorldToRealWorld;
     
     // //seq1
     // Mat44_t worldInRealWorld;
@@ -215,7 +227,7 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
     Mat44_t cameraInRealWorld = Eigen::Matrix4f::Identity();  // Note: Pose for comparing to ground truth
 
     // for debug purpose
-    bool isDebug = false;
+    bool isDebug = true;
     std::vector<size_t> numFramesEachKeyframe;
     for(const std::string& filename : filenames){
         TDO_LOG_DEBUG(filename);
@@ -224,11 +236,12 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
         std::shared_ptr<Frame> pOneFrame = std::make_shared<Frame>(FrameType::Stereo, static_cast<double>(frameCount), _camera);
         _allFramesStack.push_back(pOneFrame);
 
-        std::filesystem::path leftCamPath = sStereoSequencePath;
-        leftCamPath.append("leftcam/");
-        std::ifstream detectionResult(leftCamPath.append("detectionID0").append(filename + ".txt"));
+        // load detection results from txt file.
+        std::filesystem::path detectionFilePath = detectionsPath;
+        std::ifstream detectionResult(detectionFilePath.append(filename + ".txt"));
+        TDO_LOG_DEBUG_FORMAT("opening detection: %s", detectionFilePath.string());
         if (!detectionResult.is_open()) {
-            TDO_LOG_DEBUG("Failed to open the left detectionResult (" << filename << ").");
+            TDO_LOG_DEBUG("Failed to open the detectionResult (" << filename << ").");
             Eigen::Quaternionf myQuaternion(cameraInRealWorld.block<3, 3>(0, 0));
             outputFile << std::to_string(frameCount) << " " << cameraInRealWorld(0, 3) << " " << cameraInRealWorld(1, 3) << " " << cameraInRealWorld(2, 3) << " " << myQuaternion.x() << " " << myQuaternion.y() << " " << myQuaternion.z() << " " << myQuaternion.w() << std::endl;
             frameCount++;
@@ -240,26 +253,13 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
             sDetections.push_back(sDetection); // Store each line in the vector
         }
         detectionResult.close();
-        std::vector<TwoDBoundingBox> leftCamDetections;
-        LoadDetections(sDetections, leftCamDetections, myStereoCamera._cols, myStereoCamera._rows, pColorcone);
-
-        std::filesystem::path rightCamPath = sStereoSequencePath;
-        rightCamPath.append("rightcam/");
-        std::ifstream detectionResultRightCam(rightCamPath.append("detectionID0").append(filename + ".txt"));
-        if (!detectionResultRightCam.is_open()) {
-            TDO_LOG_DEBUG("Failed to open the right detectionResult (" << filename << ").");
-            Eigen::Quaternionf myQuaternion(cameraInRealWorld.block<3, 3>(0, 0));
-            outputFile << std::to_string(frameCount) << " " << cameraInRealWorld(0, 3) << " " << cameraInRealWorld(1, 3) << " " << cameraInRealWorld(2, 3) << " " << myQuaternion.x() << " " << myQuaternion.y() << " " << myQuaternion.z() << " " << myQuaternion.w() << std::endl;
-            frameCount++;
+        TDO_LOG_DEBUG_FORMAT("length of sDetection: %d", sDetections.size());
+        if (sDetections.size() == 0){
             continue;
         }
-        sDetections.clear();
-        while (std::getline(detectionResultRightCam, sDetection)) {
-            sDetections.push_back(sDetection); // Store each line in the vector
-        }
-        detectionResultRightCam.close();
-        std::vector<TwoDBoundingBox> rightCamDetections;
-        LoadDetections(sDetections, rightCamDetections, myStereoCamera._cols, myStereoCamera._rows, pColorcone);
+
+        std::vector<TwoDBoundingBox> leftCamDetections, rightCamDetections;  // Note: load left and right detections and list correspondingly.
+        LoadDetections(sDetections, leftCamDetections, rightCamDetections, myStereoCamera._cols, myStereoCamera._rows, pColorcone);
 
         pOneFrame->SetDetectionsFromExternalSrc(std::move(leftCamDetections), std::move(rightCamDetections));
 
@@ -270,21 +270,24 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
 
         if (isDebug){
             std::filesystem::path leftCamImagePath = sStereoSequencePath;
-            leftCamImagePath.append("leftcam/").append(filename + ".png");
-            cv::Mat display3DDetections = cv::imread(leftCamImagePath.string(), cv::IMREAD_GRAYSCALE);
+            leftCamImagePath.append("concentrated/left/").append(filename + ".png");
+            cv::Mat display3DDetections = cv::imread(leftCamImagePath.string(), cv::IMREAD_COLOR);
             std::vector<ThreeDDetection> threeDDetections = pOneFrame->_threeDDetections;
             int countThreeDDetection = 0;
-            cv::Mat testBinaryTracking(myStereoCamera._rows, myStereoCamera._cols, CV_8UC1, cv::Scalar(0));
             for (ThreeDDetection oneDetection : threeDDetections){
-                Eigen::Matrix<float, 2, Eigen::Dynamic> dstPoints = Eigen::Matrix<float, 2, Eigen::Dynamic>::Zero(2, oneDetection._vertices3DInCamera.cols());
-                myStereoCamera.ProjectPoints(oneDetection._vertices3DInCamera, dstPoints);
-                viszutils::Draw3DBoundingBox(dstPoints, display3DDetections);
+                Eigen::Matrix<float, 2, Eigen::Dynamic> dstPoints(2, 2);
+                Eigen::Matrix<float, 3, Eigen::Dynamic> threeDKeypoints(3, 2);
+                threeDKeypoints << oneDetection._keypt1InRefFrame(0), oneDetection._objectCenterInRefFrame(0),
+                                   oneDetection._keypt1InRefFrame(1), oneDetection._objectCenterInRefFrame(1),
+                                   oneDetection._keypt1InRefFrame(2), oneDetection._objectCenterInRefFrame(2);
+                myStereoCamera.ProjectPoints(threeDKeypoints, dstPoints);
+                viszutils::Draw5DDetections(dstPoints, display3DDetections);
 
                 countThreeDDetection++;
             }
 
             std::filesystem::path debug3DDetectionPath = sStereoSequencePath;
-            debug3DDetectionPath.append("debug3DDetection/");
+            debug3DDetectionPath.append("debug3DDetections/");
             if (!std::filesystem::exists(debug3DDetectionPath) && !std::filesystem::create_directory(debug3DDetectionPath)){
                 TDO_LOG_ERROR_FORMAT("Failed to create the folder: %s", debug3DDetectionPath.string());
                 throw std::runtime_error("OS Error");
@@ -292,9 +295,6 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
             debug3DDetectionPath.append(filename + ".png");
             cv::imwrite(debug3DDetectionPath.string() , display3DDetections);
         }
-
-        // // ransac based plane estimation
-           // at the same time, ground plane based detection filtering
 
         // // input the correct detections to frameTracker, get pose return from frameTracker and print.
 
@@ -308,18 +308,18 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
             _pKeyFrameStack.push_back(pOneKeyframe);
             _pMapDb->AddKeyFrame(pOneKeyframe);
             pOneFrame->SetDetectionsAsRefObjects();
-            _tracker.CreateNewLandmarks(pOneKeyframe, _pMapDb, pColorcone);
+            _tracker.CreateNewLandmarks(pOneKeyframe, _pMapDb);
         }
         else{
             Mat44_t nextFrameInCameraTransformBackup = nextFrameInCameraTransform;  // Note: backup in case first track fails and nextFrameInCameraTransform will be set to identity,
-            bool isSuccess = _tracker.DoMotionBasedTrack(*pOneFrame, (*_pFrameStack.back()), nextFrameInCameraTransform);
+            bool isSuccess = _tracker.DoMotionBasedTrack(*pOneFrame, (*_pFrameStack.back()), nextFrameInCameraTransform, isDebug);
 
             if ((!isSuccess) && (*_pFrameStack.back())._isTracked){
-                bool isSuccess = _tracker.Do2DTrackingBasedTrack(*pOneFrame, (*_pFrameStack.back()), nextFrameInCameraTransform);
+                bool isSuccess = _tracker.Do2DTrackingBasedTrack(*pOneFrame, (*_pFrameStack.back()), nextFrameInCameraTransform, isDebug);
                 // TODO: if fail again, need another track trial from keyframe.
                 if (!isSuccess){
                     nextFrameInCameraTransform = (*_pFrameStack.back()).GetPose();
-                    bool isSuccess = _tracker.DoMotionBasedTrack(*pOneFrame, (*_tracker._pRefKeyframe->_pRefFrame), nextFrameInCameraTransform);
+                    bool isSuccess = _tracker.DoMotionBasedTrack(*pOneFrame, (*_tracker._pRefKeyframe->_pRefFrame), nextFrameInCameraTransform, isDebug);
                     if (!isSuccess){
                         TDO_LOG_DEBUG("track trial from keyframe also failed.");
                     }
@@ -353,7 +353,7 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
                 pOneFrame->SetPose(Eigen::Matrix4f::Identity());
                 TDO_LOG_INFO("keyframe insert! frame number: " << filename);
                 TDO_LOG_INFO("keyframe in world pose: " << pOneKeyframe->GetKeyframePoseInWorld());
-                _tracker.CreateNewLandmarks(pOneKeyframe, _pMapDb, pColorcone);
+                _tracker.CreateNewLandmarks(pOneKeyframe, _pMapDb);
                 // if (_pKeyFrameStack.size() > 5 && _pKeyFrameStack[_pKeyFrameStack.size() - 5]->_bContainNewLandmarks) {
                 //     TDO_LOG_DEBUG_FORMAT("Entered landmark pruning at keyframe(%d).", _pKeyFrameStack[_pKeyFrameStack.size() - 5]->_keyFrameID);
                 //     _pMapper->SchedulePruneLandmarksTask(_pKeyFrameStack[_pKeyFrameStack.size() - 5]);

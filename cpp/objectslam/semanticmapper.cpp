@@ -78,9 +78,7 @@ void SemanticMapper::_DoMergeLandmarks() {
     std::vector<std::shared_ptr<LandMark>> allLandmarksInDb = _pMapDb->GetAllLandmarks();
     if (allLandmarksInDb.size() > 1) {
         // TODO: improve this O(N^2) algorithm
-        auto smallestAxisObjectExtents = std::min_element(allLandmarksInDb[0]->_pObjectInfo->_objectExtents.begin(), allLandmarksInDb[0]->_pObjectInfo->_objectExtents.end());
-        int indexSmallestAxis = std::distance(allLandmarksInDb[0]->_pObjectInfo->_objectExtents.begin(), smallestAxisObjectExtents);
-        float distanceThreshold = allLandmarksInDb[0]->_pObjectInfo->_objectExtents[indexSmallestAxis] * 3.;  // Note: 3.0 is a factor.
+        float distanceThreshold = allLandmarksInDb[0]->_horizontalSize * 3.;  // Note: 3.0 is a factor.
         std::vector<std::vector<std::shared_ptr<LandMark>>> clusters;
         std::vector<bool> visited(allLandmarksInDb.size(), false);
         for (size_t indexSrcLandmark = 0; indexSrcLandmark < allLandmarksInDb.size(); indexSrcLandmark++) {

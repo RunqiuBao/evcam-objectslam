@@ -5,29 +5,47 @@
 
 namespace eventobjectslam{
 
+typedef std::array<float, 6> ThreeDPlane;  // {x, y, z, nx, ny, nz}
+
+
+/***** shared methods operating objects *****/
+// inline Eigen::MatrixXf GetVerticesOf3DBoundingBoxFromObject(const std::shared_ptr<object::ObjectBase> pObjectInfo){
+//     float xSize, ySize, zSize;
+//     xSize = pObjectInfo->_objectExtents[0];
+//     ySize = pObjectInfo->_objectExtents[1];
+//     zSize = pObjectInfo->_objectExtents[2];
+//     Eigen::MatrixXf vertices3D;
+//     vertices3D.resize(3, 8);
+//     vertices3D.col(0) << xSize / 2, ySize / 2, zSize / 2;
+//     vertices3D.col(1) << -xSize / 2, ySize / 2, zSize / 2;
+//     vertices3D.col(2) << -xSize / 2, -ySize / 2, zSize / 2;
+//     vertices3D.col(3) << xSize / 2, -ySize / 2, zSize / 2;
+//     vertices3D.col(4) << xSize / 2, ySize / 2, -zSize / 2;
+//     vertices3D.col(5) << -xSize / 2, ySize / 2, -zSize / 2;
+//     vertices3D.col(6) << -xSize / 2, -ySize / 2, -zSize / 2;
+//     vertices3D.col(7) << xSize / 2, -ySize / 2, -zSize / 2;
+//     return vertices3D;
+// }
+
+
+Eigen::MatrixXf GetVerticesOf3DBoundingCylinderForObject(
+    const int numVerticesOneSide,
+    const float horizontalSize,
+    const Vec3_t objectCenterInRefFrame,
+    const Vec3_t topCenterPtInRefFrame
+);
+
+bool CompareDetectionScoreIfBetter(std::string methodName, float oldScore, float newScore);
+
 namespace object{
 
-class ObjectTemplate {
-
-public:
-    size_t _templID;
-    Mat44_t _simulationCameraInObjectTransform;
-
-    ObjectTemplate(const size_t templID, const Mat44_t simulationCameraInObjectTransform)
-    :_templID(templID), _simulationCameraInObjectTransform(simulationCameraInObjectTransform)
-    {}
-
-};
-
+// deprecating usage of this class.
 class ObjectBase {
 
 public:
     std::string _objectName;
-    ObjectExtents _objectExtents;  // Note: full size in X, Y, Z.
-    std::vector<ObjectTemplate> _templates;
-    std::vector<size_t> _indicesInTemplatesArray;  // Note: input templateID, output index in _templates.
 
-    ObjectBase(const std::string sTemplatesPath);
+    ObjectBase(const std::string objectName);
 
 };
 
@@ -41,15 +59,12 @@ public:
     float _centerY;
     float _bWidth;
     float _bHeight;
-    int _templateID;
-    float _templateScale;
     float _esitmated3DDepth;
     float _detectionScore;
+    std::vector<Vec2_t> _keypts;
     std::shared_ptr<object::ObjectBase> _pObjectInfo;
 
-    TwoDBoundingBox(const float x, const float y, const float bWidth, const float bHeight, const int templateID, const float templateScale, const std::shared_ptr<object::ObjectBase> pObjectInfo, const float detectionScore)
-    :_centerX(x), _centerY(y), _bWidth(bWidth), _bHeight(bHeight), _templateID(templateID), _templateScale(templateScale), _pObjectInfo(pObjectInfo), _detectionScore(detectionScore)
-    {}
+    TwoDBoundingBox(const float x, const float y, const float bWidth, const float bHeight, const std::shared_ptr<object::ObjectBase> pObjectInfo, const float detectionScore, const std::vector<Vec2_t> keypts);
 
     void Set3DDepth(const float distance){_esitmated3DDepth = distance;}
 
@@ -59,17 +74,45 @@ class ThreeDDetection {
 
 public:
     unsigned int _cameraID;
-    Mat44_t _objectInCameraTransform;
+    Vec3_t _objectCenterInRefFrame;  // Note: use center->keypt vector to express orientation. refFrame is the frame that observed this detection.
+    Vec3_t _keypt1InRefFrame;
+    Eigen::MatrixXf _vertices3DInRefFrame; // Note: 3x8 matrix, vertex 1, 2, 3, 4 should respectively have a connecting edge with 5,6,7,8. Note the vertices form a cylinder and keypt1 is at top center.
+
+    float _horizontalSize;  // diameter of the cylinder.
     int _detectionID;
     float _detectionScore;  // Note: used for records of confidence of the detection.
-    Eigen::MatrixXf _vertices3DInCamera; // Note: 3x8 matrix, vertex 1, 2, 3, 4 should respectively have a connecting edge with 5, 6, 7, 8.
-    float _centerX;  // 2D coordinates of BBox center in undisted and rectified left camera image. 
-    float _centerY;
-    float _centerXRight;  // 2D coordinates of BBox center in undisted and rectified right camera image.
+    const std::shared_ptr<TwoDBoundingBox> _pLeftBbox;
+    const std::shared_ptr<TwoDBoundingBox> _pRightBbox;
+    const std::shared_ptr<object::ObjectBase> _pObjectInfo;
 
-    ThreeDDetection(const Mat44_t objectInCameraTransform, const int detectionID, const Eigen::MatrixXf& vertices3DInCamera, const unsigned int cameraID, const float detectionScore, const float twoDCenterX, const float twoDCenterY, const float twoDCenterXRight)
-    : _objectInCameraTransform(objectInCameraTransform), _detectionID(detectionID), _vertices3DInCamera(vertices3DInCamera), _cameraID(cameraID), _detectionScore(detectionScore), _centerX(twoDCenterX), _centerY(twoDCenterY), _centerXRight(twoDCenterXRight)
-    {}
+    ThreeDDetection(
+        const Vec3_t objectCenterInRefFrame,
+        const int detectionID,
+        const unsigned int cameraID,
+        const float detectionScore,
+        const  std::shared_ptr<TwoDBoundingBox> pLeftBbox,
+        const  std::shared_ptr<TwoDBoundingBox> pRightBbox,
+        const Vec3_t keypt1InRefFrame,
+        const float horizontalSize,
+        const std::shared_ptr<object::ObjectBase> pObjectInfo
+    )
+    : _objectCenterInRefFrame(objectCenterInRefFrame),
+      _detectionID(detectionID),
+      _cameraID(cameraID),
+      _detectionScore(detectionScore),
+      _pLeftBbox(pLeftBbox),
+      _pRightBbox(pRightBbox),
+      _keypt1InRefFrame(keypt1InRefFrame),
+      _horizontalSize(horizontalSize),
+      _pObjectInfo(pObjectInfo)
+    {
+        _vertices3DInRefFrame = GetVerticesOf3DBoundingCylinderForObject(
+            4,
+            _horizontalSize,
+            _objectCenterInRefFrame,
+            _keypt1InRefFrame
+        );
+    }
 
 };
 
@@ -84,38 +127,6 @@ public:
     {}
 
 };
-
-typedef std::array<float, 6> ThreeDPlane;  // {x, y, z, nx, ny, nz}
-
-
-/***** shared methods operating objects *****/
-inline Eigen::MatrixXf GetVerticesOf3DBoundingBoxFromObject(const std::shared_ptr<object::ObjectBase> pObjectInfo){
-    float xSize, ySize, zSize;
-    xSize = pObjectInfo->_objectExtents[0];
-    ySize = pObjectInfo->_objectExtents[1];
-    zSize = pObjectInfo->_objectExtents[2];
-    Eigen::MatrixXf vertices3D;
-    vertices3D.resize(3, 8);
-    vertices3D.col(0) << xSize / 2, ySize / 2, zSize / 2;
-    vertices3D.col(1) << -xSize / 2, ySize / 2, zSize / 2;
-    vertices3D.col(2) << -xSize / 2, -ySize / 2, zSize / 2;
-    vertices3D.col(3) << xSize / 2, -ySize / 2, zSize / 2;
-    vertices3D.col(4) << xSize / 2, ySize / 2, -zSize / 2;
-    vertices3D.col(5) << -xSize / 2, ySize / 2, -zSize / 2;
-    vertices3D.col(6) << -xSize / 2, -ySize / 2, -zSize / 2;
-    vertices3D.col(7) << xSize / 2, -ySize / 2, -zSize / 2;
-    return vertices3D;
-}
-
-inline bool CompareDetectionScoreIfBetter(std::string methodName, float oldScore, float newScore){
-    if (methodName == "linemod"){
-        return newScore < oldScore;
-    }
-    else{
-        // error, return False for now.
-        return false;
-    }
-}
 
 }  // end of namespace eventobjectslam
 

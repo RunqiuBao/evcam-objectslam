@@ -9,6 +9,7 @@ namespace eventobjectslam {
 typedef Eigen::Matrix4f Mat44_t;
 typedef Eigen::Matrix3f Mat33_t;
 typedef Eigen::Vector3f Vec3_t;
+typedef Eigen::Vector2f Vec2_t;
 typedef std::array<float, 3> ObjectExtents;
 
 // -------- double precision, mainly used in g2outils -----------
