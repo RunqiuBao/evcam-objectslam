@@ -5,10 +5,11 @@ read -p "DO you want to build log4cxx?(y/n)" answer
 if [[ "$answer" == [yY] ]]; then
   # build log4cxx
   (cd log4cxx && mkdir build
+  mkdir install
   # install apr1
   sudo apt install libapr1 libaprutil1 libapr1-dev libaprutil1-dev -y
   cd build
-  cmake -DCMAKE_INSTALL_PREFIX:STRING=/home/runqiu/code/event_camera_repo/tools/tool_detectobjects/3rdparty/log4cxx/install/ ..
+  cmake -DCMAKE_INSTALL_PREFIX:STRING=/home/runqiu/code/event_camera_repo/tools/tool_eventbasedobjectslam/3rdparty/log4cxx/install/ ..
   make -j8
   make install)
 fi
@@ -31,7 +32,7 @@ if [[ "$answer" == [yY] ]]; then
   (cd opencv
   mkdir -p opencvinstall
   mkdir -p build && cd build
-  cmake -DCMAKE_BUILD_TYPE=RELEASE -DCMAKE_INSTALL_PREFIX=../opencvinstall/ -DWITH_TBB=ON -DBUILD_NEW_PYTHON_SUPPORT=ON -DWITH_V4L=ON -DWITH_OPENGL=ON -DENABLE_FAST_MATH=1 -DCUDA_FAST_MATH=0 -DWITH_CUBLAS=0 -DBUILD_TIFF=ON -DOPENCV_EXTRA_MODULES_PATH=../../opencv_contrib-4.7.0/modules ..
+  cmake -DCMAKE_BUILD_TYPE=RELEASE -DCMAKE_INSTALL_PREFIX=../opencvinstall/ -DWITH_TBB=ON -DBUILD_NEW_PYTHON_SUPPORT=ON -DWITH_V4L=ON -DWITH_OPENGL=ON -DENABLE_FAST_MATH=1 -DCUDA_FAST_MATH=0 -DWITH_CUBLAS=0 -DBUILD_TIFF=ON -DOPENCV_EXTRA_MODULES_PATH=../../opencv_contrib/modules ..
   make -j8
   make install)
 fi
@@ -52,7 +53,7 @@ if [[ "$answer" == [yY] ]]; then
   (cd Pangolin
   mkdir -p pangolininstall
   mkdir -p build && cd build
-  cmake -GNinja ..
+  cmake -GNinja -DCMAKE_INSTALL_PREFIX=../pangolininstall ..
   cmake --build ./
   cmake --install ./ --prefix ../pangolininstall/
   echo -e "-------- install python stuff --------"
@@ -69,4 +70,13 @@ if [[ "$answer" == [yY] ]]; then
    make -j8
    make install
   )
+fi
+
+read -p "Do you want to build eigen3.4?(y/n)" answer
+if [[ "$answer" == [yY] ]]; then
+  (cd eigen
+   mkdir -p eigeninstall
+   mkdir -p build && cd build
+   cmake -DCMAKE_INSTALL_PREFIX=../eigeninstall/ ..
+   make install)
 fi
