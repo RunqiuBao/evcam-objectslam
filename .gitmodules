@@ -24,4 +24,4 @@
 	url = git@github.com:RunqiuBao/g2o.git
 [submodule "3rdparty/pcl"]
 	path = 3rdparty/pcl
-	url = https://github.com/PointCloudLibrary/pcl.git
+	url = https://github.com/RunqiuBao/pcl.git
