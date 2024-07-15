@@ -78,6 +78,7 @@ bool FrameTracker::DoMotionBasedTrack(Frame& currentFrame, const Frame& lastFram
         size_t countDetection = 0;
         int indexLargestOverlap = -1;
         int largestOverlapArea = 0;
+        float largestIoU = -1;
         for (ThreeDDetection currentDetection : currentFrame._threeDDetections){
             std::vector<cv::Point> points2DCV = mathutils::ProjectPoints3DToPoints2D(currentDetection._vertices3DInRefFrame, myStereoCamera);
             cv::Mat currentDetectionPoseMask = mathutils::Draw2DHullMaskFrom2DPointsSet(points2DCV, myStereoCamera._rows, myStereoCamera._cols);
@@ -89,6 +90,7 @@ bool FrameTracker::DoMotionBasedTrack(Frame& currentFrame, const Frame& lastFram
             if (sumOverlaps[0] > largestOverlapArea && (sumOverlaps[0] / sumUnions[0]) > minIoUToReject){
                 indexLargestOverlap = countDetection;
                 largestOverlapArea = sumOverlaps[0];
+                largestIoU = (sumOverlaps[0] / sumUnions[0]);
             }
             // TDO_LOG_DEBUG_FORMAT("RefObject No.%d, detection No.%d, overlapping area: %d", countRefObject % countDetection % sum[0]);
             countDetection++;
@@ -97,7 +99,7 @@ bool FrameTracker::DoMotionBasedTrack(Frame& currentFrame, const Frame& lastFram
             std::vector<cv::Point> points2DCV = mathutils::ProjectPoints3DToPoints2D(currentFrame._threeDDetections[indexLargestOverlap]._vertices3DInRefFrame, myStereoCamera);
             cv::Mat detectionPoseMask = mathutils::Draw2DHullMaskFrom2DPointsSet(points2DCV, myStereoCamera._rows, myStereoCamera._cols);
             cv::bitwise_or(detectionPoseMask, displayDetections, displayDetections);
-            TDO_LOG_DEBUG("found corresponding detection for refObject " << std::to_string(countRefObject) << ", overlap area :" << largestOverlapArea);
+            TDO_LOG_DEBUG("found corresponding detection for refObject " << std::to_string(countRefObject) << ", IoU :" << std::to_string(largestIoU));
         }
         indicesCorrespondingDetecton.push_back(indexLargestOverlap);
 
@@ -150,19 +152,32 @@ bool FrameTracker::DoMotionBasedTrack(Frame& currentFrame, const Frame& lastFram
             (*currentFrame._matchedLeftCamDetections[indexCorrespondingDetection])._centerY
         );
         imagePoints.push_back(point2D);
-        // // keypt
-        // cv::Point3f point3D_keypt(
-        //     refObjects[indexRefObject]->_detection._keypt1InRefFrame(0),
-        //     refObjects[indexRefObject]->_detection._keypt1InRefFrame(1),
-        //     refObjects[indexRefObject]->_detection._keypt1InRefFrame(2)
-        // );
-        // objectPoints.push_back(point3D_keypt);
-        // cv::Point2f point2D_keypt(
-        //     (*currentFrame._matchedLeftCamDetections[indexCorrespondingDetection])._keypts[0][0],
-        //     (*currentFrame._matchedLeftCamDetections[indexCorrespondingDetection])._keypts[0][1]
-        // );
-        // imagePoints.push_back(point2D_keypt);
         indexRefObject++;
+    }
+
+    indexRefObject = 0;
+    if (objectPoints.size() < 4){
+        // not enough detection. Add keypt as well for tracking.
+        for (int indexCorrespondingDetection : indicesCorrespondingDetecton){
+            if (indexCorrespondingDetection < 0){
+                indexRefObject++;
+                continue;
+            }
+            // keypt
+            cv::Point3f point3D_keypt(
+                refObjects[indexRefObject]->_detection._keypt1InRefFrame(0),
+                refObjects[indexRefObject]->_detection._keypt1InRefFrame(1),
+                refObjects[indexRefObject]->_detection._keypt1InRefFrame(2)
+            );
+            objectPoints.push_back(point3D_keypt);
+            cv::Point2f point2D_keypt(
+                (*currentFrame._matchedLeftCamDetections[indexCorrespondingDetection])._keypts[0][0],
+                (*currentFrame._matchedLeftCamDetections[indexCorrespondingDetection])._keypts[0][1]
+            );
+            imagePoints.push_back(point2D_keypt);
+            indexRefObject++;
+        }
+
     }
 
     // Estimate camera pose using PnP

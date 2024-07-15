@@ -20,7 +20,6 @@ LandMark::LandMark(
 {
     Vec3_t landmarkCenter = Eigen::Vector3f::Zero(3);
     _vertices3DInLandmark = GetVerticesOf3DBoundingCylinderForObject(4, horizontalSize, landmarkCenter, _keypt1InLandmark);
-    TDO_LOG_CRITICAL("landmarkCenter: \n"<< landmarkCenter << ",\n _keypt1InLandmark:\n" << _keypt1InLandmark);
 
     _bestDetectionScore = std::numeric_limits<float>::max();
     if (_landmarkID > 200) {

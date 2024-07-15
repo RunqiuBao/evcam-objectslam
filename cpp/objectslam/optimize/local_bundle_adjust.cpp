@@ -146,7 +146,6 @@ void optimize::DoLocalBA(std::shared_ptr<KeyFrame> pCurrKeyframe, bool* const bF
         auto pLocalLm = id_localLm.second;
         // create g2o vertex from the landmark and set to optimizer.
         auto landmarkCenterInWorld = pLocalLm->GetLandmarkPoseInWorld().block(0, 3, 3, 1).cast<double>();
-        TDO_LOG_CRITICAL("landmarkCenterInWorld: " << landmarkCenterInWorld);
         auto pLmVtx = g2outils::CreateLandmarkPointVertex(maxKeyframeID + 1 + pLocalLm->_landmarkID, landmarkCenterInWorld, false);
         optimizer.addVertex(pLmVtx);
         ids_landmarkPointVtx[pLocalLm->_landmarkID] = pLmVtx;

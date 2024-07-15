@@ -77,16 +77,16 @@ void LoadDetections(
         bWidth = boost::lexical_cast<float>(splitSDetection[3].c_str()) * imageWidth;
         bHeight = boost::lexical_cast<float>(splitSDetection[4].c_str()) * imageHeight;
         x_r = boost::lexical_cast<float>(splitSDetection[5].c_str()) * imageWidth;
-        y_r = boost::lexical_cast<float>(splitSDetection[6].c_str()) * imageWidth;
+        y_r = boost::lexical_cast<float>(splitSDetection[6].c_str()) * imageHeight;
         bWidth_r = boost::lexical_cast<float>(splitSDetection[7].c_str()) * imageWidth;
-        bHeight_r = boost::lexical_cast<float>(splitSDetection[8].c_str()) * imageWidth;
+        bHeight_r = boost::lexical_cast<float>(splitSDetection[8].c_str()) * imageHeight;
         Vec2_t keypt1(
-            boost::lexical_cast<float>(splitSDetection[9].c_str()),
-            boost::lexical_cast<float>(splitSDetection[10].c_str())
+            x - bWidth / 2 + boost::lexical_cast<float>(splitSDetection[9].c_str()) * bWidth,
+            y - bHeight / 2 + boost::lexical_cast<float>(splitSDetection[10].c_str()) * bHeight
         );
         Vec2_t keypt2(
-            boost::lexical_cast<float>(splitSDetection[11].c_str()),
-            boost::lexical_cast<float>(splitSDetection[12].c_str())
+            x - bWidth / 2 + boost::lexical_cast<float>(splitSDetection[11].c_str()) * bWidth,
+            y - bHeight / 2 + boost::lexical_cast<float>(splitSDetection[12].c_str()) * bHeight
         );
         std::vector<Vec2_t> keypts = {keypt1, keypt2};
         detectionScore = boost::lexical_cast<float>(splitSDetection[13].c_str());

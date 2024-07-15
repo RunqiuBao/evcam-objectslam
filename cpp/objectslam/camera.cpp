@@ -141,8 +141,8 @@ void camera::CameraBase::CreateThreeDDetections(
         this->ProjectPointTo3DByDepth((*pMatchedLeftCamDetection)._esitmated3DDepth, (*pMatchedLeftCamDetection)._centerX, (*pMatchedLeftCamDetection)._centerY, X, Y);
         Vec3_t objectCenterInRefFrame(X, Y, (*pMatchedLeftCamDetection)._esitmated3DDepth);
         // get keypt1 in 3D
-        float keypt1_x = (*pMatchedLeftCamDetection)._centerX - (*pMatchedLeftCamDetection)._bWidth * (0.5 - (*pMatchedLeftCamDetection)._keypts[0][0]);
-        float keypt1_y = (*pMatchedLeftCamDetection)._centerY - (*pMatchedLeftCamDetection)._bHeight * (0.5 - (*pMatchedLeftCamDetection)._keypts[0][1]);
+        float keypt1_x = (*pMatchedLeftCamDetection)._keypts[0][0];
+        float keypt1_y = (*pMatchedLeftCamDetection)._keypts[0][1];
         this->ProjectPointTo3DByDepth((*pMatchedLeftCamDetection)._esitmated3DDepth, keypt1_x, keypt1_y, X, Y);
         Vec3_t keypt1InCam(X, Y, pMatchedLeftCamDetection->_esitmated3DDepth);
         float horizontalSize = pMatchedLeftCamDetection->_bWidth * pMatchedLeftCamDetection->_esitmated3DDepth / _kk(0, 0);
