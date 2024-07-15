@@ -18,10 +18,10 @@ Eigen::MatrixXf GetVerticesOf3DBoundingCylinderForObject(
     Eigen::MatrixXf vertices3DInRefFrame = Eigen::MatrixXf::Zero(3, numVerticesOneSide * 2);
     Vec3_t vOc2TopC = topCenterPtInRefFrame - objectCenterInRefFrame;
     vOc2TopC /= vOc2TopC.norm();
-    Vec3_t behindCam(0, 0, -1.0);
-    Vec3_t vOc2Cam = behindCam - objectCenterInRefFrame;  // Note: so that it supports creating vectices at origin.
-    vOc2Cam /= vOc2Cam.norm();
-    Vec3_t vRadius = vOc2TopC.cross(vOc2Cam);
+    Vec3_t vOc2TopC_pert = vOc2TopC;
+    vOc2TopC_pert(0) += M_PI;
+    vOc2TopC_pert /= vOc2TopC_pert.norm();
+    Vec3_t vRadius = vOc2TopC.cross(vOc2TopC_pert);
     vRadius /= vRadius.norm();
     Vec3_t vRotate = vRadius;
     float theta = M_PI / 2;
@@ -31,7 +31,7 @@ Eigen::MatrixXf GetVerticesOf3DBoundingCylinderForObject(
         Vec3_t oneVertex = topCenterPtInRefFrame + vRotate * horizontalSize / 2;
         vertices3DInRefFrame.col(indexVertex) = oneVertex;
     }
-    vRadius = vOc2TopC.cross(vOc2Cam);
+    vRadius = vOc2TopC.cross(vOc2TopC_pert);
     vRadius /= vRadius.norm();
     theta = -theta;  // Note: keep the connecting edges between two sides straight.
     for (size_t indexVertex = numVerticesOneSide; indexVertex < numVerticesOneSide * 2; indexVertex++){

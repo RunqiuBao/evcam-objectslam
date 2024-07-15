@@ -43,6 +43,8 @@ public:
 
     void SetKeypt1InLandmark(const Vec3_t& keypt1InLandmark);
 
+    void SetLandmarkSize(const float observedHeight, const float horizontalSize);
+
     static void ComputeLandmarkPoseInWorldAndKeypt1InWolrd(
         const std::shared_ptr<KeyFrame> pRefKeyFrame,
         const std::shared_ptr<RefObject> pRefObjInKeyFrame,
@@ -58,6 +60,7 @@ public:
     const std::shared_ptr<object::ObjectBase> _pObjectInfo;
     Eigen::MatrixXf _vertices3DInLandmark;  // 3D bounding box in landmark frame.
     float _horizontalSize;  // diameter of a cylinder.
+    float _observedHeight;  // height of the cylinder = 2 * norm(oc - keypt1)
 
     void DeleteThis() { _bIsToDelete = true; }
     bool IsToDelete() { return _bIsToDelete; }
@@ -74,7 +77,7 @@ private:
 
     mutable std::mutex _mtxObservations;
     mutable std::mutex _mtxLandmarkPose;
-    mutable std::mutex _mtxKeypt1;
+    mutable std::mutex _mtxLandmarkSize;
 
     static std::atomic<unsigned int> _nextID;
 };

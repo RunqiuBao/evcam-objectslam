@@ -152,6 +152,13 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
     // the dataset dir includes `detections` and `sysconfig.json`
 
     rapidjson::Document& sysConfigJson = _cfg->_jsonConfigNode;
+
+    Vec3_t objectSize;
+    objectSize << sysConfigJson["objects"]["0"]["objectSize"][0].GetFloat(),
+                  sysConfigJson["objects"]["0"]["objectSize"][1].GetFloat(),
+                  sysConfigJson["objects"]["0"]["objectSize"][2].GetFloat();
+    _pMapDb->SetObjectSize(objectSize);
+
     Eigen::Matrix3f kk;
     rapidjson::Value& kkJson = sysConfigJson["camera"]["kk"];
     for (rapidjson::SizeType i = 0; i < kkJson.Size(); i++){
@@ -308,23 +315,26 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
             _pKeyFrameStack.push_back(pOneKeyframe);
             _pMapDb->AddKeyFrame(pOneKeyframe);
             pOneFrame->SetDetectionsAsRefObjects();
-            _tracker.CreateNewLandmarks(pOneKeyframe, _pMapDb);
+            _tracker.CreateNewLandmarks(pOneKeyframe, _pMapDb, isDebug);
         }
         else{
             Mat44_t nextFrameInCameraTransformBackup = nextFrameInCameraTransform;  // Note: backup in case first track fails and nextFrameInCameraTransform will be set to identity,
             bool isSuccess = _tracker.DoMotionBasedTrack(*pOneFrame, (*_pFrameStack.back()), nextFrameInCameraTransform, isDebug);
 
-            if ((!isSuccess) && (*_pFrameStack.back())._isTracked){
+            if ((!isSuccess) && ((*_pFrameStack.back())._isTracked)){
                 bool isSuccess = _tracker.Do2DTrackingBasedTrack(*pOneFrame, (*_pFrameStack.back()), nextFrameInCameraTransform, isDebug);
                 // TODO: if fail again, need another track trial from keyframe.
                 if (!isSuccess){
-                    nextFrameInCameraTransform = (*_pFrameStack.back()).GetPose();
-                    bool isSuccess = _tracker.DoMotionBasedTrack(*pOneFrame, (*_tracker._pRefKeyframe->_pRefFrame), nextFrameInCameraTransform, isDebug);
+                    // nextFrameInCameraTransform = (*_pFrameStack.back()).GetPose();
+                    // bool isSuccess = _tracker.DoMotionBasedTrack(*pOneFrame, (*_tracker._pRefKeyframe->_pRefFrame), nextFrameInCameraTransform, isDebug);
+                    // try relocalize from map
+                    bool isSuccess = _tracker.DoRelocalizeFromMap(*pOneFrame, (*_pFrameStack.back()), _pMapDb, nextFrameInCameraTransform, isDebug);
                     if (!isSuccess){
                         TDO_LOG_DEBUG("track trial from keyframe also failed.");
                     }
                 }
             }
+
 
             // insert new key frame if detection increased than previous frame
             if (isSuccess && (pOneFrame->_threeDDetections.size() > (*_pFrameStack.back())._threeDDetections.size())){
@@ -353,7 +363,7 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
                 pOneFrame->SetPose(Eigen::Matrix4f::Identity());
                 TDO_LOG_INFO("keyframe insert! frame number: " << filename);
                 TDO_LOG_INFO("keyframe in world pose: " << pOneKeyframe->GetKeyframePoseInWorld());
-                _tracker.CreateNewLandmarks(pOneKeyframe, _pMapDb);
+                _tracker.CreateNewLandmarks(pOneKeyframe, _pMapDb, isDebug);
                 // if (_pKeyFrameStack.size() > 5 && _pKeyFrameStack[_pKeyFrameStack.size() - 5]->_bContainNewLandmarks) {
                 //     TDO_LOG_DEBUG_FORMAT("Entered landmark pruning at keyframe(%d).", _pKeyFrameStack[_pKeyFrameStack.size() - 5]->_keyFrameID);
                 //     _pMapper->SchedulePruneLandmarksTask(_pKeyFrameStack[_pKeyFrameStack.size() - 5]);

@@ -22,6 +22,8 @@ typedef Eigen::Matrix4f Mat44_t;
 typedef Eigen::Matrix3f Mat33_t;
 typedef Eigen::Vector3f Vec3_t;
 typedef Eigen::Vector2f Vec2_t;
+typedef Eigen::Vector3d Vec3_d;
+typedef Eigen::Matrix<double, 5, 1> Vec5_d;
 typedef std::array<float, 3> ObjectExtents;
 
 // -------- double precision, mainly used in g2outils -----------

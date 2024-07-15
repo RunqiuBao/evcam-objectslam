@@ -55,11 +55,16 @@ public:
     //!NOTE: cannot be used in map_database class. Only use from outside.
     static std::mutex _mtxDatabase;
 
+    void SetObjectSize(const Vec3_t& objectSize) {_objectSize = objectSize;}
+    const Vec3_t GetObjectSize(){return _objectSize;}
+
 private:
     // mutex for mutal exclusion controll between class methods called in different threads
     mutable std::mutex _mtxMapKeyframesAccess;
 
     mutable std::mutex _mtxMapLandmarksAccess;
+
+    Vec3_t _objectSize;
 
 };
 

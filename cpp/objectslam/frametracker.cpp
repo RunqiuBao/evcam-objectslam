@@ -5,6 +5,8 @@
 
 #include <filesystem>
 #include <algorithm>
+#include <stdexcept>
+
 #include <opencv2/tracking.hpp>
 #include <opencv2/tracking/tracking_legacy.hpp>
 
@@ -56,6 +58,149 @@ static void TrackWithPnP(
     currentFrameInRefKeyFrame = refKeyFrameInCurrentFrame.inverse();
 }
 
+bool FrameTracker::DoRelocalizeFromMap(Frame& currentFrame, const Frame& lastFrame, std::shared_ptr<MapDataBase> pMapDb, Mat44_t& velocity, const bool isDebug){
+    float maxPoseError = 0.5;
+    size_t minIoUToReject = 0.6;
+
+    std::vector<std::shared_ptr<LandMark>> visibleLandmarks = pMapDb->GetVisibleLandmarks(_pRefKeyframe);
+    if (visibleLandmarks.size() < 4) {
+        velocity = Eigen::Matrix4f::Identity();
+        currentFrame.SetPose(lastFrame.GetPose() * velocity);
+        TDO_LOG_DEBUG("relocalization failed. not enough visible landmarks.");
+        return false;
+    }
+    std::vector<int> indicesCorrespondingDetecton;
+    indicesCorrespondingDetecton.reserve(visibleLandmarks.size());
+    int imgHeight = (*_pRefKeyframe->_pCamera)._rows;
+    int imgWidth = (*_pRefKeyframe->_pCamera)._cols;
+    cv::Mat displayLdms(imgHeight, imgWidth, CV_8UC1, cv::Scalar(0));
+    cv::Mat displayDetections(imgHeight, imgWidth, CV_8UC1, cv::Scalar(0));
+    camera::CameraBase& camInstance = (*_pRefKeyframe->_pCamera);
+    for (int indexVisibleLandmark=0; indexVisibleLandmark < visibleLandmarks.size(); indexVisibleLandmark++){
+        std::shared_ptr<LandMark> pOneLandmark = visibleLandmarks[indexVisibleLandmark];
+        Eigen::MatrixXf transformedVerticesInWorld = mathutils::TransformPoints<Eigen::MatrixXf>(pOneLandmark->GetLandmarkPoseInWorld(), pOneLandmark->_vertices3DInLandmark);
+        Eigen::MatrixXf transformedVerticesInCamera = mathutils::TransformPoints<Eigen::MatrixXf>((_pRefKeyframe->GetKeyframePoseInWorld()).inverse(), transformedVerticesInWorld);
+        std::vector<cv::Point> oneLandmarkPoints2D = mathutils::ProjectPoints3DToPoints2D(transformedVerticesInCamera, camInstance);
+        cv::Mat oneLandmarkPoseMask = mathutils::Draw2DHullMaskFrom2DPointsSet(oneLandmarkPoints2D, imgHeight, imgWidth);
+        if (isDebug){
+            cv::bitwise_or(oneLandmarkPoseMask, displayLdms, displayLdms);
+        }
+        size_t countDetection = 0;
+        int indexLargestOverlap = -1;
+        float largestIoU = -1;
+        for (ThreeDDetection currentDetection : currentFrame._threeDDetections){
+            std::vector<cv::Point> points2DCV = mathutils::ProjectPoints3DToPoints2D(currentDetection._vertices3DInRefFrame, camInstance);
+            cv::Mat currentDetectionPoseMask = mathutils::Draw2DHullMaskFrom2DPointsSet(points2DCV, imgHeight, imgWidth);
+            cv::Mat overlaps, unions;
+            cv::bitwise_and(oneLandmarkPoseMask, currentDetectionPoseMask, overlaps);
+            cv::bitwise_or(oneLandmarkPoseMask, currentDetectionPoseMask, unions);
+            cv::Scalar sumOverlaps = cv::sum(overlaps);
+            cv::Scalar sumUnions = cv::sum(unions);
+            if ((sumOverlaps[0] / sumUnions[0]) > largestIoU && (sumOverlaps[0] / sumUnions[0]) > minIoUToReject){
+                indexLargestOverlap = countDetection;
+                largestIoU = (sumOverlaps[0] / sumUnions[0]);
+            }
+            countDetection++;
+            if (isDebug && indexVisibleLandmark == 0){
+                cv::bitwise_or(currentDetectionPoseMask, displayDetections, displayDetections);
+            }
+        }
+        indicesCorrespondingDetecton.push_back(indexLargestOverlap);
+    }
+    if (isDebug){
+        std::vector<cv::Mat> channels;
+        cv::Mat zeroChannel(imgHeight, imgWidth, CV_8UC1, cv::Scalar(0));
+        cv::Scalar sum = cv::sum(displayLdms);
+        cv::Scalar sum2 = cv::sum(displayDetections);
+        TDO_LOG_DEBUG("displayRefObjects sum: " << sum[0]);
+        TDO_LOG_DEBUG("displayDetections sum: " << sum2[0]);
+        channels.push_back(displayLdms * 255);
+        channels.push_back(displayDetections * 255);
+        channels.push_back(zeroChannel * 255);
+        cv::Mat debugRelocal;
+        cv::merge(channels, debugRelocal);
+        std::filesystem::path debugRelocalPath = _sStereoSequencePathForDebug;
+        debugRelocalPath.append("debugRelocalization/");
+        if (!std::filesystem::exists(debugRelocalPath) && !std::filesystem::create_directory(debugRelocalPath)){
+            TDO_LOG_ERROR_FORMAT("Failed to create the folder: %s", debugRelocalPath.string());
+            throw std::runtime_error("Debug");
+        }
+        debugRelocalPath.append(mathutils::FillZeros(std::to_string(static_cast<int>(currentFrame._timestamp)), 6) + ".png");
+        cv::imwrite(debugRelocalPath.string() , debugRelocal);
+    }
+
+    // 3D object points in world coordinates
+    std::vector<cv::Point3f> objectPoints;
+    // Populate objectPoints with the corresponding 3D points from the landmark.
+    // 2D image points in image coordinates
+    std::vector<cv::Point2f> imagePoints;
+    // Populate imagePoints with the corresponding 2D points from the detections in current frame.
+    size_t indexLandmark = 0;
+    for (int indexCorrespondingDetection : indicesCorrespondingDetecton){
+        if (indexCorrespondingDetection < 0){
+            indexLandmark++;
+            continue;
+        }
+        // object center
+        cv::Point3f point3D(
+            visibleLandmarks[indexLandmark]->GetLandmarkPoseInWorld()(0, 3),
+            visibleLandmarks[indexLandmark]->GetLandmarkPoseInWorld()(1, 3),
+            visibleLandmarks[indexLandmark]->GetLandmarkPoseInWorld()(2, 3)
+        );
+        objectPoints.push_back(point3D);
+        cv::Point2f point2D(
+            (*currentFrame._matchedLeftCamDetections[indexCorrespondingDetection])._centerX,
+            (*currentFrame._matchedLeftCamDetections[indexCorrespondingDetection])._centerY
+        );
+        imagePoints.push_back(point2D);
+        indexLandmark++;
+    }
+
+    // Estimate current frame pose using PnP
+    if (objectPoints.size() < 4){
+        // relocal failed
+        velocity = Eigen::Matrix4f::Identity();
+        currentFrame.SetPose(lastFrame.GetPose() * velocity);
+        TDO_LOG_DEBUG("relocalization failed. not updating camera pose.");
+        // not updating cameraInWorld
+        return false;
+    }
+    else{
+        // Camera intrinsic matrix (3x3)
+        cv::Mat cameraMatrix = cv::Mat::eye(3, 3, CV_64F);
+        cameraMatrix.at<double>(0, 0) = static_cast<double>(camInstance._kk(0, 0));
+        cameraMatrix.at<double>(0, 2) = static_cast<double>(camInstance._kk(0, 2));
+        cameraMatrix.at<double>(1, 1) = static_cast<double>(camInstance._kk(1, 1));
+        cameraMatrix.at<double>(1, 2) = static_cast<double>(camInstance._kk(1, 2));
+        // Set the appropriate values for the cameraMatrix
+        // Distortion coefficients
+        cv::Mat distCoeffs = cv::Mat::zeros(5, 1, CV_64F);
+        // Set the appropriate values for the distCoeffs
+        Mat44_t currentFrameInWorld, currentFrameInRefKeyFrame;
+        TrackWithPnP(objectPoints, imagePoints, cameraMatrix, distCoeffs, maxPoseError, currentFrameInWorld);
+        TDO_LOG_DEBUG("relocalization result current Frame in world: \n" << currentFrameInWorld);
+        currentFrameInRefKeyFrame = (_pRefKeyframe->GetKeyframePoseInWorld()).inverse() * currentFrameInWorld;
+        velocity = lastFrame.GetPose().inverse() * currentFrameInRefKeyFrame;
+        if (
+            velocity.block(0, 3, 3, 1).norm() > maxPoseError
+        ){
+            // track failed
+            velocity = Eigen::Matrix4f::Identity();
+            currentFrame.SetPose(lastFrame.GetPose() * velocity);
+            TDO_LOG_DEBUG("relocalization failed. not updating camera pose.");
+            // not updating cameraInWorld
+            return false;
+        }
+        else{
+            currentFrame.SetPose(currentFrameInRefKeyFrame);
+            currentFrame._isTracked = true;
+            TDO_LOG_CRITICAL("relocalization succeeded. currentFrameInLast:\n" << velocity);
+            return true;
+        }
+    }
+
+}
+
 bool FrameTracker::DoMotionBasedTrack(Frame& currentFrame, const Frame& lastFrame, Mat44_t& velocity, const bool isDebug) const{
     size_t minIoUToReject = 0.6;
     float maxPoseError = 0.5;
@@ -69,15 +214,14 @@ bool FrameTracker::DoMotionBasedTrack(Frame& currentFrame, const Frame& lastFram
     cv::Mat displayRefObjects(myStereoCamera._rows, myStereoCamera._cols, CV_8UC1, cv::Scalar(0));
     cv::Mat displayDetections(myStereoCamera._rows, myStereoCamera._cols, CV_8UC1, cv::Scalar(0));
     for (std::shared_ptr<RefObject> refObject : refObjects){
-        Eigen::MatrixXf transformedVertices = mathutils::TransformPoints<Eigen::MatrixXf>((velocity * lastFrame.GetPose()).inverse(), refObject->_detection._vertices3DInRefFrame);
+        Eigen::MatrixXf transformedVertices = mathutils::TransformPoints<Eigen::MatrixXf>((lastFrame.GetPose() * velocity).inverse(), refObject->_detection._vertices3DInRefFrame);
         std::vector<cv::Point> points2DCV = mathutils::ProjectPoints3DToPoints2D(transformedVertices, myStereoCamera);
         cv::Mat refObjectPoseMask = mathutils::Draw2DHullMaskFrom2DPointsSet(points2DCV, myStereoCamera._rows, myStereoCamera._cols);
-        int refObjectPoseMaskDataType = refObjectPoseMask.type();
-        int displayRefObjectsDataType = displayRefObjects.type();
-        cv::bitwise_or(refObjectPoseMask, displayRefObjects, displayRefObjects);
+        if (isDebug){
+            cv::bitwise_or(refObjectPoseMask, displayRefObjects, displayRefObjects);
+        }
         size_t countDetection = 0;
         int indexLargestOverlap = -1;
-        int largestOverlapArea = 0;
         float largestIoU = -1;
         for (ThreeDDetection currentDetection : currentFrame._threeDDetections){
             std::vector<cv::Point> points2DCV = mathutils::ProjectPoints3DToPoints2D(currentDetection._vertices3DInRefFrame, myStereoCamera);
@@ -87,18 +231,17 @@ bool FrameTracker::DoMotionBasedTrack(Frame& currentFrame, const Frame& lastFram
             cv::bitwise_or(refObjectPoseMask, currentDetectionPoseMask, unions);
             cv::Scalar sumOverlaps = cv::sum(overlaps);
             cv::Scalar sumUnions = cv::sum(unions);
-            if (sumOverlaps[0] > largestOverlapArea && (sumOverlaps[0] / sumUnions[0]) > minIoUToReject){
+            if ((sumOverlaps[0] / sumUnions[0]) > largestIoU && (sumOverlaps[0] / sumUnions[0]) > minIoUToReject){
                 indexLargestOverlap = countDetection;
-                largestOverlapArea = sumOverlaps[0];
                 largestIoU = (sumOverlaps[0] / sumUnions[0]);
             }
             // TDO_LOG_DEBUG_FORMAT("RefObject No.%d, detection No.%d, overlapping area: %d", countRefObject % countDetection % sum[0]);
             countDetection++;
+            if (isDebug && countRefObject == 0){
+                cv::bitwise_or(currentDetectionPoseMask, displayDetections, displayDetections);
+            }
         }
         if (indexLargestOverlap >= 0){
-            std::vector<cv::Point> points2DCV = mathutils::ProjectPoints3DToPoints2D(currentFrame._threeDDetections[indexLargestOverlap]._vertices3DInRefFrame, myStereoCamera);
-            cv::Mat detectionPoseMask = mathutils::Draw2DHullMaskFrom2DPointsSet(points2DCV, myStereoCamera._rows, myStereoCamera._cols);
-            cv::bitwise_or(detectionPoseMask, displayDetections, displayDetections);
             TDO_LOG_DEBUG("found corresponding detection for refObject " << std::to_string(countRefObject) << ", IoU :" << std::to_string(largestIoU));
         }
         indicesCorrespondingDetecton.push_back(indexLargestOverlap);
@@ -122,7 +265,7 @@ bool FrameTracker::DoMotionBasedTrack(Frame& currentFrame, const Frame& lastFram
         debugTrackingPath.append("debugTracking/");
         if (!std::filesystem::exists(debugTrackingPath) && !std::filesystem::create_directory(debugTrackingPath)){
             TDO_LOG_ERROR_FORMAT("Failed to create the folder: %s", debugTrackingPath.string());
-            return false;
+            throw std::runtime_error("Debug");
         }
         debugTrackingPath.append(mathutils::FillZeros(std::to_string(static_cast<int>(currentFrame._timestamp)), 6) + ".png");
         cv::imwrite(debugTrackingPath.string() , debugTracking);
@@ -180,11 +323,11 @@ bool FrameTracker::DoMotionBasedTrack(Frame& currentFrame, const Frame& lastFram
 
     }
 
-    // Estimate camera pose using PnP
+    // Estimate current frame pose using PnP
     if (objectPoints.size() < 4){
         // track failed
         velocity = Eigen::Matrix4f::Identity();
-        currentFrame.SetPose(velocity * lastFrame.GetPose());
+        currentFrame.SetPose(lastFrame.GetPose() * velocity);
         TDO_LOG_DEBUG("track fail. not updating camera pose.");
         // not updating cameraInWorld
         return false;
@@ -210,7 +353,7 @@ bool FrameTracker::DoMotionBasedTrack(Frame& currentFrame, const Frame& lastFram
         ){
             // track failed
             velocity = Eigen::Matrix4f::Identity();
-            currentFrame.SetPose(velocity * lastFrame.GetPose());
+            currentFrame.SetPose(lastFrame.GetPose() * velocity);
             TDO_LOG_DEBUG("track fail. not updating camera pose.");
             // not updating cameraInWorld
             return false;
@@ -219,7 +362,7 @@ bool FrameTracker::DoMotionBasedTrack(Frame& currentFrame, const Frame& lastFram
             currentFrame.SetPose(currentFrameInRefKeyFrame);
             currentFrame._isTracked = true;
             currentFrame._detectionIDsOfCorrespondingRefObjects = indicesCorrespondingDetecton;
-            TDO_LOG_DEBUG("track succeeded. currentFrameInRefFrame:\n" << velocity);
+            TDO_LOG_DEBUG("track succeeded. currentFrameInLast:\n" << velocity);
             return true;
         }
     }
@@ -374,14 +517,17 @@ bool FrameTracker::Do2DTrackingBasedTrack(Frame& currentFrame, const Frame& last
 }
 
 
-void FrameTracker::CreateNewLandmarks(std::shared_ptr<KeyFrame> pRefKeyFrame, std::shared_ptr<MapDataBase> pMapDb){
+void FrameTracker::CreateNewLandmarks(std::shared_ptr<KeyFrame> pRefKeyFrame, std::shared_ptr<MapDataBase> pMapDb, const bool isDebug){
+    float minIoUForCorrespondence = 0.6;
+    // float sizeDiffToReject = 0.5;
+
     std::vector<std::shared_ptr<LandMark>> visibleLandmarks = pMapDb->GetVisibleLandmarks(pRefKeyFrame);  // Note: find landmarks that might fall within FoV of this keyframe.
     std::map<std::shared_ptr<LandMark>, unsigned int> observedLandmarks_indicesRefObj;
-    float minIoUForCorrespondence = 0.6;
     std::vector<int> indicesLandmarkForRefObjects(pRefKeyFrame->_refObjects.size(), -1);
     std::vector<float> distancesObjectToClosestLandmark(pRefKeyFrame->_refObjects.size(), std::numeric_limits<float>::max());
     std::vector<int> indicesForClosestLandmark(pRefKeyFrame->_refObjects.size(), -1);
     size_t countNewLandmark = 0;
+    cv::Mat displayVisibleLdms((*pRefKeyFrame->_pCamera)._rows, (*pRefKeyFrame->_pCamera)._cols, CV_8UC1, cv::Scalar(0));
     for (int indexRefObject=0; indexRefObject < pRefKeyFrame->_refObjects.size(); indexRefObject++){
         std::shared_ptr<RefObject> pRefObject = pRefKeyFrame->_refObjects[indexRefObject];
         std::vector<cv::Point> refObjectPoints2D = mathutils::ProjectPoints3DToPoints2D(pRefObject->_detection._vertices3DInRefFrame, (*pRefKeyFrame->_pCamera));
@@ -397,6 +543,9 @@ void FrameTracker::CreateNewLandmarks(std::shared_ptr<KeyFrame> pRefKeyFrame, st
             cv::bitwise_or(refObjectPoseMask, oneLandmarkPoseMask, unions);
             cv::Scalar overlapArea = cv::sum(overlaps);
             cv::Scalar unionsArea = cv::sum(unions);
+            if (isDebug && indexRefObject == 0){
+                cv::bitwise_or(oneLandmarkPoseMask, displayVisibleLdms, displayVisibleLdms);
+            }
             if ((overlapArea[0] / unionsArea[0]) > minIoUForCorrespondence){
                 indicesLandmarkForRefObjects[indexRefObject] = indexVisibleLandmark;
                 observedLandmarks_indicesRefObj[visibleLandmarks[indexVisibleLandmark]] = indexRefObject;
@@ -422,7 +571,7 @@ void FrameTracker::CreateNewLandmarks(std::shared_ptr<KeyFrame> pRefKeyFrame, st
         }
         else{
             // might be the initial keyframe. Or there are no visiable landmarks existing for this keyframe.
-            distanceThreshold =  0;
+            distanceThreshold = 0;
         }
         if (indicesLandmarkForRefObjects[indexRefObject] < 0){
             if (distancesObjectToClosestLandmark[indexRefObject] > distanceThreshold){  // if within certain physical distance, still create correspondence.
@@ -430,6 +579,22 @@ void FrameTracker::CreateNewLandmarks(std::shared_ptr<KeyFrame> pRefKeyFrame, st
                 Mat44_t poseLandmarkInWorld;
                 Vec3_t keypt1InLandmark;
                 LandMark::ComputeLandmarkPoseInWorldAndKeypt1InWolrd(pRefKeyFrame, pRefObject, poseLandmarkInWorld, keypt1InLandmark);
+
+                // // if size too different, abandon
+                // Vec3_t objectSize = pMapDb->GetObjectSize();
+                // if (pRefObject->_detection._horizontalSize < objectSize.minCoeff() * (1 - sizeDiffToReject)){
+                //     continue;
+                // }
+                // else if (pRefObject->_detection._horizontalSize > objectSize.minCoeff() * (1 + sizeDiffToReject)){
+                //     continue;
+                // }
+                // else if ((keypt1InLandmark.norm() * 2) < objectSize.maxCoeff() * (1 - sizeDiffToReject)){
+                //     continue;
+                // }
+                // else if ((keypt1InLandmark.norm() * 2) > objectSize.maxCoeff() * (1 + sizeDiffToReject)){
+                //     continue;
+                // }
+
                 std::shared_ptr<object::ObjectBase> pObjectInfo = pRefObject->_detection._pObjectInfo;
                 std::shared_ptr<LandMark> pOneLandmark = std::make_shared<LandMark>(
                     poseLandmarkInWorld,
@@ -452,6 +617,19 @@ void FrameTracker::CreateNewLandmarks(std::shared_ptr<KeyFrame> pRefKeyFrame, st
         // TODO: should use multi-view stereo to update landmark pose. need stereo rectification and check if object is within FoV after stereo recti.
         visibleLandmarks[indicesLandmarkForRefObjects[indexRefObject]]->AddObservation(pRefKeyFrame, indexRefObject);
         observedLandmarks_indicesRefObj[visibleLandmarks[indicesLandmarkForRefObjects[indexRefObject]]] = indexRefObject;
+    }
+
+    if (isDebug){
+        std::filesystem::path debugLdmProj = _sStereoSequencePathForDebug;
+        debugLdmProj.append("debugLdmProj/");
+        if (!std::filesystem::exists(debugLdmProj) && !std::filesystem::create_directory(debugLdmProj)){
+            TDO_LOG_ERROR_FORMAT("Failed to create the folder: %s", debugLdmProj.string());
+        }
+        else{
+            debugLdmProj.append(mathutils::FillZeros(std::to_string(static_cast<int>(pRefKeyFrame->_keyFrameID)), 6) + ".png");
+
+            cv::imwrite(debugLdmProj.string() , displayVisibleLdms * 255);
+        }
     }
     pRefKeyFrame->InitializeObservedLandmarks(observedLandmarks_indicesRefObj);
     TDO_LOG_INFO_FORMAT("Created %d new landmarks in keyframe %d. \nTotally %d landmarks currently in MapDb.", countNewLandmark % pRefKeyFrame->_keyFrameID % pMapDb->_landmarks.size());
