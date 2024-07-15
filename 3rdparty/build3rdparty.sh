@@ -66,8 +66,8 @@ if [[ "$answer" == [yY] ]]; then
   (cd g2o
    mkdir -p g2oinstall
    mkdir -p build && cd build
-   cmake -DCMAKE_INSTALL_PREFIX=../g2oinstall ..
-   make -j8
+   cmake -DCMAKE_INSTALL_PREFIX=../g2oinstall -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_COMPILER=clang ..
+   CC=clang CXX=clang++ make -j8
    make install
   )
 fi
@@ -78,5 +78,16 @@ if [[ "$answer" == [yY] ]]; then
    mkdir -p eigeninstall
    mkdir -p build && cd build
    cmake -DCMAKE_INSTALL_PREFIX=../eigeninstall/ ..
+   make -j12
+   make install)
+fi
+
+read -p "Do you want to build pcl?(y/n)" answer
+if [[ "$answer" == [yY] ]]; then
+  (cd pcl
+   mkdir -p pclinstall
+   mkdir -p build && cd build
+   cmake -DCMAKE_INSTALL_PREFIX=../pclinstall/ -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_COMPILER=clang ..
+   CC=clang CXX=clang++ make -j12
    make install)
 fi
