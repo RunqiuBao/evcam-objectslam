@@ -10,6 +10,7 @@ RAPIDJSON_LIB_PATH="/home/runqiu/code/event_camera_repo/tools/tool_eventbasedobj
 OPENCV4_LIB_PATH="/home/runqiu/code/event_camera_repo/tools/tool_eventbasedobjectslam/3rdparty/opencv/opencvinstall/lib"
 PANGOLIN_LIB_PATH="/home/runqiu/code/event_camera_repo/tools/tool_eventbasedobjectslam/3rdparty/Pangolin/pangolininstall/lib"
 G2O_LIB_PATH="/home/runqiu/code/event_camera_repo/tools/tool_eventbasedobjectslam/3rdparty/g2o/g2oinstall/lib"
+PCL_LIB_PATH="/home/runqiu/code/event_camera_repo/tools/tool_eventbasedobjectslam/3rdparty/pcl/pclinstall/lib"
 PYTHONPACKAGE_SRC_PATH="/home/runqiu/code/event_camera_repo/tools/tool_eventbasedobjectslam/python/src"
 isAddPaths=false
 isInstallPythonPackage=false
@@ -89,6 +90,10 @@ function parse_args() {
                 G2O_LIB_PATH="$2"
                 shift 2
                 ;;
+            --pcllibpath)
+                PCL_LIB_PATH="$2"
+                shift 2
+                ;;
             --pypackagepath)
                 PYTHONPACKAGE_SRC_PATH="$2"
                 shift 2
@@ -141,6 +146,7 @@ if $isAddPaths; then
     export LD_LIBRARY_PATH=${OPENCV4_LIB_PATH}:${LD_LIBRARY_PATH}
     export LD_LIBRARY_PATH=${PANGOLIN_LIB_PATH}:${LD_LIBRARY_PATH}
     export LD_LIBRARY_PATH=${G2O_LIB_PATH}:${LD_LIBRARY_PATH}
+    export LD_LIBRARY_PATH=${PCL_LIB_PATH}:${LD_LIBRARY_PATH}
     # echo -e "[Add lib path & python src path] LD_LIBRARY_PATH: ${LD_LIBRARY_PATH}"
     # add paths for python packages
     export PYTHONPATH="${PYTHONPACKAGE_SRC_PATH}:$PYTHONPATH"
@@ -158,6 +164,7 @@ cmake \
   -DINSTALLED_OPENCV4_LIB_PATH=${OPENCV4_LIB_PATH} \
   -DINSTALLED_G2O_LIB_PATH=${G2O_LIB_PATH} \
   -DINSTALL_PATH_ALLTARGETS=${INSTALL_PATH} \
+  -DINSTALLED_PCL_LIB_PATH=${PCL_LIB_PATH} \
   ..
 make
 make install)

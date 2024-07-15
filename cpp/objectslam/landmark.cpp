@@ -16,13 +16,15 @@ LandMark::LandMark(
     const float horizontalSize,
     const std::shared_ptr<object::ObjectBase> pObjectInfo
 )
-:_poseLandmarkInWorld(poseLandmarkInWorld), _keypt1InLandmark(keypt1InLandmark), _landmarkID(_nextID++), _pObjectInfo(pObjectInfo), _bIsToDelete(false)
+:_poseLandmarkInWorld(poseLandmarkInWorld), _keypt1InLandmark(keypt1InLandmark), _horizontalSize(horizontalSize), _landmarkID(_nextID++), _pObjectInfo(pObjectInfo), _bIsToDelete(false)
 {
     Vec3_t landmarkCenter = Eigen::Vector3f::Zero(3);
     _vertices3DInLandmark = GetVerticesOf3DBoundingCylinderForObject(4, horizontalSize, landmarkCenter, _keypt1InLandmark);
+    TDO_LOG_CRITICAL("landmarkCenter: \n"<< landmarkCenter << ",\n _keypt1InLandmark:\n" << _keypt1InLandmark);
+
     _bestDetectionScore = std::numeric_limits<float>::max();
-    if (_landmarkID > 100) {
-        TDO_LOG_CRITICAL_FORMAT("iiregular landmarkID(%d)", _landmarkID);
+    if (_landmarkID > 200) {
+        TDO_LOG_ERROR_FORMAT("too much landmarks initialized (%d)", _landmarkID);
     }
 }
 

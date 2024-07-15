@@ -1,7 +1,19 @@
 #ifndef EVENTOBJECTSLAM_H
 #define EVENTOBJECTSLAM_H
 
+#include <iostream>
+#include <stdexcept>
+#undef eigen_assert
+#define eigen_assert(x) do { \
+    if (!(x)) { \
+        std::cerr << "Eigen assertion failed: " #x << " at " << __FILE__ << ":" << __LINE__ << std::endl; \
+        /* Take other actions if needed, e.g., set an error flag, etc. */ \
+    } \
+} while (0)
+
 #include <Eigen/Core>
+#include <Eigen/Dense>
+
 #include <memory>
 
 namespace eventobjectslam {

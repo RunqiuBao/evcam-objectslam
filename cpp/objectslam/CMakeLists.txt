@@ -28,7 +28,9 @@ target_link_libraries(ObjectSlam PRIVATE
         Eigen3::Eigen
         ${Boost_LIBRARIES}
         ${G2O_LIBS}
-        ${PCL_LIBRARIES})
+        ${PCL_COMMON_LIBRARIES}
+        ${PCL_IO_LIBRARIES}
+        ${PCL_SEGMENTATION_LIBRARIES})
 target_link_libraries(ObjectSlam PUBLIC ${Pangolin_LIBRARIES})
 
 install(TARGETS ObjectSlam

@@ -53,7 +53,8 @@ find_package(Boost REQUIRED)
 include_directories(${Boost_INCLUDE_DIRS})
 
 # include pcl
-find_package(PCL REQUIRED)
+set(CMAKE_PREFIX_PATH "${INSTALLED_PCL_LIB_PATH}/../share/pcl-1.14" ${CMAKE_PREFIX_PATH})
+find_package(PCL REQUIRED COMPONENTS common io segmentation)
 include_directories(${PCL_INCLUDE_DIRS})
 link_directories(${PCL_LIBRARY_DIRS})
 

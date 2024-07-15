@@ -18,7 +18,7 @@ namespace eventobjectslam {
 void optimize::DoLocalBA(std::shared_ptr<KeyFrame> pCurrKeyframe, bool* const bForceStopFlag, const size_t numFirstIter, const size_t numSecondIter) {
     // -------- (1) --------
     // collect local/fixed keyframes, local landmark.
-
+    TDO_LOG_CRITICAL("entered LocalBA!");
     // collect local keyframes of the current keyframe.
     std::unordered_map<unsigned int, std::shared_ptr<KeyFrame>> ids_localKeyframes;  // Note: keyframes that are within covisibilities of current keyframe.
     ids_localKeyframes[pCurrKeyframe->_keyFrameID] = pCurrKeyframe;
@@ -145,10 +145,11 @@ void optimize::DoLocalBA(std::shared_ptr<KeyFrame> pCurrKeyframe, bool* const bF
     for (auto& id_localLm : ids_localLandmarks) {
         auto pLocalLm = id_localLm.second;
         // create g2o vertex from the landmark and set to optimizer.
-        auto pLmVtx = g2outils::CreateLandmarkPointVertex(maxKeyframeID + 1 + pLocalLm->_landmarkID, pLocalLm->GetLandmarkPoseInWorld().block(0, 3, 3, 1).cast<double>(), false);
+        auto landmarkCenterInWorld = pLocalLm->GetLandmarkPoseInWorld().block(0, 3, 3, 1).cast<double>();
+        TDO_LOG_CRITICAL("landmarkCenterInWorld: " << landmarkCenterInWorld);
+        auto pLmVtx = g2outils::CreateLandmarkPointVertex(maxKeyframeID + 1 + pLocalLm->_landmarkID, landmarkCenterInWorld, false);
         optimizer.addVertex(pLmVtx);
         ids_landmarkPointVtx[pLocalLm->_landmarkID] = pLmVtx;
-
         const std::map<std::shared_ptr<KeyFrame>, unsigned int> observations_indices = pLocalLm->GetObservations();
         for (const auto& pObs_idx : observations_indices) {
             auto pKeyframe = pObs_idx.first;
@@ -179,8 +180,20 @@ void optimize::DoLocalBA(std::shared_ptr<KeyFrame> pCurrKeyframe, bool* const bF
             return;
         }
     }
+
     optimizer.initializeOptimization();
-    optimizer.optimize(numFirstIter);
+    TDO_LOG_CRITICAL_FORMAT("start optimize with %d allKeyframes, %d ids_localLandmarks, %d ReprojEdges.", allKeyframes.size() % ids_localLandmarks.size() % reprojEdgeWraps.size());
+    try{
+        optimizer.optimize(numFirstIter);
+    }
+    catch (const std::exception& e){
+        TDO_LOG_CRITICAL("caught exception during optimization. skip localBA. Error:\n" << e.what());
+        return;
+    }
+    catch (...) {
+        TDO_LOG_CRITICAL("caught unknown exception during optimization. skip localBA.");
+        return;
+    }
 
     // -------- (6) --------
     // remove outliers and 2nd round.
@@ -256,7 +269,7 @@ void optimize::DoLocalBA(std::shared_ptr<KeyFrame> pCurrKeyframe, bool* const bF
 
     }
 
-    TDO_LOG_DEBUG_FORMAT("localBA finished with %d keyfrm, %d landmarks updated. %d outlierPairs!", 
+    TDO_LOG_CRITICAL_FORMAT("localBA finished with %d keyfrm, %d landmarks updated. %d outlierPairs!", 
                                     ids_localKeyframes.size() %
                                     ids_localLandmarks.size() %
                                     outlier_observations_lms.size());

@@ -81,6 +81,7 @@ void StereoPerspectiveReprojEdge::linearizeOplus() {
     _jacobianOplusXj(2, 3) = _jacobianOplusXj(0, 3);
     _jacobianOplusXj(2, 4) = 0;
     _jacobianOplusXj(2, 5) = _jacobianOplusXj(0, 5) - focal_x_baseline_ / z_sq;
+
 }
 
 

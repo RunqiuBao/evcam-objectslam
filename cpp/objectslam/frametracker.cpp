@@ -57,7 +57,7 @@ static void TrackWithPnP(
 }
 
 bool FrameTracker::DoMotionBasedTrack(Frame& currentFrame, const Frame& lastFrame, Mat44_t& velocity, const bool isDebug) const{
-    size_t minOverlapAreaToReject = 400;
+    size_t minIoUToReject = 0.6;
     float maxPoseError = 0.5;
 
     std::vector<std::shared_ptr<RefObject>> refObjects = _pRefKeyframe->_refObjects;
@@ -81,12 +81,14 @@ bool FrameTracker::DoMotionBasedTrack(Frame& currentFrame, const Frame& lastFram
         for (ThreeDDetection currentDetection : currentFrame._threeDDetections){
             std::vector<cv::Point> points2DCV = mathutils::ProjectPoints3DToPoints2D(currentDetection._vertices3DInRefFrame, myStereoCamera);
             cv::Mat currentDetectionPoseMask = mathutils::Draw2DHullMaskFrom2DPointsSet(points2DCV, myStereoCamera._rows, myStereoCamera._cols);
-            cv::Mat overlaps;
+            cv::Mat overlaps, unions;
             cv::bitwise_and(refObjectPoseMask, currentDetectionPoseMask, overlaps);
-            cv::Scalar sum = cv::sum(overlaps);
-            if (sum[0] > largestOverlapArea && sum[0] > minOverlapAreaToReject){
+            cv::bitwise_or(refObjectPoseMask, currentDetectionPoseMask, unions);
+            cv::Scalar sumOverlaps = cv::sum(overlaps);
+            cv::Scalar sumUnions = cv::sum(unions);
+            if (sumOverlaps[0] > largestOverlapArea && (sumOverlaps[0] / sumUnions[0]) > minIoUToReject){
                 indexLargestOverlap = countDetection;
-                largestOverlapArea = sum[0];
+                largestOverlapArea = sumOverlaps[0];
             }
             // TDO_LOG_DEBUG_FORMAT("RefObject No.%d, detection No.%d, overlapping area: %d", countRefObject % countDetection % sum[0]);
             countDetection++;
@@ -360,7 +362,7 @@ bool FrameTracker::Do2DTrackingBasedTrack(Frame& currentFrame, const Frame& last
 void FrameTracker::CreateNewLandmarks(std::shared_ptr<KeyFrame> pRefKeyFrame, std::shared_ptr<MapDataBase> pMapDb){
     std::vector<std::shared_ptr<LandMark>> visibleLandmarks = pMapDb->GetVisibleLandmarks(pRefKeyFrame);  // Note: find landmarks that might fall within FoV of this keyframe.
     std::map<std::shared_ptr<LandMark>, unsigned int> observedLandmarks_indicesRefObj;
-    float minOverlapAreaRatioForCorrespondence = 0.5;
+    float minIoUForCorrespondence = 0.6;
     std::vector<int> indicesLandmarkForRefObjects(pRefKeyFrame->_refObjects.size(), -1);
     std::vector<float> distancesObjectToClosestLandmark(pRefKeyFrame->_refObjects.size(), std::numeric_limits<float>::max());
     std::vector<int> indicesForClosestLandmark(pRefKeyFrame->_refObjects.size(), -1);
@@ -375,11 +377,12 @@ void FrameTracker::CreateNewLandmarks(std::shared_ptr<KeyFrame> pRefKeyFrame, st
             Eigen::MatrixXf transformedVerticesInCamera = mathutils::TransformPoints<Eigen::MatrixXf>((pRefKeyFrame->GetKeyframePoseInWorld()).inverse(), transformedVerticesInWorld);
             std::vector<cv::Point> oneLandmarkPoints2D = mathutils::ProjectPoints3DToPoints2D(transformedVerticesInCamera, (*pRefKeyFrame->_pCamera));
             cv::Mat oneLandmarkPoseMask = mathutils::Draw2DHullMaskFrom2DPointsSet(oneLandmarkPoints2D, (*pRefKeyFrame->_pCamera)._rows, (*pRefKeyFrame->_pCamera)._cols);
-            cv::Mat overlaps;
+            cv::Mat overlaps, unions;
             cv::bitwise_and(refObjectPoseMask, oneLandmarkPoseMask, overlaps);
+            cv::bitwise_or(refObjectPoseMask, oneLandmarkPoseMask, unions);
             cv::Scalar overlapArea = cv::sum(overlaps);
-            cv::Scalar refObjectPoseMaskArea = cv::sum(refObjectPoseMask);
-            if ((overlapArea[0] / refObjectPoseMaskArea[0]) > minOverlapAreaRatioForCorrespondence){
+            cv::Scalar unionsArea = cv::sum(unions);
+            if ((overlapArea[0] / unionsArea[0]) > minIoUForCorrespondence){
                 indicesLandmarkForRefObjects[indexRefObject] = indexVisibleLandmark;
                 observedLandmarks_indicesRefObj[visibleLandmarks[indexVisibleLandmark]] = indexRefObject;
                 break;
@@ -413,7 +416,12 @@ void FrameTracker::CreateNewLandmarks(std::shared_ptr<KeyFrame> pRefKeyFrame, st
                 Vec3_t keypt1InLandmark;
                 LandMark::ComputeLandmarkPoseInWorldAndKeypt1InWolrd(pRefKeyFrame, pRefObject, poseLandmarkInWorld, keypt1InLandmark);
                 std::shared_ptr<object::ObjectBase> pObjectInfo = pRefObject->_detection._pObjectInfo;
-                std::shared_ptr<LandMark> pOneLandmark = std::make_shared<LandMark>(poseLandmarkInWorld, keypt1InLandmark, pRefObject->_detection._horizontalSize, pObjectInfo);
+                std::shared_ptr<LandMark> pOneLandmark = std::make_shared<LandMark>(
+                    poseLandmarkInWorld,
+                    keypt1InLandmark,
+                    pRefObject->_detection._horizontalSize,
+                    pObjectInfo
+                );
                 pOneLandmark->AddObservation(pRefKeyFrame, indexRefObject);
                 pMapDb->AddLandMark(pOneLandmark);
                 observedLandmarks_indicesRefObj[pOneLandmark] = indexRefObject;

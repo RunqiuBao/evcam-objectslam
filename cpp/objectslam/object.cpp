@@ -18,7 +18,8 @@ Eigen::MatrixXf GetVerticesOf3DBoundingCylinderForObject(
     Eigen::MatrixXf vertices3DInRefFrame = Eigen::MatrixXf::Zero(3, numVerticesOneSide * 2);
     Vec3_t vOc2TopC = topCenterPtInRefFrame - objectCenterInRefFrame;
     vOc2TopC /= vOc2TopC.norm();
-    Vec3_t vOc2Cam = -objectCenterInRefFrame;
+    Vec3_t behindCam(0, 0, -1.0);
+    Vec3_t vOc2Cam = behindCam - objectCenterInRefFrame;  // Note: so that it supports creating vectices at origin.
     vOc2Cam /= vOc2Cam.norm();
     Vec3_t vRadius = vOc2TopC.cross(vOc2Cam);
     vRadius /= vRadius.norm();
