@@ -63,7 +63,7 @@ bool FrameTracker::DoRelocalizeFromMap(Frame& currentFrame, const Frame& lastFra
     float maxRotError = 30;
 
     std::vector<std::shared_ptr<LandMark>> visibleLandmarks = pMapDb->GetVisibleLandmarks(_pRefKeyframe);
-    if (visibleLandmarks.size() < 3) {
+    if (visibleLandmarks.size() < 4) {
         velocity = Eigen::Matrix4f::Identity();
         currentFrame.SetPose(lastFrame.GetPose() * velocity);
         TDO_LOG_DEBUG("relocalization failed. not enough visible landmarks.");

@@ -319,18 +319,19 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
         }
         else{
             Mat44_t nextFrameInCameraTransformBackup = nextFrameInCameraTransform;  // Note: backup in case first track fails and nextFrameInCameraTransform will be set to identity,
-            bool isSuccess = _tracker.DoMotionBasedTrack(*pOneFrame, (*_pFrameStack.back()), nextFrameInCameraTransform, 0.3, isDebug);
+            bool isSuccess = _tracker.DoMotionBasedTrack(*pOneFrame, (*_pFrameStack.back()), nextFrameInCameraTransform, 0.4, isDebug);
 
             if ((!isSuccess) && ((*_pFrameStack.back())._isTracked)){
-                isSuccess = _tracker.Do2DTrackingBasedTrack(*pOneFrame, (*_pFrameStack.back()), nextFrameInCameraTransform, isDebug);
+                nextFrameInCameraTransform = nextFrameInCameraTransformBackup;
+                isSuccess = _tracker.Do2DTrackingBasedTrack(*pOneFrame, (*_pFrameStack.back()), nextFrameInCameraTransformBackup, isDebug);
                 // TODO: if fail again, need another track trial from keyframe.
                 if (!isSuccess){
                     nextFrameInCameraTransform = (*_pFrameStack.back()).GetPose();
-                    isSuccess = _tracker.DoMotionBasedTrack(*pOneFrame, (*_tracker._pRefKeyframe->_pRefFrame), nextFrameInCameraTransform, isDebug);
+                    isSuccess = _tracker.DoMotionBasedTrack(*pOneFrame, (*_tracker._pRefKeyframe->_pRefFrame), nextFrameInCameraTransform, 0.4, isDebug);
                 }
             }
             if (!isSuccess){
-                // try relocalize from map
+                // try relocalize from map. Note nextFrameInCameraTransform is just identity.
                 isSuccess = _tracker.DoRelocalizeFromMap(*pOneFrame, (*_pFrameStack.back()), _pMapDb, nextFrameInCameraTransform, 0.4, isDebug);
                 if (!isSuccess){
                     TDO_LOG_DEBUG_FORMAT("frame (%d) relocalization also failed.", pOneFrame->_frameID);

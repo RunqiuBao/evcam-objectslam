@@ -10,8 +10,8 @@
 #include <logging.h>
 TDO_LOGGER("objectslam.optimize.localBA")
 
-// #define USE_KEYFRAMEUPDATEMODE_CURRENTONLY
-#define USE_KEYFRAMEUPDATEMODE_COVISIBILITY
+#define USE_KEYFRAMEUPDATEMODE_CURRENTONLY
+// #define USE_KEYFRAMEUPDATEMODE_COVISIBILITY
 
 namespace eventobjectslam {
 
@@ -157,6 +157,7 @@ void optimize::DoLocalBA(std::shared_ptr<KeyFrame> pCurrKeyframe, bool* const bF
     const float sqrt_chi_sq_3D = std::sqrt(chi_sq_3D);
     unsigned int edgeId = 0;
     unsigned int ldmVertexId = 0;
+    double avgChi_edge1 = 0;
     for (auto& id_localLm : ids_localLandmarks) {
         auto pLocalLm = id_localLm.second;
         // create g2o vertex from the landmark and set to optimizer.
@@ -190,8 +191,10 @@ void optimize::DoLocalBA(std::shared_ptr<KeyFrame> pCurrKeyframe, bool* const bF
                 TDO_LOG_DEBUG_FORMAT("landmark(%d) has only one observation, disable the reprojEdgeWrap edge.", pLocalLm->_landmarkID);
                 reprojEdgeWrap.SetAsOutlier();
             }
+            avgChi_edge1 += reprojEdgeWrap._pEdge->chi2();
         }
     }
+    avgChi_edge1 /= reprojEdgeWraps.size();
 
     using ReprojEdge2Wrapper = g2outils::ReprojEdgeWrapper<g2outils::EdgeSE3CylinderProj>;
     std::vector<ReprojEdge2Wrapper> reprojEdge2Wraps;
@@ -204,6 +207,7 @@ void optimize::DoLocalBA(std::shared_ptr<KeyFrame> pCurrKeyframe, bool* const bF
     inv_sigma *= camera_object2d_BA_weight;
     Mat55_d cam_object2d_sigma = inv_sigma.cwiseProduct(inv_sigma).asDiagonal();
     const float tHuberObject2d = std::sqrt(8.0);  // Note: 1000 object reprojection error is usually large.
+    double avgChi_edge2 = 0;
     for (auto id_pLocalLm : ids_localLandmarks) {
         auto pLocalLm = id_pLocalLm.second;
         auto pLmVtx = ids_landmarkPointVtx[pLocalLm->_landmarkID];
@@ -236,8 +240,11 @@ void optimize::DoLocalBA(std::shared_ptr<KeyFrame> pCurrKeyframe, bool* const bF
                 TDO_LOG_DEBUG_FORMAT("landmark(%d) has only one observation, disable the reprojEdge2Wrap edge.", pLocalLm->_landmarkID);
                 reprojEdge2Wrap.SetAsOutlier();
             }
+            avgChi_edge2 += reprojEdge2Wrap._pEdge->chi2();
         }
     }
+    avgChi_edge2 /= reprojEdge2Wraps.size();
+    TDO_LOG_CRITICAL_FORMAT("avgChi_edge1 before opt: %f, avgChi_edge2: %f", avgChi_edge1 % avgChi_edge2);
 
     // -------- (5) --------
     // 1st round of optimization
@@ -303,6 +310,10 @@ void optimize::DoLocalBA(std::shared_ptr<KeyFrame> pCurrKeyframe, bool* const bF
     // collect outliers
     std::vector<std::pair<std::shared_ptr<KeyFrame>, std::shared_ptr<LandMark>>> outlier_observations_lms;
     outlier_observations_lms.reserve(reprojEdgeWraps.size());
+    double avgChi_edge1_after = 0.;
+    double avgChi_edge2_after = 0.;
+    std::vector<double> chi_edge1_list;
+    std::vector<double> chi_edge2_list;
     for (auto& reprojEdgeWrap : reprojEdgeWraps) {
         auto pEdge = reprojEdgeWrap._pEdge;
         auto localLm = reprojEdgeWrap._pLm;
@@ -318,6 +329,8 @@ void optimize::DoLocalBA(std::shared_ptr<KeyFrame> pCurrKeyframe, bool* const bF
         if (chi_sq_3D < pEdge->chi2() || !reprojEdgeWrap.IsDepthPositive()) {
             outlier_observations_lms.push_back(std::make_pair(reprojEdgeWrap._pShot, reprojEdgeWrap._pLm));
         }
+        avgChi_edge1_after += pEdge->chi2();
+        chi_edge1_list.push_back(pEdge->chi2());
     }
     for (auto& reprojEdge2Wrap : reprojEdge2Wraps) {
         auto pEdge = reprojEdge2Wrap._pEdge;
@@ -335,7 +348,24 @@ void optimize::DoLocalBA(std::shared_ptr<KeyFrame> pCurrKeyframe, bool* const bF
             TDO_LOG_CRITICAL_FORMAT("outlier by cylinder proj: chi2 %f, isDepth %d", pEdge->chi2() % reprojEdge2Wrap.IsDepthPositive());
             outlier_observations_lms.push_back(std::make_pair(reprojEdge2Wrap._pShot, reprojEdge2Wrap._pLm));
         }
+        avgChi_edge2_after += pEdge->chi2();
+        chi_edge2_list.push_back(pEdge->chi2());
     }
+    avgChi_edge1_after /= reprojEdgeWraps.size();
+    avgChi_edge2_after /= reprojEdge2Wraps.size();
+    TDO_LOG_CRITICAL_FORMAT("avgChi_edge1 after opt: %f, avgChi_edge2: %f", avgChi_edge1_after % avgChi_edge2_after);
+
+    double chiThresholdToEarlyQuit = std::max({chi_sq_3D, tHuberObject2d * tHuberObject2d}) * 1.5;
+    // if (
+    //     std::isnan(avgChi_edge1_after + avgChi_edge2_after)
+    //     || std::max({avgChi_edge1_after, avgChi_edge2_after}) > chiThresholdToEarlyQuit
+    //     || true
+    // ){
+    //     TDO_LOG_CRITICAL_FORMAT("localBA failed with avgChi_edge1_after %f, avgChi_edge2_after %f. Quit without update anything!", 
+    //                                     avgChi_edge1_after %
+    //                                     avgChi_edge2_after);
+    //     return;
+    // }
 
     // -------- (8) --------
     // update the map
