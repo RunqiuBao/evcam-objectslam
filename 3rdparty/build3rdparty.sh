@@ -1,5 +1,7 @@
 (cd ..
-git submodule update --init --recursive)
+if [[ ! -d "log4cxx" ]]; then
+  git submodule update --init --recursive
+fi)
 
 read -p "DO you want to build log4cxx?(y/n)" answer
 if [[ "$answer" == [yY] ]]; then
