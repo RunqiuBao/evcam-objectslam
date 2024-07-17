@@ -92,7 +92,16 @@ void LoadDetections(
         detectionScore = boost::lexical_cast<float>(splitSDetection[13].c_str());
 
         leftDetections.push_back(TwoDBoundingBox(x, y, bWidth, bHeight, pColorcone, detectionScore, keypts));
-        rightDetections.push_back(TwoDBoundingBox(x_r, y, bWidth_r, bHeight, pColorcone, detectionScore, keypts));
+        Vec2_t keypt1_r(
+            x_r - bWidth_r / 2 + boost::lexical_cast<float>(splitSDetection[9].c_str()) * bWidth_r,
+            y_r - bHeight / 2 + boost::lexical_cast<float>(splitSDetection[10].c_str()) * bHeight
+        );
+        Vec2_t keypt2_r(
+            x - bWidth / 2 + boost::lexical_cast<float>(splitSDetection[11].c_str()) * bWidth,
+            y - bHeight / 2 + boost::lexical_cast<float>(splitSDetection[12].c_str()) * bHeight
+        );
+        std::vector<Vec2_t> keypts_r = {keypt1_r, keypt2_r};
+        rightDetections.push_back(TwoDBoundingBox(x_r, y, bWidth_r, bHeight, pColorcone, detectionScore, keypts_r));
         TDO_LOG_DEBUG_FORMAT("one 2d detection (confi %f): %f, %f", detectionScore % x % y);
     }
 }

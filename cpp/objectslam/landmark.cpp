@@ -134,4 +134,8 @@ void LandMark::SetLandmarkSize(const float observedHeight, const float horizonta
     _observedHeight = observedHeight;
 }
 
+Vec3_t LandMark::GetKeypt1InLandmark() const {
+    return _keypt1InLandmark;
+}
+
 }  // end of namespace eventobjectslam

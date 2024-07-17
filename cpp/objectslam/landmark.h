@@ -39,6 +39,8 @@ public:
 
     Mat44_t GetLandmarkPoseInWorld();
 
+    Vec3_t GetKeypt1InLandmark() const;
+
     void SetLandmarkPoseInWorld(const Mat44_t& poseLandmarkInWorld);
 
     void SetKeypt1InLandmark(const Vec3_t& keypt1InLandmark);

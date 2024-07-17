@@ -131,11 +131,15 @@ void optimize::DoLocalBA(std::shared_ptr<KeyFrame> pCurrKeyframe, bool* const bF
     // -------- (4) --------
     // Connect keyframe and landmark vertices by reprojection edge.
     std::unordered_map<unsigned int, g2outils::LandmarkPointVertex*> ids_landmarkPointVtx;
+    std::unordered_map<unsigned int, g2outils::LandmarkPointVertex*> ids_landmarkPointKeyptVtx;
     ids_landmarkPointVtx.reserve(ids_localLandmarks.size());
+    ids_landmarkPointKeyptVtx.reserve(ids_localLandmarks.size());
     
     using ReprojEdgeWrapper = g2outils::ReprojEdgeWrapper<KeyFrame>;
     std::vector<ReprojEdgeWrapper> reprojEdgeWraps;
+    std::vector<ReprojEdgeWrapper> reprojEdge2Wraps;
     reprojEdgeWraps.reserve(allKeyframes.size() * ids_localLandmarks.size());
+    reprojEdge2Wraps.reserve(allKeyframes.size() * ids_localLandmarks.size());  // for keypts
 
     // 有意水準5%のカイ2乗値. for huber kernel
     // 自由度n=3
@@ -145,10 +149,18 @@ void optimize::DoLocalBA(std::shared_ptr<KeyFrame> pCurrKeyframe, bool* const bF
     for (auto& id_localLm : ids_localLandmarks) {
         auto pLocalLm = id_localLm.second;
         // create g2o vertex from the landmark and set to optimizer.
-        auto landmarkCenterInWorld = pLocalLm->GetLandmarkPoseInWorld().block(0, 3, 3, 1).cast<double>();
+        Mat44_t landmarkPoseInWorld = pLocalLm->GetLandmarkPoseInWorld(); 
+        auto landmarkCenterInWorld = landmarkPoseInWorld.block(0, 3, 3, 1).cast<double>();
         auto pLmVtx = g2outils::CreateLandmarkPointVertex(maxKeyframeID + 1 + pLocalLm->_landmarkID, landmarkCenterInWorld, false);
         optimizer.addVertex(pLmVtx);
         ids_landmarkPointVtx[pLocalLm->_landmarkID] = pLmVtx;
+
+        Vec3_t keypt1InWorld = pLocalLm->GetKeypt1InLandmark();
+        keypt1InWorld = landmarkPoseInWorld.block<3, 3>(0, 0) * keypt1InWorld + landmarkPoseInWorld.col(3).head<3>();
+        auto pLmKeyptVtx = g2outils::CreateLandmarkPointVertex(maxKeyframeID + 1 + ids_localLandmarks.size() + pLocalLm->_landmarkID, keypt1InWorld.cast<double>(), false);
+        optimizer.addVertex(pLmKeyptVtx);
+        ids_landmarkPointKeyptVtx[pLocalLm->_landmarkID] = pLmKeyptVtx;
+
         const std::map<std::shared_ptr<KeyFrame>, unsigned int> observations_indices = pLocalLm->GetObservations();
         for (const auto& pObs_idx : observations_indices) {
             auto pKeyframe = pObs_idx.first;
@@ -166,9 +178,17 @@ void optimize::DoLocalBA(std::shared_ptr<KeyFrame> pCurrKeyframe, bool* const bF
             const float centerY = pKeyframe->_refObjects[idx]->_detection._pLeftBbox->_centerY;
             const float centerXRight = pKeyframe->_refObjects[idx]->_detection._pRightBbox->_centerX;
             ReprojEdgeWrapper reprojEdgeWrap(edgeId, pKeyframe, pKeyfrmVtx, pLocalLm, pLmVtx, centerX, centerY, centerXRight, sqrt_chi_sq_3D);
-            edgeId++;
             reprojEdgeWraps.push_back(reprojEdgeWrap);
             optimizer.addEdge(reprojEdgeWrap._pEdge);
+
+            const float keyptX = pKeyframe->_refObjects[idx]->_detection._pLeftBbox->_keypts[0](0);
+            const float keyptY = pKeyframe->_refObjects[idx]->_detection._pLeftBbox->_keypts[0](1);
+            const float keyptXRight = pKeyframe->_refObjects[idx]->_detection._pRightBbox->_keypts[0](0);
+            ReprojEdgeWrapper keyptReprojEdgeWrap(edgeId + reprojEdgeWraps.capacity(), pKeyframe, pKeyfrmVtx, pLocalLm, pLmKeyptVtx, keyptX, keyptY, keyptXRight, sqrt_chi_sq_3D);
+            reprojEdge2Wraps.push_back(keyptReprojEdgeWrap);
+            optimizer.addEdge(keyptReprojEdgeWrap._pEdge);
+
+            edgeId++;
         }
     }
 
@@ -211,6 +231,20 @@ void optimize::DoLocalBA(std::shared_ptr<KeyFrame> pCurrKeyframe, bool* const bF
             pEdge->setRobustKernel(nullptr);
         }
 
+        for (auto& reprojEdge2Wrap : reprojEdge2Wraps) {
+            auto pEdge = reprojEdge2Wrap._pEdge;
+            auto localLm = reprojEdge2Wrap._pLm;
+            if (localLm->IsToDelete()) {
+                continue;
+            }
+
+            if (chi_sq_3D < pEdge->chi2() || !reprojEdge2Wrap.IsDepthPositive()) {
+                reprojEdge2Wrap.SetAsOutlier();
+            }
+
+            pEdge->setRobustKernel(nullptr);
+        }
+
         optimizer.initializeOptimization();
         optimizer.optimize(numSecondIter);
     }
@@ -218,7 +252,7 @@ void optimize::DoLocalBA(std::shared_ptr<KeyFrame> pCurrKeyframe, bool* const bF
     // -------- (7) --------
     // collect outliers
     std::vector<std::pair<std::shared_ptr<KeyFrame>, std::shared_ptr<LandMark>>> outlier_observations_lms;
-    outlier_observations_lms.reserve(reprojEdgeWraps.size());
+    outlier_observations_lms.reserve(reprojEdgeWraps.size() + reprojEdge2Wraps.size());
     for (auto& reprojEdgeWrap : reprojEdgeWraps) {
         auto pEdge = reprojEdgeWrap._pEdge;
         auto localLm = reprojEdgeWrap._pLm;
@@ -233,6 +267,22 @@ void optimize::DoLocalBA(std::shared_ptr<KeyFrame> pCurrKeyframe, bool* const bF
                                     % std::to_string(reprojEdgeWrap.IsDepthPositive()));
         if (chi_sq_3D < pEdge->chi2() || !reprojEdgeWrap.IsDepthPositive()) {
             outlier_observations_lms.push_back(std::make_pair(reprojEdgeWrap._pShot, reprojEdgeWrap._pLm));
+        }
+    }
+    for (auto& reprojEdge2Wrap : reprojEdge2Wraps) {
+        auto pEdge = reprojEdge2Wrap._pEdge;
+        auto localLm = reprojEdge2Wrap._pLm;
+        if (localLm->IsToDelete()) {
+            continue;
+        }
+
+        TDO_LOG_VERBOSE_FORMAT("Edge2 between keyframe(%d), landmark(%d), chi2 %f, depthPosi %s",
+                                    reprojEdge2Wrap._pShot->_keyFrameID
+                                    % reprojEdge2Wrap._pLm->_landmarkID
+                                    % pEdge->chi2()
+                                    % std::to_string(reprojEdge2Wrap.IsDepthPositive()));
+        if (chi_sq_3D < pEdge->chi2() || !reprojEdge2Wrap.IsDepthPositive()) {
+            outlier_observations_lms.push_back(std::make_pair(reprojEdge2Wrap._pShot, reprojEdge2Wrap._pLm));
         }
     }
 
@@ -268,10 +318,10 @@ void optimize::DoLocalBA(std::shared_ptr<KeyFrame> pCurrKeyframe, bool* const bF
 
     }
 
-    // TDO_LOG_CRITICAL_FORMAT("localBA finished with %d keyfrm, %d landmarks updated. %d outlierPairs!", 
-    //                                 ids_localKeyframes.size() %
-    //                                 ids_localLandmarks.size() %
-    //                                 outlier_observations_lms.size());
+    TDO_LOG_CRITICAL_FORMAT("localBA finished with %d keyfrm, %d landmarks updated. %d outlierPairs!", 
+                                    ids_localKeyframes.size() %
+                                    ids_localLandmarks.size() %
+                                    outlier_observations_lms.size());
 
 }
 
