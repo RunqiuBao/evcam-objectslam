@@ -10,8 +10,8 @@
 #include <logging.h>
 TDO_LOGGER("objectslam.optimize.localBA")
 
-#define USE_KEYFRAMEUPDATEMODE_CURRENTONLY
-// #define USE_KEYFRAMEUPDATEMODE_COVISIBILITY
+// #define USE_KEYFRAMEUPDATEMODE_CURRENTONLY
+#define USE_KEYFRAMEUPDATEMODE_COVISIBILITY
 
 namespace eventobjectslam {
 
@@ -92,8 +92,8 @@ void optimize::DoLocalBA(std::shared_ptr<KeyFrame> pCurrKeyframe, bool* const bF
     // -------- (2) --------
     // build optimizer
     // // case: simple map point reprojection
-    // auto linearSolver = std::make_unique<::g2o::LinearSolverCSparse<::g2o::BlockSolver_6_3::PoseMatrixType>>();  // Note: here ::g2o means a global namespace from outside of eventobjectslam.
-    // auto blockSolver = std::make_unique<::g2o::BlockSolver_6_3>(std::move(linearSolver));
+    // auto linearSolver = std::make_unique<::g2o::LinearSolverCSparse<::g2o::BlockSolverPL<6, 3>::PoseMatrixType>>();  // Note: here ::g2o means a global namespace from outside of eventobjectslam.
+    // auto blockSolver = std::make_unique<::g2o::BlockSolverPL<6, 3>>(std::move(linearSolver));
     // auto algorithm = new ::g2o::OptimizationAlgorithmLevenberg(std::move(blockSolver));
 
     // case: self-defined vertex
@@ -199,11 +199,11 @@ void optimize::DoLocalBA(std::shared_ptr<KeyFrame> pCurrKeyframe, bool* const bF
 
     // camera-object 2d measurement, including bbox and keypts
     double camera_object2d_BA_weight = 0.1;  // Note: weight in optimization.
-    Vec7_d inv_sigma;
+    Vec5_d inv_sigma;
     inv_sigma.setOnes();
     inv_sigma *= camera_object2d_BA_weight;
-    Mat77_d cam_object2d_sigma = inv_sigma.cwiseProduct(inv_sigma).asDiagonal();
-    const float tHuberObject2d = std::sqrt(20.0);  // Note: 1000 object reprojection error is usually large.
+    Mat55_d cam_object2d_sigma = inv_sigma.cwiseProduct(inv_sigma).asDiagonal();
+    const float tHuberObject2d = std::sqrt(8.0);  // Note: 1000 object reprojection error is usually large.
     for (auto id_pLocalLm : ids_localLandmarks) {
         auto pLocalLm = id_pLocalLm.second;
         auto pLmVtx = ids_landmarkPointVtx[pLocalLm->_landmarkID];
@@ -226,7 +226,7 @@ void optimize::DoLocalBA(std::shared_ptr<KeyFrame> pCurrKeyframe, bool* const bF
             leftKeypts << threeDetection._pLeftBbox->_keypts[0](0), threeDetection._pLeftBbox->_keypts[0](1);
             Vec4_d rightBbox;
             rightBbox << threeDetection._pRightBbox->_centerX, threeDetection._pRightBbox->_centerY, threeDetection._pRightBbox->_bWidth, threeDetection._pRightBbox->_bHeight;
-            Mat77_d infoMat = cam_object2d_sigma * threeDetection._detectionScore * threeDetection._detectionScore;
+            Mat55_d infoMat = cam_object2d_sigma * threeDetection._detectionScore * threeDetection._detectionScore;
             ReprojEdge2Wrapper reprojEdge2Wrap(edgeId, pKeyframe, pKeyfrmVtx, pLocalLm, pLmVtx, leftBbox, leftKeypts, rightBbox, tHuberObject2d, true, infoMat);
             edgeId++;
             auto key_keyfrm_lm = std::make_pair(pKeyframe, pLocalLm);

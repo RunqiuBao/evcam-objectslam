@@ -35,7 +35,7 @@ using MatRC_d = Eigen::Matrix<double, R, C>;
 
 using Mat33_d = Eigen::Matrix3d;
 using Mat44_d = Eigen::Matrix4d;
-using Mat77_d = Eigen::Matrix<double, 7, 7>;
+using Mat55_d = Eigen::Matrix<double, 5, 5>;
 
 template<size_t R>
 using VecR_d = Eigen::Matrix<double, R, 1>;

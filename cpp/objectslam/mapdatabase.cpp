@@ -41,7 +41,7 @@ std::vector<std::shared_ptr<LandMark>> MapDataBase::GetVisibleLandmarks(std::sha
         vCamToLandmark /= vCamToLandmark.norm();
         Eigen::Vector3f vCamZ = pRefKeyFrame->GetKeyframePoseInWorld().block(0, 2, 3, 1);
         float angleViewRay = std::acos(vCamToLandmark.dot(vCamZ));
-        if (angleViewRay < angleFoVLimit){
+        if (angleViewRay < angleFoVLimit && !id_landmark.second->IsToDelete()){
             visibleLandmarks.push_back(id_landmark.second);
         }
     }

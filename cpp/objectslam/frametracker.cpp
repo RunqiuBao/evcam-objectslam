@@ -60,9 +60,10 @@ static void TrackWithPnP(
 
 bool FrameTracker::DoRelocalizeFromMap(Frame& currentFrame, const Frame& lastFrame, std::shared_ptr<MapDataBase> pMapDb, Mat44_t& velocity, const float minIoUToReject, const bool isDebug){
     float maxPoseError = 0.5;
+    float maxRotError = 30;
 
     std::vector<std::shared_ptr<LandMark>> visibleLandmarks = pMapDb->GetVisibleLandmarks(_pRefKeyframe);
-    if (visibleLandmarks.size() < 4) {
+    if (visibleLandmarks.size() < 3) {
         velocity = Eigen::Matrix4f::Identity();
         currentFrame.SetPose(lastFrame.GetPose() * velocity);
         TDO_LOG_DEBUG("relocalization failed. not enough visible landmarks.");
@@ -99,7 +100,7 @@ bool FrameTracker::DoRelocalizeFromMap(Frame& currentFrame, const Frame& lastFra
                 indexLargestOverlap = countDetection;
                 largestIoU = (sumOverlaps[0] / sumUnions[0]);
             }
-            if ((sumOverlaps[0] / sumUnions[0]) > 0)
+            if (largestIoU < 0 && (sumOverlaps[0] / sumUnions[0]) > 0 && (sumOverlaps[0] / sumUnions[0]) < minIoUToReject)
             {
                 TDO_LOG_DEBUG_FORMAT("relocal: give up landmark matching due to threshold: iou (%f)", (sumOverlaps[0] / sumUnions[0]));
             }
@@ -159,39 +160,39 @@ bool FrameTracker::DoRelocalizeFromMap(Frame& currentFrame, const Frame& lastFra
         indexLandmark++;
     }
 
-    // indexLandmark = 0;
-    // if (objectPoints.size() < 4){
-    //     // not enough detection. Add keypt as well for tracking.
-    //     for (int indexCorrespondingDetection : indicesCorrespondingDetecton){
-    //         if (indexCorrespondingDetection < 0){
-    //             indexLandmark++;
-    //             continue;
-    //         }
-    //         // keypt
-    //         Vec3_t keypt1InWorld = visibleLandmarks[indexLandmark]->GetKeypt1InLandmark();
-    //         Mat44_t landmarkPoseInWorld = visibleLandmarks[indexLandmark]->GetLandmarkPoseInWorld();
-    //         keypt1InWorld = landmarkPoseInWorld.block<3, 3>(0, 0) * keypt1InWorld + landmarkPoseInWorld.col(3).head<3>();
-    //         cv::Point3f point3D_keypt(
-    //             keypt1InWorld(0),
-    //             keypt1InWorld(1),
-    //             keypt1InWorld(2)
-    //         );
-    //         objectPoints.push_back(point3D_keypt);
-    //         cv::Point2f point2D_keypt(
-    //             (*currentFrame._matchedLeftCamDetections[indexCorrespondingDetection])._keypts[0][0],
-    //             (*currentFrame._matchedLeftCamDetections[indexCorrespondingDetection])._keypts[0][1]
-    //         );
-    //         imagePoints.push_back(point2D_keypt);
-    //         indexLandmark++;
-    //     }
-    // }
+    indexLandmark = 0;
+    if (objectPoints.size() < 4){
+        // not enough detection. Add keypt as well for tracking.
+        for (int indexCorrespondingDetection : indicesCorrespondingDetecton){
+            if (indexCorrespondingDetection < 0){
+                indexLandmark++;
+                continue;
+            }
+            // keypt
+            Vec3_t keypt1InWorld = visibleLandmarks[indexLandmark]->GetKeypt1InLandmark();
+            Mat44_t landmarkPoseInWorld = visibleLandmarks[indexLandmark]->GetLandmarkPoseInWorld();
+            keypt1InWorld = landmarkPoseInWorld.block<3, 3>(0, 0) * keypt1InWorld + landmarkPoseInWorld.col(3).head<3>();
+            cv::Point3f point3D_keypt(
+                keypt1InWorld(0),
+                keypt1InWorld(1),
+                keypt1InWorld(2)
+            );
+            objectPoints.push_back(point3D_keypt);
+            cv::Point2f point2D_keypt(
+                (*currentFrame._matchedLeftCamDetections[indexCorrespondingDetection])._keypts[0][0],
+                (*currentFrame._matchedLeftCamDetections[indexCorrespondingDetection])._keypts[0][1]
+            );
+            imagePoints.push_back(point2D_keypt);
+            indexLandmark++;
+        }
+    }
 
     // Estimate current frame pose using PnP
     if (objectPoints.size() < 4){
         // relocal failed
         velocity = Eigen::Matrix4f::Identity();
         currentFrame.SetPose(lastFrame.GetPose() * velocity);
-        TDO_LOG_DEBUG("relocalization failed. not updating camera pose.");
+        TDO_LOG_DEBUG_FORMAT("relocalization failed. only %d landmark matching.", objectPoints.size());
         // not updating cameraInWorld
         return false;
     }
@@ -211,13 +212,21 @@ bool FrameTracker::DoRelocalizeFromMap(Frame& currentFrame, const Frame& lastFra
         TDO_LOG_DEBUG("relocalization result current Frame in world: \n" << currentFrameInWorld);
         currentFrameInRefKeyFrame = (_pRefKeyframe->GetKeyframePoseInWorld()).inverse() * currentFrameInWorld;
         velocity = lastFrame.GetPose().inverse() * currentFrameInRefKeyFrame;
-        if (
-            velocity.block(0, 3, 3, 1).norm() > maxPoseError
-        ){
+
+        Eigen::Quaterniond quat(velocity.block<3, 3>(0, 0).cast<double>());
+        double roll, pitch, yaw;
+        mathutils::convert_quat_to_euler_zyx_infuc(quat, roll, pitch, yaw);
+        double maxAngle = std::max({std::abs(roll), std::abs(pitch), std::abs(yaw)});
+
+        bool isTooLargeTranslation = velocity.col(3).head<3>().norm() > maxPoseError;
+        bool isTooLargeRotate = static_cast<float>(maxAngle * 180 / M_PI) > maxRotError;
+        bool isTooLargeError = isTooLargeRotate || isTooLargeTranslation;
+        if (isTooLargeError){
+            TDO_LOG_DEBUG_FORMAT("relocalization failed (rotate: %f:%f, trans: %f:%f). not updating camera pose.", 
+                                 (maxAngle * 180 / M_PI) % maxRotError % (velocity.block<3, 3>(0, 0).norm()) % maxPoseError);
             // track failed
             velocity = Eigen::Matrix4f::Identity();
             currentFrame.SetPose(lastFrame.GetPose() * velocity);
-            TDO_LOG_DEBUG("relocalization failed. not updating camera pose.");
             // not updating cameraInWorld
             return false;
         }
@@ -233,6 +242,7 @@ bool FrameTracker::DoRelocalizeFromMap(Frame& currentFrame, const Frame& lastFra
 
 bool FrameTracker::DoMotionBasedTrack(Frame& currentFrame, const Frame& lastFrame, Mat44_t& velocity, const float minIoUToReject, const bool isDebug) const{
     float maxPoseError = 0.5;
+    float maxRotError = 30;
 
     std::vector<std::shared_ptr<RefObject>> refObjects = _pRefKeyframe->_refObjects;
     // project 3d refObjects and 3d detections to current camera pose and find correspondences.
@@ -264,9 +274,9 @@ bool FrameTracker::DoMotionBasedTrack(Frame& currentFrame, const Frame& lastFram
                 indexLargestOverlap = countDetection;
                 largestIoU = (sumOverlaps[0] / sumUnions[0]);
             }
-            if ((sumOverlaps[0] / sumUnions[0]) > 0)
+            if (largestIoU < 0 && (sumOverlaps[0] / sumUnions[0]) > 0 && (sumOverlaps[0] / sumUnions[0]) < minIoUToReject)
             {
-                TDO_LOG_DEBUG_FORMAT("relocal: give up landmark matching due to threshold: iou (%f)", (sumOverlaps[0] / sumUnions[0]));
+                TDO_LOG_DEBUG_FORMAT("MotionBased tracking: object matching failed due to threshold: iou (%f)", (sumOverlaps[0] / sumUnions[0]));
             }
             // TDO_LOG_DEBUG_FORMAT("RefObject No.%d, detection No.%d, overlapping area: %d", countRefObject % countDetection % sum[0]);
             countDetection++;
@@ -287,8 +297,6 @@ bool FrameTracker::DoMotionBasedTrack(Frame& currentFrame, const Frame& lastFram
         cv::Mat zeroChannel(myStereoCamera._rows, myStereoCamera._cols, CV_8UC1, cv::Scalar(0));
         cv::Scalar sum = cv::sum(displayRefObjects);
         cv::Scalar sum2 = cv::sum(displayDetections);
-        TDO_LOG_DEBUG("displayRefObjects sum: " << sum[0]);
-        TDO_LOG_DEBUG("displayDetections sum: " << sum2[0]);
         channels.push_back(displayRefObjects * 255);
         channels.push_back(displayDetections * 255);
         channels.push_back(zeroChannel * 255);
@@ -361,7 +369,7 @@ bool FrameTracker::DoMotionBasedTrack(Frame& currentFrame, const Frame& lastFram
         // track failed
         velocity = Eigen::Matrix4f::Identity();
         currentFrame.SetPose(lastFrame.GetPose() * velocity);
-        TDO_LOG_DEBUG("track fail. not updating camera pose.");
+        TDO_LOG_DEBUG_FORMAT("track fail. only %d corresponding objects.", objectPoints.size());
         // not updating cameraInWorld
         return false;
     }
@@ -381,13 +389,21 @@ bool FrameTracker::DoMotionBasedTrack(Frame& currentFrame, const Frame& lastFram
         TrackWithPnP(objectPoints, imagePoints, cameraMatrix, distCoeffs, maxPoseError, currentFrameInRefKeyFrame);
         TDO_LOG_DEBUG("currentCameraInRefKeyFrame: \n" << currentFrameInRefKeyFrame);
         velocity = lastFrame.GetPose().inverse() * currentFrameInRefKeyFrame;  // Note: think like there is a point in last frame, first transform it to keyframe then to current frame.
-        if (
-            velocity.block(0, 3, 3, 1).norm() > maxPoseError
-        ){
+
+        Eigen::Quaterniond quat(velocity.block<3, 3>(0, 0).cast<double>());
+        double roll, pitch, yaw;
+        mathutils::convert_quat_to_euler_zyx_infuc(quat, roll, pitch, yaw);
+        double maxAngle = std::max({std::abs(roll), std::abs(pitch), std::abs(yaw)});
+
+        bool isTooLargeTranslation = velocity.col(3).head<3>().norm() > maxPoseError;
+        bool isTooLargeRotate = static_cast<float>(maxAngle * 180 / M_PI) > maxRotError;
+        bool isTooLargeError = isTooLargeRotate || isTooLargeTranslation;
+        if (isTooLargeError){
+            TDO_LOG_DEBUG_FORMAT("motionbased tracking failed (rotate: %f:%f, trans: %f:%f). not updating camera pose.", 
+                                 (maxAngle * 180 / M_PI) % maxRotError % (velocity.block(0, 3, 3, 1).norm()) % maxPoseError);
             // track failed
             velocity = Eigen::Matrix4f::Identity();
             currentFrame.SetPose(lastFrame.GetPose() * velocity);
-            TDO_LOG_DEBUG("track fail. not updating camera pose.");
             // not updating cameraInWorld
             return false;
         }
@@ -552,6 +568,7 @@ bool FrameTracker::Do2DTrackingBasedTrack(Frame& currentFrame, const Frame& last
 
 void FrameTracker::CreateNewLandmarks(std::shared_ptr<KeyFrame> pRefKeyFrame, std::shared_ptr<MapDataBase> pMapDb, const bool isDebug){
     float minIoUForCorrespondence = 0.6;
+    // float planeThreshold = 1.0;
     // float sizeDiffToReject = 0.5;
 
     std::vector<std::shared_ptr<LandMark>> visibleLandmarks = pMapDb->GetVisibleLandmarks(pRefKeyFrame);  // Note: find landmarks that might fall within FoV of this keyframe.
@@ -626,6 +643,22 @@ void FrameTracker::CreateNewLandmarks(std::shared_ptr<KeyFrame> pRefKeyFrame, st
                 // }
                 // else if ((keypt1InLandmark.norm() * 2) > objectSize.maxCoeff() * (1 + sizeDiffToReject)){
                 //     continue;
+                // }
+
+                // // // use plane consumption to filter bad landmark.
+                // std::vector<std::shared_ptr<LandMark>> visibleLandmarks = pMapDb->GetVisibleLandmarks(_pRefKeyframe);
+                // if (visibleLandmarks.size() > 4){
+                //     std::vector<Vec3_t> ldmCenters(visibleLandmarks.size() + 1);
+                //     ldmCenters.push_back(poseLandmarkInWorld.col(3).head<3>());
+                //     for (auto& ldm : visibleLandmarks){
+                //         ldmCenters.push_back(ldm->GetLandmarkPoseInWorld().col(3).head<3>());
+                //     }
+                //     std::vector<int> indicesInliers;
+                //     mathutils::FilterNonPlanePoints(ldmCenters, planeThreshold, indicesInliers);
+                //     if (indicesInliers.size() <= 0 || indicesInliers[0] != 0) {
+                //         TDO_LOG_DEBUG_FORMAT("landmark creation give up due to large plane error. (%d visible ldm, %d inliers)", visibleLandmarks.size() % indicesInliers.size())
+                //         continue;
+                //     }
                 // }
 
                 std::shared_ptr<object::ObjectBase> pObjectInfo = pRefObject->_detection._pObjectInfo;

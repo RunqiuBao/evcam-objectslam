@@ -1,9 +1,16 @@
 #ifndef MATHUTILS_H
 #define MATHUTILS_H
 
-#include <Eigen/Core>
 #include <cassert>
+
 #include <opencv2/opencv.hpp>
+
+#include <Eigen/Core>
+
+#include <pcl/point_types.h>
+#include <pcl/sample_consensus/model_types.h>
+#include <pcl/sample_consensus/method_types.h>
+#include <pcl/segmentation/sac_segmentation.h>
 
 #include "camera.h"
 
@@ -42,6 +49,34 @@ Eigen::Quaternion<T> zyx_euler_to_quat(const T& roll, const T& pitch, const T& y
 
 template Eigen::Quaterniond zyx_euler_to_quat<double>(const double&, const double&, const double&);
 template Eigen::Quaternionf zyx_euler_to_quat<float>(const float&, const float&, const float&);
+
+inline void convert_quat_to_euler_zyx_infuc(const Eigen::Quaterniond& q, double& roll, double& pitch, double& yaw)
+{
+    const double qw = q.w();
+    const double qx = q.x();
+    const double qy = q.y();
+    const double qz = q.z();
+
+    roll = std::atan2(2*(qw*qx+qy*qz), 1-2*(qx*qx+qy*qy));
+    pitch = std::asin(2*(qw*qy-qz*qx));
+    yaw = std::atan2(2*(qw*qz+qx*qy), 1-2*(qy*qy+qz*qz));
+}
+
+template<class quaternionType>  // Note: templating to avoid dep on g2o in mathutils.
+Vec6_d ConvertToXYZPRYVector(const quaternionType& pose){
+    double yaw, pitch, roll;
+    Eigen::Quaterniond q = pose.rotation();
+    convert_quat_to_euler_zyx_infuc(q, roll, pitch, yaw);
+    Vec6_d v;
+    Vec3_d _t = pose.translation();
+    v[0]=_t(0);
+    v[1]=_t(1);
+    v[2]=_t(2);
+    v[3]=roll;
+    v[4]=pitch;
+    v[5]=yaw;
+    return v;
+}
 
 // input is (3, N) shape points (or (2, N) for 2D), output (4, n) shape (or (3, N) for 2D).
 template <class T>
@@ -90,6 +125,12 @@ Eigen::Matrix4f ConvertMatrixFromQuat(const Eigen::Vector4f quat);
 std::string FillZeros(const std::string& str, const int width);
 
 std::vector<size_t> GetListOfRandomIndex(const size_t iStart, const size_t iEnd, const size_t numElements);
+
+void FilterNonPlanePoints(
+    const std::vector<Vec3_t> points,
+    const float planeDistanceThreshold,
+    std::vector<int>& indicesPoints
+);
 
 } // end of mathutils
 

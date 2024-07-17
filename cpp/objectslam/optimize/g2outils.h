@@ -38,7 +38,6 @@ public:
     bool write(std::ostream& os) const override;
 
     void setToOriginImpl() override {
-        std::cout <<"setToOriginImpl called" <<std::endl;
         _estimate = ::g2o::SE3Quat();
     }
 
@@ -52,35 +51,6 @@ public:
 /*--------------------------------------------------------------------------*/
 /*                  5D cylinder based optimization                          */
 /*--------------------------------------------------------------------------*/
-
-inline void convert_quat_to_euler_zyx_infuc(const Eigen::Quaterniond q, double& roll, double& pitch, double& yaw)
-{
-    const double qw = q.w();
-    const double qx = q.x();
-    const double qy = q.y();
-    const double qz = q.z();
-
-    roll = std::atan2(2*(qw*qx+qy*qz), 1-2*(qx*qx+qy*qy));
-    pitch = std::asin(2*(qw*qy-qz*qx));
-    yaw = std::atan2(2*(qw*qz+qx*qy), 1-2*(qy*qy+qz*qz));
-}
-
-inline Vec6_d ConvertToXYZPRYVector(const ::g2o::SE3Quat& pose){
-    double yaw, pitch, roll;
-    Eigen::Quaterniond q = pose.rotation();
-    convert_quat_to_euler_zyx_infuc(q, roll, pitch, yaw);
-    Vec6_d v;
-    Vec3_d _t = pose.translation();
-    v[0]=_t(0);
-    v[1]=_t(1);
-    v[2]=_t(2);
-    v[3]=roll;
-    v[4]=pitch;
-    v[5]=yaw;
-    return v;
-}
-
-
 class CylinderTarget
 {
 public:
@@ -106,49 +76,49 @@ public:
         keypt1InLocal = keypt1;
     }
 
-    // x,y,z,roll,pitch,yaw
-    inline void fromMinimalVector(const Vec6_d &v){
-        Eigen::Quaterniond posequat = mathutils::zyx_euler_to_quat<double>(v(3), v(4), v(5));
-        this->poseInWorld = ::g2o::SE3Quat(posequat, v.head<3>());
-    }
+    // // x,y,z,roll,pitch,yaw
+    // inline void fromMinimalVector(const Vec6_d &v){
+    //     Eigen::Quaterniond posequat = mathutils::zyx_euler_to_quat<double>(v(3), v(4), v(5));
+    //     this->poseInWorld = ::g2o::SE3Quat(posequat, v.head<3>());
+    // }
 
-	inline const Vec3_d &translation() const { return poseInWorld.translation(); }
-	inline void setTranslation(const Vec3_d &t_) {
-        poseInWorld.setTranslation(t_); 
-    }
-	inline void setRotation(const Eigen::Quaterniond &r_) {
-        poseInWorld.setRotation(r_);
-    }
-	inline void setRotation(const Mat33_d &R) {
-        poseInWorld.setRotation(Eigen::Quaterniond(R));
-    }
+	// inline const Vec3_d &translation() const { return poseInWorld.translation(); }
+	// inline void setTranslation(const Vec3_d &t_) {
+        // poseInWorld.setTranslation(t_); 
+    // }
+	// inline void setRotation(const Eigen::Quaterniond &r_) {
+        // poseInWorld.setRotation(r_);
+    // }
+	// inline void setRotation(const Mat33_d &R) {
+        // poseInWorld.setRotation(Eigen::Quaterniond(R));
+    // }
 
-    // update current cylinder pose with Lie algebra exponential map.
-    CylinderTarget exp_update(const Vec6_d& update){  // Note: update = omega (rotate) + upsilon (trans).
-        CylinderTarget newCylinder;
-        newCylinder.initialize(this->halfSizes, this->keypt1InLocal);
-        newCylinder.poseInWorld = this->poseInWorld * ::g2o::SE3Quat::exp(update);
-        return newCylinder;
-    }
+    // // update current cylinder pose with Lie algebra exponential map.
+    // CylinderTarget exp_update(const Vec6_d& update){  // Note: update = omega (rotate) + upsilon (trans).
+        // CylinderTarget newCylinder;
+        // newCylinder.initialize(this->halfSizes, this->keypt1InLocal);
+        // newCylinder.poseInWorld = this->poseInWorld * ::g2o::SE3Quat::exp(update);
+        // return newCylinder;
+    // }
 
-    // compare error between two cylinders
-    Vec6_d cylinder_log_error(const CylinderTarget& cylinder_b) const {
-        Vec6_d res;
-        ::g2o::SE3Quat pose_diff = cylinder_b.poseInWorld.inverse() * this->poseInWorld;
-        res = pose_diff.log();
-        return res;
-    }
+    // // compare error between two cylinders
+    // Vec6_d cylinder_log_error(const CylinderTarget& cylinder_b) const {
+        // Vec6_d res;
+        // ::g2o::SE3Quat pose_diff = cylinder_b.poseInWorld.inverse() * this->poseInWorld;
+        // res = pose_diff.log();
+        // return res;
+    // }
 
-    // api func required by g2o
-    Vec6_d min_log_error(const CylinderTarget& cylinder_b, bool print_details = false) const {
-        return cylinder_log_error(cylinder_b);
-    }
-
-    inline Vec6_d toMinimalVector() const {
-        Vec6_d v;
-        v = ConvertToXYZPRYVector(this->poseInWorld);
-        return v;
-    }
+    // // api func required by g2o
+    // Vec6_d min_log_error(const CylinderTarget& cylinder_b, bool print_details = false) const {
+        // return cylinder_log_error(cylinder_b);
+    // }
+ 
+    // inline Vec6_d toMinimalVector() const {
+        // Vec6_d v;
+        // v = mathutils::ConvertToXYZPRYVector<::g2o::SE3Quat>(this->poseInWorld);
+        // return v;
+    // }
 
     Mat44_d GetSimilarityTransform() const {
         Mat44_d transform = this->poseInWorld.to_homogeneous_matrix();
@@ -168,12 +138,22 @@ public:
         return corners_world;
     }
 
-    Mat3Xd compute_keypts_3D() const {
+    Mat3Xd compute_keypt_3D() const {
         Mat3Xd keypts_local;
         keypts_local.resize(3, 1);
-        keypts_local << keypt1InLocal(0),
-                        keypt1InLocal(1),
-                        keypt1InLocal(2);
+        keypts_local << 0,
+                        0,
+                        1;
+        Mat3Xd keypts_world = mathutils::homo_to_real_coord<double>(GetSimilarityTransform() * mathutils::real_to_homo_coord<double>(keypts_local));
+        return keypts_world;
+    }
+
+    Mat3Xd compute_keypts_3D() const {
+        Mat3Xd keypts_local;
+        keypts_local.resize(3, 2);
+        keypts_local << 0, 0,
+                        0, 0,
+                        1, 0;
         Mat3Xd keypts_world = mathutils::homo_to_real_coord<double>(GetSimilarityTransform() * mathutils::real_to_homo_coord<double>(keypts_local));
         return keypts_world;
     }
@@ -200,16 +180,27 @@ public:
     Vec6_d ProjectToImageBboxAndKeypts(const ::g2o::SE3Quat& transform_cw, const Mat33_d& kk) const
     {
         Vec4_d bbox_proj = ProjectToImageBbox(transform_cw, kk);
-        Mat3Xd keypts_3d_world = compute_keypts_3D();
+        Mat3Xd keypts_3d_world = compute_keypt_3D();
         Mat2Xd keypys_2d = mathutils::homo_to_real_coord<double>(kk * mathutils::homo_to_real_coord<double>(transform_cw.to_homogeneous_matrix() * mathutils::real_to_homo_coord<double>(keypts_3d_world)));
         Vec6_d bboxAndKeypts;
         bboxAndKeypts << bbox_proj(0), bbox_proj(1), bbox_proj(2), bbox_proj(3), keypys_2d(0, 0), keypys_2d(1, 0);
         return bboxAndKeypts;
     }
 
+    // [keypt1_x, keypt2_x]
+    Vec4_d ProjectToImageKeypts(const ::g2o::SE3Quat& transform_cw, const Mat33_d& kk) const
+    {
+        Vec4_d bbox_proj = ProjectToImageBbox(transform_cw, kk);
+        Mat3Xd keypts_3d_world = compute_keypts_3D();
+        Mat2Xd keypys_2d = mathutils::homo_to_real_coord<double>(kk * mathutils::homo_to_real_coord<double>(transform_cw.to_homogeneous_matrix() * mathutils::real_to_homo_coord<double>(keypts_3d_world)));
+        Vec4_d keypts;
+        keypts << keypys_2d(0, 0), keypys_2d(1, 0), keypys_2d(0, 1), keypys_2d(1, 1);
+        return keypts;
+    }
+
 };
 
-class VertexLandmarkCylinder final : public ::g2o::BaseVertex<6, CylinderTarget>
+class VertexLandmarkCylinder final : public ::g2o::BaseVertex<6, CylinderTarget>  // Note: 6 means the twist update is 6 digits (omega + upsilon). 
 {
 public:
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
@@ -227,6 +218,9 @@ public:
     }
 
     void setToOriginImpl() override{
+        std::cout <<"+++++++++++++++++++++++++++++++++" <<std::endl;
+        std::cout <<"ShotVertex setToOriginImpl called" <<std::endl;
+        std::cout <<"~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~" <<std::endl;
         _estimate = CylinderTarget();
         _estimate.initialize(halfSizes, keypt1InLocal);
     }
@@ -240,14 +234,14 @@ public:
     Vec3_d keypt1InLocal;
 };
 
-class EdgeSE3CylinderProj : public ::g2o::BaseBinaryEdge<7, Vec7_d, VertexLandmarkCylinder, ShotVertex>
+class EdgeSE3CylinderProj : public ::g2o::BaseBinaryEdge<5, Vec5_d, VertexLandmarkCylinder, ShotVertex>
 {
 public:
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
     typedef std::shared_ptr<EdgeSE3CylinderProj> Ptr;
 
     EdgeSE3CylinderProj(const unsigned int edgeId)
-    :_edgeId(edgeId), BaseBinaryEdge<7, Vec7_d, VertexLandmarkCylinder, ShotVertex>()
+    :_edgeId(edgeId), BaseBinaryEdge<5, Vec5_d, VertexLandmarkCylinder, ShotVertex>()
     {}
 
     bool read(std::istream& is) override {return true;};
@@ -292,8 +286,6 @@ public:
         const Vec3_d obs(_measurement);
         auto obsUpdate = cam_project(v1->estimate().map(v2->estimate().poseInWorld.translation()));
         _error = obs - obsUpdate;
-        std::cout << "================================================================" << std::endl;
-        std::cout << "point proj error: " << _error << std::endl;
     }
 
     void linearizeOplus() override;
@@ -342,7 +334,7 @@ public:
         const Vec4_d& rightBbox,
         const float sqrt_chi_sq,
         const bool bUseHuberLoss,
-        const Mat77_d& infoMat
+        const Mat55_d& infoMat
     );
 
     inline bool IsInlier() const {
@@ -420,11 +412,11 @@ ReprojEdgeWrapper<EdgeType>::ReprojEdgeWrapper(
     const Vec4_d& rightBbox,
     const float sqrt_chi_sq,
     const bool bUseHuberLoss,
-    const Mat77_d& infoMat
+    const Mat55_d& infoMat
 ): _edgeId(edgeId), _pCamera(pShot->_pCamera), _pShot(pShot), _pLm(pLm) {
     EdgeType* edge = new EdgeType(edgeId);
-    Vec7_d obs;
-    obs << leftBbox(0), leftBbox(1), leftBbox(2), leftBbox(3), leftKeypts(0), leftKeypts(1), rightBbox(0);
+    Vec5_d obs;
+    obs << leftKeypts(0), leftKeypts(1), leftBbox(0), leftBbox(1), rightBbox(0);
     edge->setMeasurement(obs);
     edge->setInformation(infoMat);
 

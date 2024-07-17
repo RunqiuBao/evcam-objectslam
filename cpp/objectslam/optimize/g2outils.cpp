@@ -145,10 +145,10 @@ bool StereoPerspectiveReprojEdge::write(std::ostream& os) const {
 void VertexLandmarkCylinder::oplusImpl(const double *update_)
 {
     Eigen::Map<const Vec6_d> update(update_);
-    CylinderTarget cylinder_b = _estimate;
+    CylinderTarget cylinder_b = estimate();
     Vec6_d update_noRz = update;
-    update_noRz(2) = 0; // Note: rotation around z is ignored.
-    cylinder_b.poseInWorld = _estimate.poseInWorld * ::g2o::SE3Quat::exp(update_noRz);
+    update_noRz(2) *= 0; // Note: rotation around z is ignored.
+    cylinder_b.poseInWorld = ::g2o::SE3Quat::exp(update_noRz) * cylinder_b.poseInWorld;
     setEstimate(cylinder_b);
 }
 
@@ -159,19 +159,16 @@ void EdgeSE3CylinderProj::computeError()
     ::g2o::SE3Quat cam_pose_Tcw = shotVertex->estimate();
     CylinderTarget cylinder_world = cylinderVertex->estimate();    
 
-    Vec6_d bboxAndKeypts = cylinder_world.ProjectToImageBboxAndKeypts(cam_pose_Tcw, kk);
-
+    Vec4_d keypts = cylinder_world.ProjectToImageKeypts(cam_pose_Tcw, kk);
     // right cam
     Vec3_d cylinder_pos_cam = cam_pose_Tcw.map(cylinder_world.poseInWorld.translation());
+    double reproj_x_right = keypts(2) - focal_x_baseline_ / cylinder_pos_cam(2);
 
-    double reproj_x_right = bboxAndKeypts(0) - focal_x_baseline_ / cylinder_pos_cam(2);
+    Vec5_d keyptsAndRightX;
+    keyptsAndRightX.head<4>() = keypts;
+    keyptsAndRightX(4) = reproj_x_right;
 
-    Vec7_d bboxAndKeyptsAndRightX;
-    bboxAndKeyptsAndRightX.head<6>() = bboxAndKeypts;
-    bboxAndKeyptsAndRightX(6) = reproj_x_right;
-    _error = bboxAndKeyptsAndRightX - _measurement;
-    TDO_LOG_CRITICAL("cylinder proj error:\n" << _error);
-
+    _error = keyptsAndRightX - _measurement;
 }
 
 double EdgeSE3CylinderProj::get_error_norm()
