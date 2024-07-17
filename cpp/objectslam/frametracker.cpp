@@ -58,9 +58,8 @@ static void TrackWithPnP(
     currentFrameInRefKeyFrame = refKeyFrameInCurrentFrame.inverse();
 }
 
-bool FrameTracker::DoRelocalizeFromMap(Frame& currentFrame, const Frame& lastFrame, std::shared_ptr<MapDataBase> pMapDb, Mat44_t& velocity, const bool isDebug){
+bool FrameTracker::DoRelocalizeFromMap(Frame& currentFrame, const Frame& lastFrame, std::shared_ptr<MapDataBase> pMapDb, Mat44_t& velocity, const float minIoUToReject, const bool isDebug){
     float maxPoseError = 0.5;
-    size_t minIoUToReject = 0.6;
 
     std::vector<std::shared_ptr<LandMark>> visibleLandmarks = pMapDb->GetVisibleLandmarks(_pRefKeyframe);
     if (visibleLandmarks.size() < 4) {
@@ -99,6 +98,10 @@ bool FrameTracker::DoRelocalizeFromMap(Frame& currentFrame, const Frame& lastFra
             if ((sumOverlaps[0] / sumUnions[0]) > largestIoU && (sumOverlaps[0] / sumUnions[0]) > minIoUToReject){
                 indexLargestOverlap = countDetection;
                 largestIoU = (sumOverlaps[0] / sumUnions[0]);
+            }
+            if ((sumOverlaps[0] / sumUnions[0]) > 0)
+            {
+                TDO_LOG_DEBUG_FORMAT("relocal: give up landmark matching due to threshold: iou (%f)", (sumOverlaps[0] / sumUnions[0]));
             }
             countDetection++;
             if (isDebug && indexVisibleLandmark == 0){
@@ -156,6 +159,33 @@ bool FrameTracker::DoRelocalizeFromMap(Frame& currentFrame, const Frame& lastFra
         indexLandmark++;
     }
 
+    // indexLandmark = 0;
+    // if (objectPoints.size() < 4){
+    //     // not enough detection. Add keypt as well for tracking.
+    //     for (int indexCorrespondingDetection : indicesCorrespondingDetecton){
+    //         if (indexCorrespondingDetection < 0){
+    //             indexLandmark++;
+    //             continue;
+    //         }
+    //         // keypt
+    //         Vec3_t keypt1InWorld = visibleLandmarks[indexLandmark]->GetKeypt1InLandmark();
+    //         Mat44_t landmarkPoseInWorld = visibleLandmarks[indexLandmark]->GetLandmarkPoseInWorld();
+    //         keypt1InWorld = landmarkPoseInWorld.block<3, 3>(0, 0) * keypt1InWorld + landmarkPoseInWorld.col(3).head<3>();
+    //         cv::Point3f point3D_keypt(
+    //             keypt1InWorld(0),
+    //             keypt1InWorld(1),
+    //             keypt1InWorld(2)
+    //         );
+    //         objectPoints.push_back(point3D_keypt);
+    //         cv::Point2f point2D_keypt(
+    //             (*currentFrame._matchedLeftCamDetections[indexCorrespondingDetection])._keypts[0][0],
+    //             (*currentFrame._matchedLeftCamDetections[indexCorrespondingDetection])._keypts[0][1]
+    //         );
+    //         imagePoints.push_back(point2D_keypt);
+    //         indexLandmark++;
+    //     }
+    // }
+
     // Estimate current frame pose using PnP
     if (objectPoints.size() < 4){
         // relocal failed
@@ -201,8 +231,7 @@ bool FrameTracker::DoRelocalizeFromMap(Frame& currentFrame, const Frame& lastFra
 
 }
 
-bool FrameTracker::DoMotionBasedTrack(Frame& currentFrame, const Frame& lastFrame, Mat44_t& velocity, const bool isDebug) const{
-    size_t minIoUToReject = 0.6;
+bool FrameTracker::DoMotionBasedTrack(Frame& currentFrame, const Frame& lastFrame, Mat44_t& velocity, const float minIoUToReject, const bool isDebug) const{
     float maxPoseError = 0.5;
 
     std::vector<std::shared_ptr<RefObject>> refObjects = _pRefKeyframe->_refObjects;
@@ -234,6 +263,10 @@ bool FrameTracker::DoMotionBasedTrack(Frame& currentFrame, const Frame& lastFram
             if ((sumOverlaps[0] / sumUnions[0]) > largestIoU && (sumOverlaps[0] / sumUnions[0]) > minIoUToReject){
                 indexLargestOverlap = countDetection;
                 largestIoU = (sumOverlaps[0] / sumUnions[0]);
+            }
+            if ((sumOverlaps[0] / sumUnions[0]) > 0)
+            {
+                TDO_LOG_DEBUG_FORMAT("relocal: give up landmark matching due to threshold: iou (%f)", (sumOverlaps[0] / sumUnions[0]));
             }
             // TDO_LOG_DEBUG_FORMAT("RefObject No.%d, detection No.%d, overlapping area: %d", countRefObject % countDetection % sum[0]);
             countDetection++;
@@ -567,7 +600,7 @@ void FrameTracker::CreateNewLandmarks(std::shared_ptr<KeyFrame> pRefKeyFrame, st
         float distanceThreshold;
         if (indicesForClosestLandmark[indexRefObject] >= 0){
             // found a closest landmark.
-            distanceThreshold = visibleLandmarks[indicesForClosestLandmark[indexRefObject]]->_horizontalSize * 3.;  // Note: 3.0 is a factor.
+            distanceThreshold = visibleLandmarks[indicesForClosestLandmark[indexRefObject]]->GetLandmarkSize()(0) * 3.;  // Note: 3.0 is a factor.
         }
         else{
             // might be the initial keyframe. Or there are no visiable landmarks existing for this keyframe.

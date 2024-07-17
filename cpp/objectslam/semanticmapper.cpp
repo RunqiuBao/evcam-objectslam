@@ -88,7 +88,7 @@ void SemanticMapper::_DoMergeLandmarks() {
 
                 for (size_t indexDestLandmark = indexSrcLandmark + 1; indexDestLandmark < allLandmarksInDb.size(); indexDestLandmark++) {
                     if (!visited[indexDestLandmark]) {
-                        float distanceThreshold = allLandmarksInDb[indexDestLandmark]->_horizontalSize * 3.;  // Note: 3.0 is a factor.
+                        float distanceThreshold = allLandmarksInDb[indexDestLandmark]->GetLandmarkSize()(0) * 3.;  // Note: 3.0 is a factor.
                         float distance = (allLandmarksInDb[indexSrcLandmark]->GetLandmarkPoseInWorld().block(0, 3, 3, 1) - allLandmarksInDb[indexDestLandmark]->GetLandmarkPoseInWorld().block(0, 3, 3, 1)).norm();
                         if (distance < distanceThreshold) {
                             cluster.push_back(allLandmarksInDb[indexDestLandmark]);

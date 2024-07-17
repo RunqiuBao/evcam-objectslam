@@ -319,7 +319,7 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
         }
         else{
             Mat44_t nextFrameInCameraTransformBackup = nextFrameInCameraTransform;  // Note: backup in case first track fails and nextFrameInCameraTransform will be set to identity,
-            bool isSuccess = _tracker.DoMotionBasedTrack(*pOneFrame, (*_pFrameStack.back()), nextFrameInCameraTransform, isDebug);
+            bool isSuccess = _tracker.DoMotionBasedTrack(*pOneFrame, (*_pFrameStack.back()), nextFrameInCameraTransform, 0.4, isDebug);
 
             if ((!isSuccess) && ((*_pFrameStack.back())._isTracked)){
                 bool isSuccess = _tracker.Do2DTrackingBasedTrack(*pOneFrame, (*_pFrameStack.back()), nextFrameInCameraTransform, isDebug);
@@ -328,7 +328,7 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
                     // nextFrameInCameraTransform = (*_pFrameStack.back()).GetPose();
                     // bool isSuccess = _tracker.DoMotionBasedTrack(*pOneFrame, (*_tracker._pRefKeyframe->_pRefFrame), nextFrameInCameraTransform, isDebug);
                     // try relocalize from map
-                    bool isSuccess = _tracker.DoRelocalizeFromMap(*pOneFrame, (*_pFrameStack.back()), _pMapDb, nextFrameInCameraTransform, isDebug);
+                    bool isSuccess = _tracker.DoRelocalizeFromMap(*pOneFrame, (*_pFrameStack.back()), _pMapDb, nextFrameInCameraTransform, 0.4, isDebug);
                     if (!isSuccess){
                         TDO_LOG_DEBUG("track trial from keyframe also failed.");
                     }
@@ -372,11 +372,11 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
                     _pMapper->SchedulePruneLandmarksTask();
                     keyframeCount = _pMapDb->_keyframes.size();
                 }
-                // start BA
-                while (!_pMapper->PushKeyframeForBA(pOneKeyframe)){
-                    // Note: Force optimize every keyframe.
-                    std::this_thread::sleep_for(std::chrono::microseconds(static_cast<unsigned int>(0.05 * 1e6)));
-                }
+                // // start BA
+                // while (!_pMapper->PushKeyframeForBA(pOneKeyframe)){
+                //     // Note: Force optimize every keyframe.
+                //     std::this_thread::sleep_for(std::chrono::microseconds(static_cast<unsigned int>(0.05 * 1e6)));
+                // }
             }
 
         }

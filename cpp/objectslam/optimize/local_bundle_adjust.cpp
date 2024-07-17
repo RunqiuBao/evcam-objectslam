@@ -50,6 +50,7 @@ void optimize::DoLocalBA(std::shared_ptr<KeyFrame> pCurrKeyframe, bool* const bF
                 TDO_LOG_ERROR("got empty plandmark, something is super wrong!");
                 continue;
             }
+
             if (localLandmark_index.first->IsToDelete()) {
                 continue;
             }
@@ -90,9 +91,15 @@ void optimize::DoLocalBA(std::shared_ptr<KeyFrame> pCurrKeyframe, bool* const bF
 
     // -------- (2) --------
     // build optimizer
-    auto linearSolver = std::make_unique<::g2o::LinearSolverCSparse<::g2o::BlockSolver_6_3::PoseMatrixType>>();  // Note: here ::g2o means a global namespace from outside of eventobjectslam.
-    auto blockSolver = std::make_unique<::g2o::BlockSolver_6_3>(std::move(linearSolver));
-    auto algorithm = new ::g2o::OptimizationAlgorithmLevenberg(std::move(blockSolver));
+    // // case: simple map point reprojection
+    // auto linearSolver = std::make_unique<::g2o::LinearSolverCSparse<::g2o::BlockSolver_6_3::PoseMatrixType>>();  // Note: here ::g2o means a global namespace from outside of eventobjectslam.
+    // auto blockSolver = std::make_unique<::g2o::BlockSolver_6_3>(std::move(linearSolver));
+    // auto algorithm = new ::g2o::OptimizationAlgorithmLevenberg(std::move(blockSolver));
+
+    // case: self-defined vertex
+    std::unique_ptr<::g2o::BlockSolverX::LinearSolverType> linearSolver = std::make_unique<::g2o::LinearSolverDense<g2o::BlockSolverX::PoseMatrixType>>();
+    std::unique_ptr<::g2o::BlockSolverX> blockSolver = std::make_unique<::g2o::BlockSolverX>(std::move(linearSolver));
+    ::g2o::OptimizationAlgorithmLevenberg* algorithm = new ::g2o::OptimizationAlgorithmLevenberg(std::move(blockSolver));
 
     ::g2o::SparseOptimizer optimizer;
     optimizer.setAlgorithm(algorithm);
@@ -111,8 +118,12 @@ void optimize::DoLocalBA(std::shared_ptr<KeyFrame> pCurrKeyframe, bool* const bF
     // set local keyframes to the optimizer
     for (auto& id_pLocalKeyframe : ids_localKeyframes) {
         auto pLocalKeyframe = id_pLocalKeyframe.second;
+        // if (pLocalKeyframe->IsToDelete()) {
+        //     continue;
+        // }
         allKeyframes.emplace(id_pLocalKeyframe);
-        auto pKeyfrmVtx = g2outils::CreateShotVertex(pLocalKeyframe->_keyFrameID, pLocalKeyframe->GetKeyframePoseInWorld().inverse().cast<double>(), false);
+        TDO_LOG_CRITICAL("pLocalKeyframe->_keyFrameID:" << std::to_string(pLocalKeyframe->_keyFrameID) << ", isToDelte: " << (pLocalKeyframe->IsToDelete()? "true" : "false"));
+        auto pKeyfrmVtx = g2outils::CreateShotVertex(pLocalKeyframe->_keyFrameID, pLocalKeyframe->GetKeyframePoseInWorld().inverse().cast<double>(), pLocalKeyframe->_keyFrameID==0?true:false);
         ids_keyfrmVtx[pLocalKeyframe->_keyFrameID] = pKeyfrmVtx;
         optimizer.addVertex(pKeyfrmVtx);
         maxKeyframeID = maxKeyframeID > pLocalKeyframe->_keyFrameID ? maxKeyframeID : pLocalKeyframe->_keyFrameID;
@@ -121,7 +132,11 @@ void optimize::DoLocalBA(std::shared_ptr<KeyFrame> pCurrKeyframe, bool* const bF
     // set fixed keyframes to optimizer
     for (auto& id_pFixedKeyframe : ids_fixedKeyframes) {
         auto pFixedKeyframe = id_pFixedKeyframe.second;
+        // if (pFixedKeyframe->IsToDelete()) {
+        //     continue;
+        // }
         allKeyframes.emplace(id_pFixedKeyframe);
+        TDO_LOG_CRITICAL("pLocalKeyframe->_keyFrameID:" << std::to_string(pFixedKeyframe->_keyFrameID) << ", isToDelte: " << (pFixedKeyframe->IsToDelete()? "true" : "false"));
         auto pKeyfrmVtx = g2outils::CreateShotVertex(pFixedKeyframe->_keyFrameID, pFixedKeyframe->GetKeyframePoseInWorld().inverse().cast<double>(), true);
         ids_keyfrmVtx[pFixedKeyframe->_keyFrameID] = pKeyfrmVtx;
         optimizer.addVertex(pKeyfrmVtx);
@@ -130,23 +145,25 @@ void optimize::DoLocalBA(std::shared_ptr<KeyFrame> pCurrKeyframe, bool* const bF
 
     // -------- (4) --------
     // Connect keyframe and landmark vertices by reprojection edge.
-    std::unordered_map<unsigned int, g2outils::LandmarkPointVertex*> ids_landmarkPointVtx;
+    std::unordered_map<unsigned int, g2outils::VertexLandmarkCylinder*> ids_landmarkPointVtx;
     ids_landmarkPointVtx.reserve(ids_localLandmarks.size());
     
-    using ReprojEdgeWrapper = g2outils::ReprojEdgeWrapper<KeyFrame>;
+    using ReprojEdgeWrapper = g2outils::ReprojEdgeWrapper<g2outils::StereoPerspectiveReprojEdge>;
     std::vector<ReprojEdgeWrapper> reprojEdgeWraps;
     reprojEdgeWraps.reserve(allKeyframes.size() * ids_localLandmarks.size());
 
-    // 有意水準5%のカイ2乗値. for huber kernel
-    // 自由度n=3
+    // 有意水準5%のカイ2乗値. for huber kernel. 自由度n=3
     constexpr float chi_sq_3D = 7.81473;
     const float sqrt_chi_sq_3D = std::sqrt(chi_sq_3D);
     unsigned int edgeId = 0;
+    unsigned int ldmVertexId = 0;
     for (auto& id_localLm : ids_localLandmarks) {
         auto pLocalLm = id_localLm.second;
         // create g2o vertex from the landmark and set to optimizer.
-        auto landmarkCenterInWorld = pLocalLm->GetLandmarkPoseInWorld().block(0, 3, 3, 1).cast<double>();
-        auto pLmVtx = g2outils::CreateLandmarkPointVertex(maxKeyframeID + 1 + pLocalLm->_landmarkID, landmarkCenterInWorld, false);
+        auto landmarkPoseInWorld = pLocalLm->GetLandmarkPoseInWorld().cast<double>();
+        ldmVertexId = maxKeyframeID + 1 + pLocalLm->_landmarkID;
+        Vec3_d cylinderHalfSizes = (pLocalLm->GetLandmarkSize() / 2).cast<double>();
+        auto pLmVtx = g2outils::CreateLandmarkCylinderVertex(ldmVertexId, landmarkPoseInWorld, cylinderHalfSizes, pLocalLm->GetKeypt1InLandmark().cast<double>(), false);
         optimizer.addVertex(pLmVtx);
         ids_landmarkPointVtx[pLocalLm->_landmarkID] = pLmVtx;
         const std::map<std::shared_ptr<KeyFrame>, unsigned int> observations_indices = pLocalLm->GetObservations();
@@ -154,7 +171,7 @@ void optimize::DoLocalBA(std::shared_ptr<KeyFrame> pCurrKeyframe, bool* const bF
             auto pKeyframe = pObs_idx.first;
             auto idx = pObs_idx.second;
             if (!pKeyframe) {
-                TDO_LOG_ERROR("got empty pkeyframe, something is super wrong!");
+                TDO_LOG_ERROR("got empty pkeyframe, the target keyframe might be deleted already!");
                 continue;
             }
             if (!allKeyframes.count(pKeyframe->_keyFrameID)) {
@@ -165,10 +182,60 @@ void optimize::DoLocalBA(std::shared_ptr<KeyFrame> pCurrKeyframe, bool* const bF
             const float centerX = pKeyframe->_refObjects[idx]->_detection._pLeftBbox->_centerX;
             const float centerY = pKeyframe->_refObjects[idx]->_detection._pLeftBbox->_centerY;
             const float centerXRight = pKeyframe->_refObjects[idx]->_detection._pRightBbox->_centerX;
-            ReprojEdgeWrapper reprojEdgeWrap(edgeId, pKeyframe, pKeyfrmVtx, pLocalLm, pLmVtx, centerX, centerY, centerXRight, sqrt_chi_sq_3D);
+            ReprojEdgeWrapper reprojEdgeWrap(edgeId, pKeyframe, pKeyfrmVtx, pLocalLm, pLmVtx, centerX, centerY, centerXRight, sqrt_chi_sq_3D, true);
             edgeId++;
             reprojEdgeWraps.push_back(reprojEdgeWrap);
             optimizer.addEdge(reprojEdgeWrap._pEdge);
+            if (observations_indices.size() == 1){
+                TDO_LOG_DEBUG_FORMAT("landmark(%d) has only one observation, disable the reprojEdgeWrap edge.", pLocalLm->_landmarkID);
+                reprojEdgeWrap.SetAsOutlier();
+            }
+        }
+    }
+
+    using ReprojEdge2Wrapper = g2outils::ReprojEdgeWrapper<g2outils::EdgeSE3CylinderProj>;
+    std::vector<ReprojEdge2Wrapper> reprojEdge2Wraps;
+    reprojEdge2Wraps.reserve(allKeyframes.size() * ids_localLandmarks.size());
+
+    // camera-object 2d measurement, including bbox and keypts
+    double camera_object2d_BA_weight = 0.1;  // Note: weight in optimization.
+    Vec7_d inv_sigma;
+    inv_sigma.setOnes();
+    inv_sigma *= camera_object2d_BA_weight;
+    Mat77_d cam_object2d_sigma = inv_sigma.cwiseProduct(inv_sigma).asDiagonal();
+    const float tHuberObject2d = std::sqrt(20.0);  // Note: 1000 object reprojection error is usually large.
+    for (auto id_pLocalLm : ids_localLandmarks) {
+        auto pLocalLm = id_pLocalLm.second;
+        auto pLmVtx = ids_landmarkPointVtx[pLocalLm->_landmarkID];
+        const std::map<std::shared_ptr<KeyFrame>, unsigned int> observations_indices = pLocalLm->GetObservations();
+        for (const auto& pObs_idx : observations_indices) {
+            auto pKeyframe = pObs_idx.first;
+            auto idxRefObj = pObs_idx.second;
+            if (!pKeyframe) {
+                TDO_LOG_ERROR("got empty pkeyframe, the target keyframe might be deleted already!");
+                continue;
+            }
+            if (!allKeyframes.count(pKeyframe->_keyFrameID)) {
+                continue;
+            }
+            const auto pKeyfrmVtx = ids_keyfrmVtx[pKeyframe->_keyFrameID];
+            Vec4_d leftBbox;
+            auto& threeDetection = pKeyframe->_refObjects[idxRefObj]->_detection;
+            leftBbox << threeDetection._pLeftBbox->_centerX, threeDetection._pLeftBbox->_centerY, threeDetection._pLeftBbox->_bWidth, threeDetection._pLeftBbox->_bHeight;
+            Vec2_d leftKeypts;
+            leftKeypts << threeDetection._pLeftBbox->_keypts[0](0), threeDetection._pLeftBbox->_keypts[0](1);
+            Vec4_d rightBbox;
+            rightBbox << threeDetection._pRightBbox->_centerX, threeDetection._pRightBbox->_centerY, threeDetection._pRightBbox->_bWidth, threeDetection._pRightBbox->_bHeight;
+            Mat77_d infoMat = cam_object2d_sigma * threeDetection._detectionScore * threeDetection._detectionScore;
+            ReprojEdge2Wrapper reprojEdge2Wrap(edgeId, pKeyframe, pKeyfrmVtx, pLocalLm, pLmVtx, leftBbox, leftKeypts, rightBbox, tHuberObject2d, true, infoMat);
+            edgeId++;
+            auto key_keyfrm_lm = std::make_pair(pKeyframe, pLocalLm);
+            reprojEdge2Wraps.push_back(reprojEdge2Wrap);
+            optimizer.addEdge(reprojEdge2Wrap._pEdge);
+            if (observations_indices.size() == 1){
+                TDO_LOG_DEBUG_FORMAT("landmark(%d) has only one observation, disable the reprojEdge2Wrap edge.", pLocalLm->_landmarkID);
+                reprojEdge2Wrap.SetAsOutlier();
+            }
         }
     }
 
@@ -181,7 +248,7 @@ void optimize::DoLocalBA(std::shared_ptr<KeyFrame> pCurrKeyframe, bool* const bF
     }
 
     optimizer.initializeOptimization();
-    // TDO_LOG_CRITICAL_FORMAT("start optimize with %d allKeyframes, %d ids_localLandmarks, %d ReprojEdges.", allKeyframes.size() % ids_localLandmarks.size() % reprojEdgeWraps.size());
+    TDO_LOG_CRITICAL_FORMAT("start optimize with %d allKeyframes, %d ids_localLandmarks, %d ReprojEdges.", allKeyframes.size() % ids_localLandmarks.size() % reprojEdgeWraps.size());
     try{
         optimizer.optimize(numFirstIter);
     }
@@ -197,7 +264,9 @@ void optimize::DoLocalBA(std::shared_ptr<KeyFrame> pCurrKeyframe, bool* const bF
     // -------- (6) --------
     // remove outliers and 2nd round.
     if (*bForceStopFlag) {
-        for (auto& reprojEdgeWrap : reprojEdgeWraps) {
+
+        for (size_t ii = 0; ii < reprojEdgeWraps.size(); ii++) {
+            auto& reprojEdgeWrap = reprojEdgeWraps[ii];
             auto pEdge = reprojEdgeWrap._pEdge;
             auto localLm = reprojEdgeWrap._pLm;
             if (localLm->IsToDelete()) {
@@ -206,6 +275,21 @@ void optimize::DoLocalBA(std::shared_ptr<KeyFrame> pCurrKeyframe, bool* const bF
 
             if (chi_sq_3D < pEdge->chi2() || !reprojEdgeWrap.IsDepthPositive()) {
                 reprojEdgeWrap.SetAsOutlier();
+            }
+
+            pEdge->setRobustKernel(nullptr);
+        }
+
+        for (size_t ii = 0; ii < reprojEdge2Wraps.size(); ii++) {
+            auto& reprojEdge2Wrap = reprojEdge2Wraps[ii];
+            auto pEdge = reprojEdge2Wrap._pEdge;
+            auto localLm = reprojEdge2Wrap._pLm;
+            if (localLm->IsToDelete()) {
+                continue;
+            }
+
+            if ((tHuberObject2d * tHuberObject2d) < pEdge->chi2() || !reprojEdge2Wrap.IsDepthPositive()) {
+                reprojEdge2Wrap.SetAsOutlier();
             }
 
             pEdge->setRobustKernel(nullptr);
@@ -235,6 +319,23 @@ void optimize::DoLocalBA(std::shared_ptr<KeyFrame> pCurrKeyframe, bool* const bF
             outlier_observations_lms.push_back(std::make_pair(reprojEdgeWrap._pShot, reprojEdgeWrap._pLm));
         }
     }
+    for (auto& reprojEdge2Wrap : reprojEdge2Wraps) {
+        auto pEdge = reprojEdge2Wrap._pEdge;
+        auto localLm = reprojEdge2Wrap._pLm;
+        if (localLm->IsToDelete()) {
+            continue;
+        }
+
+        TDO_LOG_VERBOSE_FORMAT("Edge2 between keyframe(%d), landmark(%d), chi2 %f, depthPosi %s",
+                                    reprojEdge2Wrap._pShot->_keyFrameID
+                                    % reprojEdge2Wrap._pLm->_landmarkID
+                                    % pEdge->chi2()
+                                    % std::to_string(reprojEdge2Wrap.IsDepthPositive()));
+        if ((tHuberObject2d * tHuberObject2d) < pEdge->chi2() || !reprojEdge2Wrap.IsDepthPositive()) {
+            TDO_LOG_CRITICAL_FORMAT("outlier by cylinder proj: chi2 %f, isDepth %d", pEdge->chi2() % reprojEdge2Wrap.IsDepthPositive());
+            outlier_observations_lms.push_back(std::make_pair(reprojEdge2Wrap._pShot, reprojEdge2Wrap._pLm));
+        }
+    }
 
     // -------- (8) --------
     // update the map
@@ -244,7 +345,7 @@ void optimize::DoLocalBA(std::shared_ptr<KeyFrame> pCurrKeyframe, bool* const bF
             for (auto& outlier_obs_lm : outlier_observations_lms) {
                 auto pKeyfrm = outlier_obs_lm.first;
                 auto pLm = outlier_obs_lm.second;
-                TDO_LOG_DEBUG_FORMAT("outlier pair keyframe(%d), landmark(%d)", pKeyfrm->_keyFrameID % pLm->_landmarkID);
+                TDO_LOG_CRITICAL_FORMAT("outlier pair keyframe(%d), landmark(%d)", pKeyfrm->_keyFrameID % pLm->_landmarkID);
                 pKeyfrm->DeleteOneObservedLandmark(pLm);
                 pLm->DeleteObservation(pKeyfrm);
             }
@@ -253,7 +354,7 @@ void optimize::DoLocalBA(std::shared_ptr<KeyFrame> pCurrKeyframe, bool* const bF
         for (auto id_localKeyfrm : ids_localKeyframes) {
             auto pLocalKeyfrm = id_localKeyfrm.second;
             auto pKeyfrmVtx = ids_keyfrmVtx[pLocalKeyfrm->_keyFrameID];
-            TDO_LOG_DEBUG_FORMAT("updating pose of keyframe(%d)", pLocalKeyfrm->_keyFrameID);
+            TDO_LOG_CRITICAL_FORMAT("updating pose of keyframe(%d)", pLocalKeyfrm->_keyFrameID);
             pLocalKeyfrm->SetKeyframePoseInWorld(pKeyfrmVtx->estimate().to_homogeneous_matrix().inverse().cast<float>());
         }
 
@@ -261,17 +362,17 @@ void optimize::DoLocalBA(std::shared_ptr<KeyFrame> pCurrKeyframe, bool* const bF
             auto pLocalLm = id_localLm.second;
             auto pLmVtx = ids_landmarkPointVtx[pLocalLm->_landmarkID];
             Mat44_t landmarkPoseInWorld = pLocalLm->GetLandmarkPoseInWorld();
-            landmarkPoseInWorld.block(0, 3, 3, 1) = pLmVtx->estimate().cast<float>();
-            TDO_LOG_DEBUG_FORMAT("updating pose of landmark(%d)", pLocalLm->_landmarkID);
+            landmarkPoseInWorld.block(0, 3, 3, 1) = pLmVtx->estimate().poseInWorld.translation().cast<float>();
+            TDO_LOG_CRITICAL_FORMAT("updating pose of landmark(%d)", pLocalLm->_landmarkID);
             pLocalLm->SetLandmarkPoseInWorld(landmarkPoseInWorld);
         }
 
     }
 
-    // TDO_LOG_CRITICAL_FORMAT("localBA finished with %d keyfrm, %d landmarks updated. %d outlierPairs!", 
-    //                                 ids_localKeyframes.size() %
-    //                                 ids_localLandmarks.size() %
-    //                                 outlier_observations_lms.size());
+    TDO_LOG_CRITICAL_FORMAT("localBA finished with %d keyfrm, %d landmarks updated. %d outlierPairs!", 
+                                    ids_localKeyframes.size() %
+                                    ids_localLandmarks.size() %
+                                    outlier_observations_lms.size());
 
 }
 

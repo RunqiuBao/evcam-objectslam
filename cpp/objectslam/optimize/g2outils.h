@@ -3,6 +3,8 @@
 
 #include "objectslam.h"
 #include "landmark.h"
+#include "keyframe.h"
+#include "mathutils.h"
 
 #include <g2o/core/solver.h>
 #include <g2o/core/block_solver.h>
@@ -14,6 +16,8 @@
 #include <g2o/solvers/csparse/linear_solver_csparse.h>
 #include <g2o/solvers/cholmod/linear_solver_cholmod.h>
 #include <g2o/core/optimization_algorithm_levenberg.h>
+
+#include <g2o/core/base_multi_edge.h>
 
 namespace eventobjectslam {
 
@@ -29,13 +33,12 @@ public:
     ShotVertex()
     : BaseVertex<6, ::g2o::SE3Quat>() {}
 
-    ~ShotVertex() = default;
-
     bool read(std::istream& is) override;
 
     bool write(std::ostream& os) const override;
 
     void setToOriginImpl() override {
+        std::cout <<"setToOriginImpl called" <<std::endl;
         _estimate = ::g2o::SE3Quat();
     }
 
@@ -46,37 +49,233 @@ public:
 
 };
 
-class LandmarkPointVertex final : public ::g2o::BaseVertex<3, Vec3_d> {
+/*--------------------------------------------------------------------------*/
+/*                  5D cylinder based optimization                          */
+/*--------------------------------------------------------------------------*/
+
+inline void convert_quat_to_euler_zyx_infuc(const Eigen::Quaterniond q, double& roll, double& pitch, double& yaw)
+{
+    const double qw = q.w();
+    const double qx = q.x();
+    const double qy = q.y();
+    const double qz = q.z();
+
+    roll = std::atan2(2*(qw*qx+qy*qz), 1-2*(qx*qx+qy*qy));
+    pitch = std::asin(2*(qw*qy-qz*qx));
+    yaw = std::atan2(2*(qw*qz+qx*qy), 1-2*(qy*qy+qz*qz));
+}
+
+inline Vec6_d ConvertToXYZPRYVector(const ::g2o::SE3Quat& pose){
+    double yaw, pitch, roll;
+    Eigen::Quaterniond q = pose.rotation();
+    convert_quat_to_euler_zyx_infuc(q, roll, pitch, yaw);
+    Vec6_d v;
+    Vec3_d _t = pose.translation();
+    v[0]=_t(0);
+    v[1]=_t(1);
+    v[2]=_t(2);
+    v[3]=roll;
+    v[4]=pitch;
+    v[5]=yaw;
+    return v;
+}
+
+
+class CylinderTarget
+{
 public:
-    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+    ::g2o::SE3Quat poseInWorld;  // 6 dof object. But Rz will be degenerated.
+    Vec3_d halfSizes;  // x, y size are same.
+    Vec3_d keypt1InLocal;
 
-    LandmarkPointVertex()
-        : BaseVertex<3, Vec3_d>() {}
-
-    ~LandmarkPointVertex() = default;
-
-    bool read(std::istream& is) override;
-
-    bool write(std::ostream& os) const override;
-
-    void setToOriginImpl() override {
-        _estimate.fill(0);
+    CylinderTarget(){
+        poseInWorld = ::g2o::SE3Quat();
+        halfSizes.setZero();
+        keypt1InLocal.setZero();
     }
 
-    void oplusImpl(const double* update) override {
-        Eigen::Map<const Vec3_d> v(update);
-        _estimate += v;
+    CylinderTarget& operator=(const CylinderTarget& cylinder) {
+        poseInWorld = cylinder.poseInWorld;
+        halfSizes = cylinder.halfSizes;
+        keypt1InLocal = cylinder.keypt1InLocal;
+        return *this;
+    }
+
+    void initialize(const Vec3_d& cylinderHalfSizes, const Vec3_d& keypt1){
+        halfSizes = cylinderHalfSizes;
+        keypt1InLocal = keypt1;
+    }
+
+    // x,y,z,roll,pitch,yaw
+    inline void fromMinimalVector(const Vec6_d &v){
+        Eigen::Quaterniond posequat = mathutils::zyx_euler_to_quat<double>(v(3), v(4), v(5));
+        this->poseInWorld = ::g2o::SE3Quat(posequat, v.head<3>());
+    }
+
+	inline const Vec3_d &translation() const { return poseInWorld.translation(); }
+	inline void setTranslation(const Vec3_d &t_) {
+        poseInWorld.setTranslation(t_); 
+    }
+	inline void setRotation(const Eigen::Quaterniond &r_) {
+        poseInWorld.setRotation(r_);
+    }
+	inline void setRotation(const Mat33_d &R) {
+        poseInWorld.setRotation(Eigen::Quaterniond(R));
+    }
+
+    // update current cylinder pose with Lie algebra exponential map.
+    CylinderTarget exp_update(const Vec6_d& update){  // Note: update = omega (rotate) + upsilon (trans).
+        CylinderTarget newCylinder;
+        newCylinder.initialize(this->halfSizes, this->keypt1InLocal);
+        newCylinder.poseInWorld = this->poseInWorld * ::g2o::SE3Quat::exp(update);
+        return newCylinder;
+    }
+
+    // compare error between two cylinders
+    Vec6_d cylinder_log_error(const CylinderTarget& cylinder_b) const {
+        Vec6_d res;
+        ::g2o::SE3Quat pose_diff = cylinder_b.poseInWorld.inverse() * this->poseInWorld;
+        res = pose_diff.log();
+        return res;
+    }
+
+    // api func required by g2o
+    Vec6_d min_log_error(const CylinderTarget& cylinder_b, bool print_details = false) const {
+        return cylinder_log_error(cylinder_b);
+    }
+
+    inline Vec6_d toMinimalVector() const {
+        Vec6_d v;
+        v = ConvertToXYZPRYVector(this->poseInWorld);
+        return v;
+    }
+
+    Mat44_d GetSimilarityTransform() const {
+        Mat44_d transform = this->poseInWorld.to_homogeneous_matrix();
+        Mat33_d scale_mat = this->halfSizes.asDiagonal();
+        transform.topLeftCorner<3, 3>() = transform.topLeftCorner<3, 3>() * scale_mat;
+        return transform;
+    }
+
+    // use 8 vertices to represent a cylinder.
+    Mat3Xd compute_3D_cylinder_vertices() const {
+        Mat3Xd vertices_body;
+        vertices_body.resize(3, 8);
+        vertices_body << 1, 1, -1, -1, 1, 1, -1, -1,
+                         1, -1, -1, 1, 1, -1, -1, 1,
+                         -1, -1, -1, -1, 1, 1, 1, 1;
+        Mat3Xd corners_world = mathutils::homo_to_real_coord<double>(GetSimilarityTransform() * mathutils::real_to_homo_coord<double>(vertices_body));
+        return corners_world;
+    }
+
+    Mat3Xd compute_keypts_3D() const {
+        Mat3Xd keypts_local;
+        keypts_local.resize(3, 1);
+        keypts_local << keypt1InLocal(0),
+                        keypt1InLocal(1),
+                        keypt1InLocal(2);
+        Mat3Xd keypts_world = mathutils::homo_to_real_coord<double>(GetSimilarityTransform() * mathutils::real_to_homo_coord<double>(keypts_local));
+        return keypts_world;
+    }
+
+    // rect: [topleft, bottomright]
+    Vec4_d ProjectToImageRect(const ::g2o::SE3Quat& transform_cw, const Mat33_d& kk) const {
+        Mat3Xd corners_3d_world = compute_3D_cylinder_vertices();
+        Mat2Xd corners_2d = mathutils::homo_to_real_coord<double>(kk * mathutils::homo_to_real_coord<double>(transform_cw.to_homogeneous_matrix() * mathutils::real_to_homo_coord<double>(corners_3d_world)));
+        Vec2_d bottomright = corners_2d.rowwise().maxCoeff();
+        Vec2_d topleft = corners_2d.rowwise().minCoeff();
+        return Vec4_d(topleft(0), topleft(1), bottomright(0), bottomright(1));
+    }
+
+    // bbox: [X, Y, width, height]
+    Vec4_d ProjectToImageBbox(const ::g2o::SE3Quat& transform_cw, const Mat33_d& kk) const
+    {
+        Vec4_d rect = ProjectToImageRect(transform_cw, kk);
+        Vec2_d rect_center = (rect.head<2>() + rect.tail<2>()) / 2;
+        Vec2_d wh = rect.tail<2>() - rect.head<2>();
+        return Vec4_d(rect_center(0), rect_center(1), wh(0), wh(1));
+    }
+
+    // [[bbox], keypt1_x]
+    Vec6_d ProjectToImageBboxAndKeypts(const ::g2o::SE3Quat& transform_cw, const Mat33_d& kk) const
+    {
+        Vec4_d bbox_proj = ProjectToImageBbox(transform_cw, kk);
+        Mat3Xd keypts_3d_world = compute_keypts_3D();
+        Mat2Xd keypys_2d = mathutils::homo_to_real_coord<double>(kk * mathutils::homo_to_real_coord<double>(transform_cw.to_homogeneous_matrix() * mathutils::real_to_homo_coord<double>(keypts_3d_world)));
+        Vec6_d bboxAndKeypts;
+        bboxAndKeypts << bbox_proj(0), bbox_proj(1), bbox_proj(2), bbox_proj(3), keypys_2d(0, 0), keypys_2d(1, 0);
+        return bboxAndKeypts;
     }
 
 };
 
+class VertexLandmarkCylinder final : public ::g2o::BaseVertex<6, CylinderTarget>
+{
+public:
+    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+    VertexLandmarkCylinder()
+    :BaseVertex<6, CylinderTarget>()
+    {
+        halfSizes.setZero();
+        keypt1InLocal.setZero();
+    }
+
+    void initialize(const CylinderTarget& cylinder) {
+        _estimate = cylinder;
+        halfSizes = cylinder.halfSizes;
+        keypt1InLocal = cylinder.keypt1InLocal;
+    }
+
+    void setToOriginImpl() override{
+        _estimate = CylinderTarget();
+        _estimate.initialize(halfSizes, keypt1InLocal);
+    }
+
+    void oplusImpl(const double *update) override;
+
+    bool read(std::istream& is) override {return true;};
+    bool write(std::ostream& os) const override {return os.good();};
+
+    Vec3_d halfSizes;  // x, y size are same.
+    Vec3_d keypt1InLocal;
+};
+
+class EdgeSE3CylinderProj : public ::g2o::BaseBinaryEdge<7, Vec7_d, VertexLandmarkCylinder, ShotVertex>
+{
+public:
+    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+    typedef std::shared_ptr<EdgeSE3CylinderProj> Ptr;
+
+    EdgeSE3CylinderProj(const unsigned int edgeId)
+    :_edgeId(edgeId), BaseBinaryEdge<7, Vec7_d, VertexLandmarkCylinder, ShotVertex>()
+    {}
+
+    bool read(std::istream& is) override {return true;};
+    bool write(std::ostream& os) const override {return os.good();};
+
+    void computeError() override;
+    double get_error_norm();
+
+    bool depth_is_positive() const {
+        const auto v1 = static_cast<const ShotVertex*>(_vertices.at(1));
+        const auto v2 = static_cast<const VertexLandmarkCylinder*>(_vertices.at(0));
+        return 0 < (v1->estimate().map(v2->estimate().poseInWorld.translation()))(2);
+    }
+
+    // void linearizeOplus() override;
+    unsigned int _edgeId;
+    Mat33_d kk;
+    double focal_x_baseline_;
+};
+
+
 // !Note: don't change function interfaces. As it will be passed to g2o optimizer.
-class StereoPerspectiveReprojEdge final : public ::g2o::BaseBinaryEdge<3, Vec3_d, LandmarkPointVertex, ShotVertex> {
+class StereoPerspectiveReprojEdge final : public ::g2o::BaseBinaryEdge<3, Vec3_d, VertexLandmarkCylinder, ShotVertex> {
 public:
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
     StereoPerspectiveReprojEdge(const unsigned int edgeId)
-        : _edgeId(edgeId), BaseBinaryEdge<3, Vec3_d, LandmarkPointVertex, ShotVertex>() {}
+        : _edgeId(edgeId), BaseBinaryEdge<3, Vec3_d, VertexLandmarkCylinder, ShotVertex>() {}
 
     ~StereoPerspectiveReprojEdge(){
         // Note: First all the member variables will be destructed in reverse order. Then this destructor will be called.
@@ -89,19 +288,20 @@ public:
 
     void computeError() override {
         const auto v1 = static_cast<const ShotVertex*>(_vertices.at(1));
-        const auto v2 = static_cast<const LandmarkPointVertex*>(_vertices.at(0));
+        const auto v2 = static_cast<const VertexLandmarkCylinder*>(_vertices.at(0));
         const Vec3_d obs(_measurement);
-        auto obsUpdate = cam_project(v1->estimate().map(v2->estimate()));
+        auto obsUpdate = cam_project(v1->estimate().map(v2->estimate().poseInWorld.translation()));
         _error = obs - obsUpdate;
-        // std::cout << "edgeId: " << _edgeId << ", obs: {" << obs[0] << ", " << obs[1] << ", " << obs[2] << "}, update: {" << obsUpdate[0] << ", " << obsUpdate[1] << ", " << obsUpdate[2] << "}." << std::endl;
+        std::cout << "================================================================" << std::endl;
+        std::cout << "point proj error: " << _error << std::endl;
     }
 
     void linearizeOplus() override;
 
     bool depth_is_positive() const {
         const auto v1 = static_cast<const ShotVertex*>(_vertices.at(1));
-        const auto v2 = static_cast<const LandmarkPointVertex*>(_vertices.at(0));
-        return 0 < (v1->estimate().map(v2->estimate()))(2);
+        const auto v2 = static_cast<const VertexLandmarkCylinder*>(_vertices.at(0));
+        return 0 < (v1->estimate().map(v2->estimate().poseInWorld.translation()))(2);
     }
 
     inline Vec3_d cam_project(const Vec3_d& pos_c) const {
@@ -113,17 +313,37 @@ public:
     unsigned int _edgeId;
 };
 
-template<typename T>
+template<typename EdgeType>
 class ReprojEdgeWrapper {
 public:
     ReprojEdgeWrapper() = delete;  // Note: delete default constructor.
 
-    ReprojEdgeWrapper(const unsigned int edgeId, std::shared_ptr<T> pShot, ShotVertex* pShotVtx,
-                        std::shared_ptr<LandMark> pLm, LandmarkPointVertex* pLmVtx,
-                        const float refObjX, const float refObjY, const float refObjX_right,
-                        const float sqrt_chi_sq, const bool bUseHuberLoss = true);  // Note: sqrt_chi_sq is a strictiness threshold for huber kernel
+    ReprojEdgeWrapper(
+        const unsigned int edgeId,
+        std::shared_ptr<KeyFrame> pShot,
+        ShotVertex* pShotVtx,
+        std::shared_ptr<LandMark> pLm,
+        VertexLandmarkCylinder* pLmVtx,
+        const float refObjX,
+        const float refObjY,
+        const float refObjX_right,
+        const float sqrt_chi_sq,
+        const bool bUseHuberLoss
+    );
 
-    ~ReprojEdgeWrapper() = default;
+    ReprojEdgeWrapper(
+        const unsigned int edgeId,
+        std::shared_ptr<KeyFrame> pShot,
+        ShotVertex* pShotVtx,
+        std::shared_ptr<LandMark> pLm,
+        VertexLandmarkCylinder* pLmVtx,
+        const Vec4_d& leftBbox,
+        const Vec2_d& leftKeypts,
+        const Vec4_d& rightBbox,
+        const float sqrt_chi_sq,
+        const bool bUseHuberLoss,
+        const Mat77_d& infoMat
+    );
 
     inline bool IsInlier() const {
         return _pEdge->level() == 0;
@@ -144,19 +364,26 @@ public:
     inline bool IsDepthPositive() const;
 
     std::shared_ptr<camera::CameraBase> _pCamera;
-    std::shared_ptr<T> _pShot;
+    std::shared_ptr<KeyFrame> _pShot;
     ::g2o::OptimizableGraph::Edge* _pEdge;
     std::shared_ptr<LandMark> _pLm;
     unsigned int _edgeId;
 };
 
-template<typename T>
-ReprojEdgeWrapper<T>::ReprojEdgeWrapper(const unsigned int edgeId, std::shared_ptr<T> pShot, ShotVertex* pShotVtx,
-                                        std::shared_ptr<LandMark> pLm, LandmarkPointVertex* pLmVtx,
-                                        const float refObjX, const float refObjY, const float refObjX_right,
-                                        const float sqrt_chi_sq, const bool bUseHuberLoss)
-    : _edgeId(edgeId), _pCamera(pShot->_pCamera), _pShot(pShot), _pLm(pLm) {
-    StereoPerspectiveReprojEdge* edge = new StereoPerspectiveReprojEdge(edgeId);
+template<typename EdgeType>
+ReprojEdgeWrapper<EdgeType>::ReprojEdgeWrapper(
+    const unsigned int edgeId,
+    std::shared_ptr<KeyFrame> pShot,
+    ShotVertex* pShotVtx,
+    std::shared_ptr<LandMark> pLm,
+    VertexLandmarkCylinder* pLmVtx,
+    const float refObjX,
+    const float refObjY,
+    const float refObjX_right,
+    const float sqrt_chi_sq,
+    const bool bUseHuberLoss
+): _edgeId(edgeId), _pCamera(pShot->_pCamera), _pShot(pShot), _pLm(pLm) {
+    EdgeType* edge = new EdgeType(edgeId);
 
     const Vec3_d obs{refObjX, refObjY, refObjX_right};
     edge->setMeasurement(obs);
@@ -181,13 +408,49 @@ ReprojEdgeWrapper<T>::ReprojEdgeWrapper(const unsigned int edgeId, std::shared_p
     }
 }
 
-template<typename T>
-bool ReprojEdgeWrapper<T>::IsDepthPositive() const {
-    return static_cast<StereoPerspectiveReprojEdge*>(_pEdge)->StereoPerspectiveReprojEdge::depth_is_positive();
+template<typename EdgeType>
+ReprojEdgeWrapper<EdgeType>::ReprojEdgeWrapper(
+    const unsigned int edgeId,
+    std::shared_ptr<KeyFrame> pShot,
+    ShotVertex* pShotVtx,
+    std::shared_ptr<LandMark> pLm,
+    VertexLandmarkCylinder* pLmVtx,
+    const Vec4_d& leftBbox,
+    const Vec2_d& leftKeypts,
+    const Vec4_d& rightBbox,
+    const float sqrt_chi_sq,
+    const bool bUseHuberLoss,
+    const Mat77_d& infoMat
+): _edgeId(edgeId), _pCamera(pShot->_pCamera), _pShot(pShot), _pLm(pLm) {
+    EdgeType* edge = new EdgeType(edgeId);
+    Vec7_d obs;
+    obs << leftBbox(0), leftBbox(1), leftBbox(2), leftBbox(3), leftKeypts(0), leftKeypts(1), rightBbox(0);
+    edge->setMeasurement(obs);
+    edge->setInformation(infoMat);
+
+    edge->kk = _pCamera->_kk.cast<double>();
+    edge->focal_x_baseline_ = _pCamera->_kk(0, 0) * _pCamera->_baseline;
+
+    edge->setVertex(0, pLmVtx);
+    edge->setVertex(1, pShotVtx);
+
+    _pEdge = edge;
+
+    // loss functionを設定
+    if (bUseHuberLoss) {
+        auto huber_kernel = new ::g2o::RobustKernelHuber();
+        huber_kernel->setDelta(sqrt_chi_sq);
+        _pEdge->setRobustKernel(huber_kernel);
+    }
+}
+
+template<typename EdgeType>
+bool ReprojEdgeWrapper<EdgeType>::IsDepthPositive() const {
+    return static_cast<EdgeType*>(_pEdge)->EdgeType::depth_is_positive();
 }
 
 ShotVertex* CreateShotVertex(const unsigned int vtxId, const Mat44_d& worldToShotTransform, const bool isConstant);
-LandmarkPointVertex* CreateLandmarkPointVertex(const unsigned int vtxId, const Vec3_d& posInWorld, const bool isConstant);
+VertexLandmarkCylinder* CreateLandmarkCylinderVertex(const unsigned int vtxId, const Mat44_d& poseInWorld, const Vec3_d& cylinderHalfSizes, const Vec3_d& keypt1InLocal, const bool isConstant);
 
 }  // end of namespace g2outils
 }  // end of namspace optimize

@@ -39,6 +39,10 @@ public:
 
     Mat44_t GetLandmarkPoseInWorld();
 
+    Vec3_t GetKeypt1InLandmark();
+
+    Vec3_t GetLandmarkSize();
+
     void SetLandmarkPoseInWorld(const Mat44_t& poseLandmarkInWorld);
 
     void SetKeypt1InLandmark(const Vec3_t& keypt1InLandmark);
@@ -59,8 +63,6 @@ public:
 
     const std::shared_ptr<object::ObjectBase> _pObjectInfo;
     Eigen::MatrixXf _vertices3DInLandmark;  // 3D bounding box in landmark frame.
-    float _horizontalSize;  // diameter of a cylinder.
-    float _observedHeight;  // height of the cylinder = 2 * norm(oc - keypt1)
 
     void DeleteThis() { _bIsToDelete = true; }
     bool IsToDelete() { return _bIsToDelete; }
@@ -69,7 +71,9 @@ private:
     std::map<std::shared_ptr<KeyFrame>, unsigned int> _observations_indices;  //Note: uint is the refOject index in this keyframe.
 
     Mat44_t _poseLandmarkInWorld;
-    Vec3_t _keypt1InLandmark;
+    Vec3_t _keypt1InLandmark;  // Note: this might be updated by better (closer) observation,
+    float _horizontalSize;  // diameter of a cylinder.
+    float _observedHeight;  // height of the cylinder = 2 * norm(oc - keypt1)
 
     float _bestDetectionScore;  // (deprecated) if detection score becomes better, update detection orientation. 
     float _distanceFromBestRefKeyframe;  // TODO: this is a problamtic design. To deprecate.

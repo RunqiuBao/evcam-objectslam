@@ -12,34 +12,40 @@ namespace g2outils {
 static ::g2o::SE3Quat ConvertToG2oSE3(const Mat44_d& campose) {
     const Mat33_d rot = campose.block<3, 3>(0, 0);
     const Vec3_d trans = campose.block<3, 1>(0, 3);
-    return ::g2o::SE3Quat{rot, trans};
+    return ::g2o::SE3Quat(rot, trans);
 }
 
 ShotVertex* CreateShotVertex(const unsigned int vtxId, const Mat44_d& worldToShotTransform, const bool isConstant) {
     // create vertex
     auto vtx = new ShotVertex();
     vtx->setId(vtxId);
-    vtx->setEstimate(ConvertToG2oSE3(worldToShotTransform));
+    ::g2o::SE3Quat qPose_cw = ConvertToG2oSE3(worldToShotTransform);
+    vtx->setEstimate(qPose_cw);
     vtx->setFixed(isConstant);
     return vtx;
 }
 
-LandmarkPointVertex* CreateLandmarkPointVertex(const unsigned int vtxId, const Vec3_d& posInWorld, const bool isConstant) {
-    // vertexを作成
-    auto vtx = new LandmarkPointVertex();
+VertexLandmarkCylinder* CreateLandmarkCylinderVertex(const unsigned int vtxId, const Mat44_d& poseInWorld, const Vec3_d& cylinderHalfSizes, const Vec3_d& keypt1InLocal, const bool isConstant){
+    CylinderTarget cylinder;
+    cylinder.initialize(cylinderHalfSizes, keypt1InLocal);
+    cylinder.poseInWorld = ConvertToG2oSE3(poseInWorld);
+    auto vtx = new VertexLandmarkCylinder();
+    vtx->initialize(cylinder);
     vtx->setId(vtxId);
-    vtx->setEstimate(posInWorld);
+    vtx->setEstimate(cylinder);
     vtx->setFixed(isConstant);
     vtx->setMarginalized(true);
     return vtx;
 }
 
+
+// analytical jacobian faster than auto differentiation in g2o.
 void StereoPerspectiveReprojEdge::linearizeOplus() {
     auto vj = static_cast<ShotVertex*>(_vertices.at(1));
     const ::g2o::SE3Quat& cam_pose_cw = vj->ShotVertex::estimate();
 
-    auto vi = static_cast<LandmarkPointVertex*>(_vertices.at(0));
-    const Vec3_d& pos_w = vi->LandmarkPointVertex::estimate();
+    auto vi = static_cast<VertexLandmarkCylinder*>(_vertices.at(0));
+    const Vec3_d& pos_w = vi->VertexLandmarkCylinder::estimate().poseInWorld.translation();
     const Vec3_d pos_c = cam_pose_cw.map(pos_w);
 
     const auto x = pos_c(0);
@@ -98,22 +104,6 @@ bool ShotVertex::read(std::istream& is) {
     return true;
 }
 
-bool LandmarkPointVertex::read(std::istream& is) {
-    Vec3_d lv;
-    for (unsigned int i = 0; i < 3; ++i) {
-        is >> _estimate(i);
-    }
-    return true;
-}
-
-bool LandmarkPointVertex::write(std::ostream& os) const {
-    const Vec3_d pos_w = estimate();
-    for (unsigned int i = 0; i < 3; ++i) {
-        os << pos_w(i) << " ";
-    }
-    return os.good();
-}
-
 bool ShotVertex::write(std::ostream& os) const {
     ::g2o::SE3Quat g2o_cam_pose_wc(estimate().inverse());
     for (unsigned int i = 0; i < 7; ++i) {
@@ -148,6 +138,48 @@ bool StereoPerspectiveReprojEdge::write(std::ostream& os) const {
     }
     return os.good();
 }
+
+/*--------------------------------------------------------------------------*/
+/*                  5D cylinder based optimization                          */
+/*--------------------------------------------------------------------------*/
+void VertexLandmarkCylinder::oplusImpl(const double *update_)
+{
+    Eigen::Map<const Vec6_d> update(update_);
+    CylinderTarget cylinder_b = _estimate;
+    Vec6_d update_noRz = update;
+    update_noRz(2) = 0; // Note: rotation around z is ignored.
+    cylinder_b.poseInWorld = _estimate.poseInWorld * ::g2o::SE3Quat::exp(update_noRz);
+    setEstimate(cylinder_b);
+}
+
+void EdgeSE3CylinderProj::computeError()
+{
+    const ShotVertex *shotVertex = dynamic_cast<const ShotVertex*>(_vertices[1]);  // Note: pose world to cam
+    const VertexLandmarkCylinder *cylinderVertex = dynamic_cast<const VertexLandmarkCylinder*>(_vertices[0]);  // Note: pose object to world.
+    ::g2o::SE3Quat cam_pose_Tcw = shotVertex->estimate();
+    CylinderTarget cylinder_world = cylinderVertex->estimate();    
+
+    Vec6_d bboxAndKeypts = cylinder_world.ProjectToImageBboxAndKeypts(cam_pose_Tcw, kk);
+
+    // right cam
+    Vec3_d cylinder_pos_cam = cam_pose_Tcw.map(cylinder_world.poseInWorld.translation());
+
+    double reproj_x_right = bboxAndKeypts(0) - focal_x_baseline_ / cylinder_pos_cam(2);
+
+    Vec7_d bboxAndKeyptsAndRightX;
+    bboxAndKeyptsAndRightX.head<6>() = bboxAndKeypts;
+    bboxAndKeyptsAndRightX(6) = reproj_x_right;
+    _error = bboxAndKeyptsAndRightX - _measurement;
+    TDO_LOG_CRITICAL("cylinder proj error:\n" << _error);
+
+}
+
+double EdgeSE3CylinderProj::get_error_norm()
+{
+    computeError();
+    return _error.norm();
+}
+
 
 }  // end of namespace g2outils
 

@@ -30,8 +30,11 @@ set(CMAKE_PREFIX_PATH "${INSTALLED_LOG4CXX_LIB_PATH}/cmake/" ${CMAKE_PREFIX_PATH
 find_package(log4cxx REQUIRED)
 
 # include Eigen
-set(EIGEN3_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/eigen")
+# set(EIGEN3_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/eigeninstall/include")
+set(CMAKE_PREFIX_PATH "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/eigeninstall/share/eigen3/cmake" ${CMAKE_PREFIX_PATH})
 find_package (Eigen3 3.4 REQUIRED)
+message("baodebug: ${EIGEN3_INCLUDE_DIR}")
+
 
 # include pybind11
 set(pybind11_DIR "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/pybind11/pybind11install/share/cmake/pybind11/")

@@ -118,6 +118,16 @@ Mat44_t LandMark::GetLandmarkPoseInWorld() {
     return _poseLandmarkInWorld;
 }
 
+Vec3_t LandMark::GetKeypt1InLandmark() {
+    std::lock_guard<std::mutex> lock(_mtxLandmarkSize);
+    return _keypt1InLandmark;
+}
+
+Vec3_t LandMark::GetLandmarkSize() {
+    std::lock_guard<std::mutex> lock(_mtxLandmarkSize);
+    return Vec3_t(_horizontalSize, _horizontalSize, _observedHeight);
+}
+
 void LandMark::SetLandmarkPoseInWorld(const Mat44_t& poseLandmarkInWorld) {
     std::lock_guard<std::mutex> lock(_mtxLandmarkPose);
     _poseLandmarkInWorld = poseLandmarkInWorld;  // Note: for Eigen matrix, `=` is deep copy.
