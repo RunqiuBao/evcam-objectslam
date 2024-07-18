@@ -403,6 +403,7 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
 
     }
     outputFile.close();
+    // FIXME: the first keyframe will be optimized and bias from (0, 0, 0). Compensate it before saving.
     SaveOptimizedTraj(sStereoSequencePath, _allFramesStack, worldInRealWorld);
     SaveLandmarks(sStereoSequencePath, _pMapDb, worldInRealWorld);
 

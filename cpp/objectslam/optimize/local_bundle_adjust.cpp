@@ -33,10 +33,6 @@ void optimize::DoLocalBA(std::shared_ptr<KeyFrame> pCurrKeyframe, bool* const bF
         if (pLocalKeyFrame->IsToDelete()){
             continue;
         }
-        if (pLocalKeyFrame->_keyFrameID == 0) {
-            // do not optimize the first keyframe, which is the first frame as well.
-            continue;
-        }
         ids_localKeyframes[pLocalKeyFrame->_keyFrameID] = pLocalKeyFrame;
     }
 #endif
