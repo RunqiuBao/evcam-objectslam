@@ -21,6 +21,7 @@ enum class FrameType {
 class Frame {
 
 public:
+    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
     Frame(const FrameType frameType, const double timestamp, const std::shared_ptr<camera::CameraBase> pCamera);
 
     // ~Frame();

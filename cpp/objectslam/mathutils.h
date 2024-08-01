@@ -5,6 +5,11 @@
 #include <cassert>
 #include <opencv2/opencv.hpp>
 
+#include <pcl/point_types.h>
+#include <pcl/sample_consensus/model_types.h>
+#include <pcl/sample_consensus/method_types.h>
+#include <pcl/segmentation/sac_segmentation.h>
+
 #include "camera.h"
 
 namespace eventobjectslam {
@@ -25,6 +30,11 @@ MatrixType TransformPoints(const MatrixType& transform, const MatrixType& points
 }
 
 
+void FilterNonPlanePoints(
+    const std::vector<Vec3_t> points,
+    const float planeDistanceThreshold,
+    std::vector<int>& indicesPoints
+);
 
 /**
  *   mPoints3D: 3xn Eigen matrix

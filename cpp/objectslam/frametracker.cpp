@@ -10,23 +10,371 @@
 #include <opencv2/tracking.hpp>
 #include <opencv2/tracking/tracking_legacy.hpp>
 
+// #include <unsupported/Eigen/MatrixFunctions>
+
 #include <logging.h>
 TDO_LOGGER("eventobjectslam.frametracker")
 
 namespace eventobjectslam {
 
-// bool FrameTracker::DoBruteForceMatchBasedTrack(
-//     frame& currentFrame,
-//     const frame& lastFrame,
-//     const Mat44_t& velocity
-// ) const{
-// // TODO: 
-// // 1. each frame contains object instances (plane optimized) it detected. but they do not contain object id.
-// // 2. according to roughly estimated pose, project existing object in and find correspondences; create new objects if exist; use pnp update frame pose, return True.
-// // 3. if more than 4 objects detected, and not in line, create key frame.
-// // 4. if not enough detection or correspondences, return false.
+void SaveCvmatForDebug(cv::Mat& debugImg_in, const std::string debugId){
+    cv::Mat debugImg_int;
+    cv::Mat debugImg = cv::abs(debugImg_in.clone());
+    cv::Scalar sum = cv::sum(debugImg);
+    double minVal, maxVal;
+    cv::Point minLoc, maxLoc;
+    cv::minMaxLoc(debugImg, &minVal, &maxVal, &minLoc, &maxLoc);
+    debugImg = debugImg * 255 / maxVal;
+    debugImg.convertTo(debugImg_int, CV_32S);
+    cv::imwrite("/home/runqiu/tmptmp/debug_" + debugId + ".png", debugImg_int);
+}
 
-// }
+static Mat44_d se3Exp(Vec6_d twist){
+    // Mat44_d incrementPose;
+    // incrementPose << 0, -twist(5), twist(4), twist(0),
+    //                 twist(5), 0, -twist(3), twist(1),
+    //                 -twist(4), twist(3), 0, twist(3),
+    //                 0, 0, 0, 0;
+    // Mat44_d expIncrePose = incrementPose.exp();
+
+    arma::mat incrementPoseArma(4, 4);  // Note: eigen unsupported broke g2o
+    incrementPoseArma(0, 0) = 0.0;
+    incrementPoseArma(0, 1) = -twist(5);
+    incrementPoseArma(0, 2) = twist(4);
+    incrementPoseArma(0, 3) = twist(0);
+    incrementPoseArma(1, 0) = twist(5);
+    incrementPoseArma(1, 1) = 0.0;
+    incrementPoseArma(1, 2) = -twist(3);
+    incrementPoseArma(1, 3) = twist(1);
+    incrementPoseArma(2, 0) = -twist(4);
+    incrementPoseArma(2, 1) = twist(3);
+    incrementPoseArma(2, 2) = 0.0;
+    incrementPoseArma(2, 3) = twist(3);
+    incrementPoseArma(3, 0) = 0.0;
+    incrementPoseArma(3, 1) = 0.0;
+    incrementPoseArma(3, 2) = 0.0;
+    incrementPoseArma(3, 3) = 0.0;
+    // Compute the matrix exponential
+    arma::mat expIncrePoseArma = arma::expmat(incrementPoseArma);
+    Mat44_d expIncrePose = Mat44_d::Identity();
+    expIncrePose << expIncrePoseArma(0, 0), expIncrePoseArma(0, 1), expIncrePoseArma(0, 2), expIncrePoseArma(0, 3),
+                        expIncrePoseArma(1, 0), expIncrePoseArma(1, 1), expIncrePoseArma(1, 2), expIncrePoseArma(1, 3),
+                        expIncrePoseArma(2, 0), expIncrePoseArma(2, 1), expIncrePoseArma(2, 2), expIncrePoseArma(2, 3),
+                        expIncrePoseArma(3, 0), expIncrePoseArma(3, 1), expIncrePoseArma(3, 2), expIncrePoseArma(3, 3);
+    return expIncrePose;
+}
+
+static Vec6_d se3Log(Mat44_d incrementPose){
+    Vec6_d twist = Vec6_d::Zero();
+    if (incrementPose.isIdentity()){
+        return twist;
+    }
+    // Eigen::MatrixXd incrementPoseLog = incrementPose.log();
+    // twist << incrementPoseLog(0, 3), incrementPoseLog(1, 3), incrementPoseLog(2, 3), incrementPoseLog(2, 1), incrementPoseLog(0, 2), incrementPoseLog(1, 0);
+
+    arma::mat incrementPoseArma(4, 4);
+    incrementPoseArma(0, 0) = incrementPose(0, 0);
+    incrementPoseArma(0, 1) = incrementPose(0, 1);
+    incrementPoseArma(0, 2) = incrementPose(0, 2);
+    incrementPoseArma(0, 3) = incrementPose(0, 3);
+    incrementPoseArma(1, 0) = incrementPose(1, 0);
+    incrementPoseArma(1, 1) = incrementPose(1, 1);
+    incrementPoseArma(1, 2) = incrementPose(1, 2);
+    incrementPoseArma(1, 3) = incrementPose(1, 3);
+    incrementPoseArma(2, 0) = incrementPose(2, 0);
+    incrementPoseArma(2, 1) = incrementPose(2, 1);
+    incrementPoseArma(2, 2) = incrementPose(2, 2);
+    incrementPoseArma(2, 3) = incrementPose(2, 3);
+    incrementPoseArma(3, 0) = incrementPose(3, 0);
+    incrementPoseArma(3, 1) = incrementPose(3, 1);
+    incrementPoseArma(3, 2) = incrementPose(3, 2);
+    incrementPoseArma(3, 3) = incrementPose(3, 3);
+    arma::cx_mat incrementPoseLogArma = arma::logmat(incrementPoseArma);
+    arma::mat incrementPoseLogRealArma = arma::real(incrementPoseLogArma);
+    twist << incrementPoseLogRealArma(0, 3), incrementPoseLogRealArma(1, 3), incrementPoseLogRealArma(2, 3), incrementPoseLogRealArma(2, 1), incrementPoseLogRealArma(0, 2), incrementPoseLogRealArma(1, 0);
+    return twist;
+}
+
+static void DownScale(cv::Mat& featImage, cv::Mat& depthImage, Mat33_t& kk, const float downScaleFactor){
+    Mat33_t kkLevel;
+    kkLevel << kk(0, 0) / downScaleFactor, 0, kk(0, 2) / downScaleFactor,
+                0, kk(1, 1) / downScaleFactor, kk(1, 2) / downScaleFactor,
+                0, 0, 1;
+    kk = kkLevel;
+    cv::resize(featImage, featImage, cv::Size(), 1/ downScaleFactor, 1 / downScaleFactor, cv::INTER_AREA);
+    cv::resize(depthImage, depthImage, cv::Size(), 1 / downScaleFactor, 1 / downScaleFactor, cv::INTER_NEAREST);
+}
+
+void PoseOptimizer::DrawRectangleWithInverseDistance(cv::Mat& featmap, cv::Rect rect, const bool isNormalize){
+    cv::Point center(rect.x + rect.width / 2, rect.y + rect.height / 2);
+    float maxDistance = std::sqrt(std::pow(rect.x - center.x, 2) + std::pow(rect.y - center.y, 2));
+    for (int y = rect.y; y < rect.y + rect.height; y++){
+        for (int x = rect.x; x < rect.x + rect.width; x++){
+            float distance = std::sqrt(std::pow(x - center.x, 2) + std::pow(y - center.y, 2));
+            featmap.at<float>(y, x) = maxDistance - distance;
+        }
+    }
+    if (isNormalize){
+        cv::normalize(featmap, featmap, 0, 1, cv::NORM_MINMAX);
+    }
+}
+
+void PoseOptimizer::PrepareDepthAndFeatureMapFromBboxes(
+    std::vector<TwoDBoundingBox>& leftBboxes,
+    std::vector<TwoDBoundingBox>& rightBboxes,
+    const int imageWidth,
+    const int imageHeight,
+    cv::Mat& featureMap,
+    cv::Mat& depthMap
+){
+    featureMap = cv::Mat::zeros(imageHeight, imageWidth, CV_32FC1);
+    depthMap = cv::Mat::zeros(imageHeight, imageWidth, CV_32FC1);
+    for (size_t ii=0; ii < leftBboxes.size(); ii++){
+        auto& leftbbox = leftBboxes[ii];
+        auto& rightbbox = rightBboxes[ii];
+        cv::Mat mask = cv::Mat::zeros(featureMap.size(), CV_8UC1);
+        cv::Rect cvBbox = cv::Rect(
+            static_cast<int>(leftbbox._centerX - leftbbox._bWidth / 2),
+            static_cast<int>(leftbbox._centerY - leftbbox._bHeight / 2),
+            static_cast<int>(leftbbox._bWidth),
+            static_cast<int>(leftbbox._bHeight));
+        cv::rectangle(mask, cvBbox, cv::Scalar(255), cv::FILLED);
+
+        float disparity = leftbbox._centerX - rightbbox._centerX;
+        float depth = _kk(0, 0) * _baseline / disparity;
+        depthMap.setTo(depth, mask);
+
+        this->DrawRectangleWithInverseDistance(featureMap, cvBbox, false);
+    }
+
+    cv::Mat residual_int;
+    cv::Mat residual_debug = cv::abs(featureMap.clone());
+    double minVal, maxVal;
+    cv::Point minLoc, maxLoc;
+    cv::minMaxLoc(residual_debug, &minVal, &maxVal, &minLoc, &maxLoc);
+    residual_debug = residual_debug * 255 / maxVal;
+    residual_debug.convertTo(residual_int, CV_32S);
+    cv::imwrite("/home/runqiu/tmptmp/debug_featmap.png", residual_int);
+}
+
+void PoseOptimizer::deriveAnalytic(
+    const cv::Mat& refDepth,
+    const cv::Mat& refImage,
+    const std::vector<TwoDBoundingBox>& bboxesRef,
+    const cv::Mat& currImage,
+    const Vec6_d& xi,
+    const Mat33_d kk,
+    const int scaleLevel,
+    Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>& outJac,
+    Eigen::VectorXf& outResidual
+){
+    Mat44_d T = se3Exp(xi);
+    Mat33_d R = T.block<3, 3>(0, 0);
+    Vec3_d t = T.col(3).head<3>();
+    Mat33_d RKinv = R * kk.inverse();
+
+    int imageWidth = refImage.cols;
+    int imageHeight = refImage.rows;
+    // record the projection of 3d points transformed from ref to curr.
+    cv::Mat xImg(imageHeight, imageWidth, CV_32F, cv::Scalar(-10.0));
+    cv::Mat yImg(imageHeight, imageWidth, CV_32F, cv::Scalar(-10.0));
+    // record the 3d points transformed from ref to curr.
+    cv::Mat xp(imageHeight, imageWidth, CV_32F, std::numeric_limits<float>::quiet_NaN());
+    cv::Mat yp(imageHeight, imageWidth, CV_32F, std::numeric_limits<float>::quiet_NaN());
+    cv::Mat zp(imageHeight, imageWidth, CV_32F, std::numeric_limits<float>::quiet_NaN());
+
+    for (size_t ii=0; ii < bboxesRef.size(); ii++){
+        auto& bbox = bboxesRef[ii];
+        cv::Rect rect = cv::Rect(
+            static_cast<int>((bbox._centerX - bbox._bWidth / 2) / std::pow(2, scaleLevel)),
+            static_cast<int>((bbox._centerY - bbox._bHeight / 2) / std::pow(2, scaleLevel)),
+            static_cast<int>(bbox._bWidth / std::pow(2, scaleLevel)),
+            static_cast<int>(bbox._bHeight / std::pow(2, scaleLevel)));
+        for (int y = rect.y; y < rect.y + rect.height; y++){
+            for (int x = rect.x; x < rect.x + rect.width; x++){
+                if (x < 0 || x >= imageWidth || y < 0 || y >= imageHeight){
+                    continue;
+                }
+                Vec3_d p(x, y, 1);
+                p = p * (double)refDepth.at<float>(y, x);
+                Vec3_d pTrans = RKinv * p + t;
+
+                // if point is valid (depth > 0), project and save result.
+                if (pTrans(2) > 0 && refDepth.at<float>(y, x) > 0){
+                    Vec3_d pTransProj = kk * pTrans;
+                    xImg.at<float>(y, x) = pTransProj(0) / pTransProj(2);
+                    yImg.at<float>(y, x) = pTransProj(1) / pTransProj(2);
+
+                    xp.at<float>(y, x) = pTrans(0);
+                    yp.at<float>(y, x) = pTrans(1);
+                    zp.at<float>(y, x) = pTrans(2);
+                }
+            }
+        }
+    }
+
+    // calculate actual derivative
+    std::cout << "baodebug" << std::endl;
+    cv::Mat dxI(imageHeight, imageWidth, CV_32F, std::numeric_limits<float>::quiet_NaN());
+    cv::Mat dyI(imageHeight, imageWidth, CV_32F, std::numeric_limits<float>::quiet_NaN());
+
+    Eigen::Map<Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>> mCurrImg(const_cast<float*>(currImage.ptr<float>()), imageHeight, imageWidth);
+    Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> mDyI_r2endm1 = 0.5 * (mCurrImg.block(2, 0, imageHeight - 2, imageWidth) - mCurrImg.block(0, 0, imageHeight - 2, imageWidth));
+    Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> mDxI_c2endm1 = 0.5 * (mCurrImg.block(0, 2, imageHeight, imageWidth - 2) - mCurrImg.block(0, 0, imageHeight, imageWidth - 2));
+    cv::Mat dyI_r2endm1(imageHeight - 2, imageWidth, CV_32F, mDyI_r2endm1.data());
+    cv::Mat dxI_c2endm1(imageHeight, imageWidth - 2, CV_32F, mDxI_c2endm1.data());
+
+    cv::Point topLeft_r2endm1(0, 1);
+    cv::Point bottomRight_r2endm1(imageWidth, imageHeight - 1);
+    cv::Rect roi_r2endm1(topLeft_r2endm1, bottomRight_r2endm1);
+    dyI_r2endm1.copyTo(dyI(roi_r2endm1));
+
+    cv::Point topLeft_c2endm1(1, 0);
+    cv::Point bottomRight_c2endm1(imageWidth - 1, imageHeight);
+    cv::Rect roi_c2endm1(topLeft_c2endm1, bottomRight_c2endm1);
+    dxI_c2endm1.copyTo(dxI(roi_c2endm1));
+
+    cv::Mat dxI_warp;
+    // Perform the remapping
+    cv::remap(dxI, dxI_warp, xImg, yImg, cv::INTER_CUBIC, cv::BORDER_CONSTANT, cv::Scalar(std::numeric_limits<float>::quiet_NaN()));
+    Eigen::VectorXf mIxfx = kk(0, 0) * Eigen::Map<Eigen::VectorXf>(const_cast<float*>(dxI_warp.ptr<float>()), imageHeight * imageWidth);
+    cv::Mat dyI_warp;
+    cv::remap(dyI, dyI_warp, xImg, yImg, cv::INTER_CUBIC, cv::BORDER_CONSTANT, cv::Scalar(std::numeric_limits<float>::quiet_NaN()));
+    Eigen::VectorXf mIyfy = kk(1, 1) * Eigen::Map<Eigen::VectorXf>(const_cast<float*>(dyI_warp.ptr<float>()), imageHeight * imageWidth);
+
+    // flatten xp, yp, zp
+    Eigen::VectorXf mXp = Eigen::Map<Eigen::VectorXf>(const_cast<float*>(xp.ptr<float>()), imageHeight * imageWidth);
+    Eigen::VectorXf mYp = Eigen::Map<Eigen::VectorXf>(const_cast<float*>(yp.ptr<float>()), imageHeight * imageWidth);
+    Eigen::VectorXf mZp = Eigen::Map<Eigen::VectorXf>(const_cast<float*>(zp.ptr<float>()), imageHeight * imageWidth);
+
+    // jacobian matrix
+    Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> mJac(imageHeight * imageWidth, 6);
+    mJac.setZero();
+    mJac.block(0, 0, imageHeight * imageWidth, 1) = mIxfx.array() / mZp.array();
+    mJac.block(0, 1, imageHeight * imageWidth, 1) = mIyfy.array() / mZp.array();
+    mJac.block(0, 2, imageHeight * imageWidth, 1) = - (mIxfx.array() * mXp.array() + mIyfy.array() * mYp.array()) / (mZp.array() * mZp.array());
+    mJac.block(0, 3, imageHeight * imageWidth, 1) = -(mIxfx.array() * mXp.array() * mYp.array()) / (mZp.array() * mZp.array()) - mIyfy.array() * (1 + (mYp.array() / mZp.array()).square());
+    mJac.block(0, 4, imageHeight * imageWidth, 1) = mIxfx.array() * (1 + (mXp.array() / mZp.array()).square()) + (mIyfy.array() * mXp.array() * mYp.array()) / (mZp.array() * mZp.array());
+    mJac.block(0, 5, imageHeight * imageWidth, 1) = (-mIxfx.array() * mYp.array() + mIyfy.array() * mXp.array()) / mZp.array();
+    outJac = std::move(mJac);
+
+    // plot residual image for debug
+    cv::Mat currImage_warp;
+    cv::remap(currImage, currImage_warp, xImg, yImg, cv::INTER_CUBIC, cv::BORDER_CONSTANT, cv::Scalar(0.));
+    cv::Mat residual = (currImage_warp - refImage);
+    outResidual = Eigen::Map<Eigen::VectorXf>(const_cast<float*>(residual.ptr<float>()), imageHeight * imageWidth);
+    
+    cv::Mat residual_int;
+    cv::Mat residual_debug = cv::abs(residual.clone());
+    cv::Scalar sum = cv::sum(residual_debug);
+    std::cout << "sum of residual: " << sum[0] << std::endl; 
+    double minVal, maxVal;
+    cv::Point minLoc, maxLoc;
+    cv::minMaxLoc(residual_debug, &minVal, &maxVal, &minLoc, &maxLoc);
+    residual_debug = residual_debug * 255 / maxVal;
+    residual_debug.convertTo(residual_int, CV_32S);
+    cv::imwrite("/home/runqiu/tmptmp/debug.png", residual_int);
+}
+
+void PoseOptimizer::EstimatePose(
+    const cv::Mat& refDepth,
+    const cv::Mat& refImage,
+    const std::vector<TwoDBoundingBox>& bboxesRef,
+    const cv::Mat& currDepth,
+    const cv::Mat& currImage,
+    Mat44_d& currInRefTransform
+){
+    Vec6_d xi = Vec6_d::Zero();
+
+    for (size_t iiLevel=_numLevel; iiLevel > 0; iiLevel--){
+        // downscale inputs. from rough to fine.
+        Mat33_t kk_level = _kk;
+        Mat33_t kk_clone = _kk;
+        cv::Mat refDepth_clone = refDepth.clone();
+        cv::Mat refImage_clone = refImage.clone();
+        cv::Mat currDepth_clone = currDepth.clone();
+        cv::Mat currImage_clone = currImage.clone();
+        DownScale(refDepth_clone, refImage_clone, kk_level, std::pow(2, iiLevel));
+        DownScale(currDepth_clone, currImage_clone, kk_clone, std::pow(2, iiLevel));
+
+        float errorLast = std::numeric_limits<float>::max();
+        Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> outJac;
+        Eigen::VectorXf outResidual;
+        bool haveDecreased = false;
+        for (size_t iter = 0; iter < 10; iter++){
+            deriveAnalytic(
+                refDepth_clone,
+                refImage_clone,
+                bboxesRef,
+                currImage_clone,
+                xi,
+                kk_level.cast<double>(),
+                iiLevel,
+                outJac,
+                outResidual
+            );
+            // remove nan values
+            outJac = outJac.unaryExpr([](float v) { return std::isnan(v) ? 0.0f : v; });
+            outResidual = outResidual.unaryExpr([](float v) { return std::isnan(v) ? 0.0f : v; });
+            
+            Eigen::Matrix<float, 6, 6> coeffMat = -(outJac.transpose() * outJac);
+            Eigen::Vector<float, 6> constMat = outJac.transpose() * outResidual;
+            Vec6_d upd = (coeffMat.ldlt().solve(constMat)).cast<double>();
+
+            xi = se3Log(se3Exp(upd) * se3Exp(xi));
+
+            float avgError = (outResidual.array() * outResidual.array()).mean();
+            if (avgError / errorLast > 0.99995 && haveDecreased){
+                std::cout << "level: " << iiLevel << ", iter: " << iter <<  ", estimate pose converge early. avgError: " << avgError << std::endl;
+                break;
+            }
+            else if (avgError < errorLast){
+                haveDecreased = true;  // Note: have got good estimate at least once.
+            }
+            else{
+                std::cout << "level: " << iiLevel << ", iter: " << iter <<  ", avgError: " << avgError << std::endl;
+            }
+            errorLast = avgError;
+        }
+
+    }
+    currInRefTransform = se3Exp(xi);
+    std::cout << "currInRefTransform:\n" << currInRefTransform << std::endl;
+
+}
+
+static void TrackWithHomography(
+    const std::vector<cv::Point2f>& srcPoints2D,
+    const std::vector<cv::Point2f>& dstPoints2D,
+    const cv::Mat& cameraMatrix,
+    Mat44_t& currFrameInRefKeyFrame
+){
+    const float cameraFloorHeight = 0.05;
+    std::vector<uint8_t> mask;  // Note: filter outliers by ransac
+    cv::Mat H = cv::findHomography(srcPoints2D, dstPoints2D, 0, 3, mask);
+
+    // reprojection verify
+    std::vector<cv::Point2f> dstPoints2DReproj(dstPoints2D.size());
+    cv::perspectiveTransform(srcPoints2D, dstPoints2DReproj, H);
+    float sumError = 0;
+    TDO_LOG_DEBUG("H: \n" << H);
+    for (size_t indexPoint=0; indexPoint < dstPoints2D.size(); indexPoint++){
+        sumError += cv::norm(dstPoints2D[indexPoint] - dstPoints2DReproj[indexPoint]);
+    }
+    TDO_LOG_DEBUG("avg reproj. error = " << sumError / dstPoints2D.size());
+
+    std::vector<cv::Mat> Rs, ts, Ns;
+    cv::decomposeHomographyMat(H, cameraMatrix, Rs, ts, Ns);
+
+    std::vector<uint8_t> possibles;
+    cv::filterHomographyDecompByVisibleRefpoints(Rs, Ns, srcPoints2D, dstPoints2D, possibles, mask);
+    TDO_LOG_DEBUG_FORMAT("found %d solutions.", possibles.size());
+    for (uint8_t ii : possibles){
+        TDO_LOG_DEBUG("Rs: " << Rs[ii]);
+        TDO_LOG_DEBUG("ts: " << cameraFloorHeight * ts[ii]);
+    }
+    TDO_LOG_DEBUG("exit");
+}
 
 static void TrackWithPnP(
     const std::vector<cv::Point3f>& objectPoints,
@@ -59,8 +407,8 @@ static void TrackWithPnP(
 }
 
 bool FrameTracker::DoRelocalizeFromMap(Frame& currentFrame, const Frame& lastFrame, std::shared_ptr<MapDataBase> pMapDb, Mat44_t& velocity, const bool isDebug){
-    float maxPoseError = 0.5;
-    size_t minIoUToReject = 0.6;
+    float maxPoseError = 0.2;
+    float minIoUToReject = 0.2;
 
     std::vector<std::shared_ptr<LandMark>> visibleLandmarks = pMapDb->GetVisibleLandmarks(_pRefKeyframe);
     if (visibleLandmarks.size() < 4) {
@@ -202,8 +550,9 @@ bool FrameTracker::DoRelocalizeFromMap(Frame& currentFrame, const Frame& lastFra
 }
 
 bool FrameTracker::DoMotionBasedTrack(Frame& currentFrame, const Frame& lastFrame, Mat44_t& velocity, const bool isDebug) const{
-    size_t minIoUToReject = 0.6;
-    float maxPoseError = 0.5;
+    float minIoUToReject = 0.2;
+    float maxPoseError = 0.2;
+    float maxRotationAngleDeg = 10.0;
 
     std::vector<std::shared_ptr<RefObject>> refObjects = _pRefKeyframe->_refObjects;
     // project 3d refObjects and 3d detections to current camera pose and find correspondences.
@@ -275,7 +624,7 @@ bool FrameTracker::DoMotionBasedTrack(Frame& currentFrame, const Frame& lastFram
     std::vector<cv::Point3f> objectPoints;
     // Populate objectPoints with the corresponding 3D points from the object
     // 2D image points in image coordinates
-    std::vector<cv::Point2f> imagePoints;
+    std::vector<cv::Point2f> imagePoints, imagePointsRef;
     // Populate imagePoints with the corresponding 2D points from the object in the image
     size_t indexRefObject = 0;
     for (int indexCorrespondingDetection : indicesCorrespondingDetecton){
@@ -295,12 +644,17 @@ bool FrameTracker::DoMotionBasedTrack(Frame& currentFrame, const Frame& lastFram
             (*currentFrame._matchedLeftCamDetections[indexCorrespondingDetection])._centerY
         );
         imagePoints.push_back(point2D);
+        cv::Point2f point2DRef(
+            refObjects[indexRefObject]->_detection._pLeftBbox->_centerX,
+            refObjects[indexRefObject]->_detection._pLeftBbox->_centerY
+        );
+        imagePointsRef.push_back(point2DRef);
         indexRefObject++;
     }
 
     indexRefObject = 0;
-    if (objectPoints.size() < 4){
-        // not enough detection. Add keypt as well for tracking.
+    if (objectPoints.size() < 8){
+        // not enough detection. Add keypts as well for tracking.
         for (int indexCorrespondingDetection : indicesCorrespondingDetecton){
             if (indexCorrespondingDetection < 0){
                 indexRefObject++;
@@ -318,11 +672,13 @@ bool FrameTracker::DoMotionBasedTrack(Frame& currentFrame, const Frame& lastFram
                 (*currentFrame._matchedLeftCamDetections[indexCorrespondingDetection])._keypts[0][1]
             );
             imagePoints.push_back(point2D_keypt);
+
             indexRefObject++;
         }
 
     }
 
+    bool isSuccess = false;
     // Estimate current frame pose using PnP
     if (objectPoints.size() < 4){
         // track failed
@@ -330,7 +686,6 @@ bool FrameTracker::DoMotionBasedTrack(Frame& currentFrame, const Frame& lastFram
         currentFrame.SetPose(lastFrame.GetPose() * velocity);
         TDO_LOG_DEBUG("track fail. not updating camera pose.");
         // not updating cameraInWorld
-        return false;
     }
     else{
         // Camera intrinsic matrix (3x3)
@@ -348,24 +703,74 @@ bool FrameTracker::DoMotionBasedTrack(Frame& currentFrame, const Frame& lastFram
         TrackWithPnP(objectPoints, imagePoints, cameraMatrix, distCoeffs, maxPoseError, currentFrameInRefKeyFrame);
         TDO_LOG_DEBUG("currentCameraInRefKeyFrame: \n" << currentFrameInRefKeyFrame);
         velocity = lastFrame.GetPose().inverse() * currentFrameInRefKeyFrame;  // Note: think like there is a point in last frame, first transform it to keyframe then to current frame.
+        float rotAngleDeg = Eigen::AngleAxisf(velocity.block<3, 3>(0, 0)).angle() * 180.0 / M_PI;
         if (
-            velocity.block(0, 3, 3, 1).norm() > maxPoseError
+            velocity.block(0, 3, 3, 1).norm() > maxPoseError ||
+            std::abs(rotAngleDeg) > maxRotationAngleDeg
         ){
+            TDO_LOG_DEBUG("track fail. not updating camera pose. velocity is \n" << velocity << ", translation is " << velocity.block(0, 3, 3, 1) << ", rotations are " << rotAngleDeg);
             // track failed
             velocity = Eigen::Matrix4f::Identity();
             currentFrame.SetPose(lastFrame.GetPose() * velocity);
-            TDO_LOG_DEBUG("track fail. not updating camera pose.");
             // not updating cameraInWorld
-            return false;
         }
         else{
             currentFrame.SetPose(currentFrameInRefKeyFrame);
             currentFrame._isTracked = true;
             currentFrame._detectionIDsOfCorrespondingRefObjects = indicesCorrespondingDetecton;
-            TDO_LOG_DEBUG("track succeeded. currentFrameInLast:\n" << velocity);
-            return true;
+            TDO_LOG_DEBUG("track succeeded. (rotAngleDeg, " << rotAngleDeg << "). currentFrameInLast:\n" << velocity);
+            isSuccess = true;
         }
     }
+
+    if (!isSuccess){
+        TDO_LOG_DEBUG("try once dense alignment");
+        indexRefObject = 0;
+        std::vector<TwoDBoundingBox> leftCamDetections_ref, rightCamDetections_ref, leftCamDetections, rightCamDetections;
+        for (int indexCorrespondingDetection : indicesCorrespondingDetecton){
+            if (indexCorrespondingDetection < 0){
+                indexRefObject++;
+                continue;
+            }
+            leftCamDetections_ref.push_back(*refObjects[indexRefObject]->_detection._pLeftBbox);
+            rightCamDetections_ref.push_back(*refObjects[indexRefObject]->_detection._pRightBbox);
+            leftCamDetections.push_back(*currentFrame._matchedLeftCamDetections[indexCorrespondingDetection]);
+            rightCamDetections.push_back(*currentFrame._matchedRightCamDetections[indexCorrespondingDetection]);
+            indexRefObject++;
+        }
+        cv::Mat refDepth, refImage, currDepth, currImage;
+        const int imageWidth = _camera->_cols;
+        const int imageHeight = _camera->_rows;
+        _pPoseOptimizer->PrepareDepthAndFeatureMapFromBboxes(leftCamDetections_ref, rightCamDetections_ref, imageWidth, imageHeight, refImage, refDepth);
+        _pPoseOptimizer->PrepareDepthAndFeatureMapFromBboxes(leftCamDetections, rightCamDetections, imageWidth, imageHeight, currImage, currDepth);
+        if (isDebug){
+            SaveCvmatForDebug(refImage, "ref");
+            SaveCvmatForDebug(currImage, "curr");
+        }
+        Mat44_d currInRefTransform;
+        _pPoseOptimizer->EstimatePose(refDepth, refImage, leftCamDetections_ref, currDepth, currImage, currInRefTransform);
+        TDO_LOG_DEBUG("currentCameraInRefKeyFrame by dense align: \n" << currInRefTransform);
+        velocity = lastFrame.GetPose().inverse() * currInRefTransform.cast<float>();
+        float rotAngleDenseAlignDeg = Eigen::AngleAxisf(velocity.block<3, 3>(0, 0)).angle() * 180.0 / M_PI;
+        if (
+            velocity.block(0, 3, 3, 1).norm() > maxPoseError ||
+            std::abs(rotAngleDenseAlignDeg) > maxRotationAngleDeg
+        ){
+            TDO_LOG_DEBUG("track by dense align fail. not updating camera pose. velocity is \n" << velocity << ", translation is " << velocity.block(0, 3, 3, 1) << ", rotations are " << rotAngleDenseAlignDeg);
+            // track by dense align failed
+            velocity = Eigen::Matrix4f::Identity();
+            currentFrame.SetPose(lastFrame.GetPose() * velocity);
+            // not updating cameraInWorld
+        }
+        else{
+            currentFrame.SetPose(currInRefTransform.cast<float>());
+            currentFrame._isTracked = true;
+            currentFrame._detectionIDsOfCorrespondingRefObjects = indicesCorrespondingDetecton;
+            TDO_LOG_DEBUG("track by dense align succeeded. (rotAngleDeg, " << rotAngleDenseAlignDeg << "). currentFrameInLast:\n" << velocity);
+            isSuccess = true;
+        }
+    }
+    return isSuccess;
 }
 
 static void DrawNodes(
@@ -388,7 +793,7 @@ bool FrameTracker::Do2DTrackingBasedTrack(Frame& currentFrame, const Frame& last
     int nodeSizeHalf = 5;
     int nodeRoiSize = 20;
     int maxTrackSuccessRoiSizeError = 2;
-    float maxPoseError = 0.5;
+    float maxPoseError = 0.2;
 
     // Draw nodes for tracking
     cv::Mat nodesCurrentFrame, nodesLastFrame;

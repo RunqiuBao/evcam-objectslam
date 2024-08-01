@@ -2,7 +2,53 @@
 
 #include <random>
 
+#include <logging.h>
+TDO_LOGGER("objectslam.mathutils")
+
 namespace eventobjectslam {
+
+void mathutils::FilterNonPlanePoints(
+    const std::vector<Vec3_t> points,
+    const float planeDistanceThreshold,
+    std::vector<int>& indicesPoints
+){
+    if (points.size() < 5) {
+        indicesPoints.resize(points.size());
+        std::iota(indicesPoints.begin(), indicesPoints.end(), 0);
+        return;
+    }
+    pcl::PointCloud<pcl::PointXYZ>::Ptr pPoints(new pcl::PointCloud<pcl::PointXYZ>);
+    pPoints->width = 1;
+    pPoints->height = points.size();
+    pPoints->points.resize(points.size());
+    for (size_t indexPoint = 0; indexPoint < points.size(); indexPoint++){
+        pPoints->points[indexPoint] = pcl::PointXYZ(points[indexPoint](0), points[indexPoint](1), points[indexPoint](2));
+    }
+    // use pcl ransac segmentation to estimate the plane
+    pcl::SACSegmentation<pcl::PointXYZ> seg;
+    seg.setOptimizeCoefficients(true);
+    seg.setModelType(pcl::SACMODEL_PLANE);
+    seg.setMethodType(pcl::SAC_RANSAC);
+    seg.setMaxIterations(3);
+    seg.setDistanceThreshold(planeDistanceThreshold);  // unit is meter.
+    pcl::ModelCoefficients::Ptr planeCoeff(new pcl::ModelCoefficients);
+    pcl::PointIndices::Ptr pIndicesInliers(new pcl::PointIndices);
+    
+    seg.setInputCloud(pPoints);
+    seg.segment(*pIndicesInliers, *planeCoeff);
+
+    if (pIndicesInliers->indices.size() == 0){
+        TDO_LOG_DEBUG_FORMAT("plane fitting zero inliers from %d points, plane distance threshold = %f", points.size() % planeDistanceThreshold);
+        return;
+    }
+    else {
+        for (const auto& ii : pIndicesInliers->indices){
+            indicesPoints.push_back(static_cast<int>(ii));
+        }
+        TDO_LOG_DEBUG_FORMAT("plane fitting found %d inliers from %d points, plane distance threshold = %f", indicesPoints.size() % points.size() % planeDistanceThreshold);
+        return;
+    }
+}
 
 std::vector<cv::Point> mathutils::ProjectPoints3DToPoints2D(Eigen::MatrixXf& mPoints3D, camera::CameraBase& camera){
     Eigen::Matrix<float, 2, Eigen::Dynamic> mPoints2D(2, mPoints3D.cols());

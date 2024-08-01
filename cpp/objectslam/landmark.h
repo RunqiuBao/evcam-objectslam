@@ -14,6 +14,7 @@ class KeyFrame;  // Note: due to mutual reference.
 class LandMark {
 
 public:
+    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
     LandMark(
         const Mat44_t poseLandmarkInWorld,
         const Vec3_t keypt1InLandmark,

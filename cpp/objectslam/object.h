@@ -73,6 +73,7 @@ public:
 class ThreeDDetection {
 
 public:
+    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
     unsigned int _cameraID;
     Vec3_t _objectCenterInRefFrame;  // Note: use center->keypt vector to express orientation. refFrame is the frame that observed this detection.
     Vec3_t _keypt1InRefFrame;
@@ -92,7 +93,7 @@ public:
         const float detectionScore,
         const  std::shared_ptr<TwoDBoundingBox> pLeftBbox,
         const  std::shared_ptr<TwoDBoundingBox> pRightBbox,
-        const Vec3_t keypt1InRefFrame,
+        const Vec3_t& keypt1InRefFrame,
         const float horizontalSize,
         const std::shared_ptr<object::ObjectBase> pObjectInfo
     )

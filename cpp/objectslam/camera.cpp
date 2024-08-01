@@ -5,11 +5,6 @@
 #include <opencv2/opencv.hpp>
 #include <cassert>
 
-#include <pcl/point_types.h>
-#include <pcl/sample_consensus/model_types.h>
-#include <pcl/sample_consensus/method_types.h>
-#include <pcl/segmentation/sac_segmentation.h>
-
 #include <logging.h>
 TDO_LOGGER("objectslam.camera")
 
@@ -43,43 +38,6 @@ static const bool CheckTooCloseToImageBorder(
     }
 }
 
-static void FilterNonPlanePoints(
-    const std::vector<Vec3_t> points,
-    std::vector<int>& indicesPoints
-){
-    const float planeDistanceThreshold = 0.5;
-    pcl::PointCloud<pcl::PointXYZ>::Ptr pPoints(new pcl::PointCloud<pcl::PointXYZ>);
-    pPoints->width = 1;
-    pPoints->height = points.size();
-    pPoints->points.resize(points.size());
-    for (size_t indexPoint = 0; indexPoint < points.size(); indexPoint++){
-        pPoints->points[indexPoint] = pcl::PointXYZ(points[indexPoint](0), points[indexPoint](1), points[indexPoint](2));
-    }
-    // use pcl ransac segmentation to estimate the plane
-    pcl::SACSegmentation<pcl::PointXYZ> seg;
-    seg.setOptimizeCoefficients(true);
-    seg.setModelType(pcl::SACMODEL_PLANE);
-    seg.setMethodType(pcl::SAC_RANSAC);
-    seg.setMaxIterations(3);
-    seg.setDistanceThreshold(planeDistanceThreshold);  // unit is meter.
-    pcl::ModelCoefficients::Ptr planeCoeff(new pcl::ModelCoefficients);
-    pcl::PointIndices::Ptr pIndicesInliers(new pcl::PointIndices);
-    
-    seg.setInputCloud(pPoints);
-    seg.segment(*pIndicesInliers, *planeCoeff);
-
-    if (pIndicesInliers->indices.size() == 0){
-        TDO_LOG_DEBUG_FORMAT("plane fitting zero inliers from %d points, plane distance threshold = %f", points.size() % planeDistanceThreshold);
-        return;
-    }
-    else {
-        for (const auto& ii : pIndicesInliers->indices){
-            indicesPoints.push_back(static_cast<int>(ii));
-        }
-        TDO_LOG_DEBUG_FORMAT("plane fitting found %d inliers from %d points, plane distance threshold = %f", indicesPoints.size() % points.size() % planeDistanceThreshold);
-        return;
-    }
-}
 
 void camera::CameraBase::ProjectPointTo3DByDepth(const float Z, const float u, const float v, float& X, float& Y){
     X = (u - _kk(0, 2)) /_kk(0, 0) * Z;
@@ -99,7 +57,7 @@ void camera::CameraBase::MatchStereoBBoxes(
     std::vector<std::shared_ptr<TwoDBoundingBox>>& matchedRightCamDetections
 ){
     float yMarginForMatch  = 20.;  // threshold to reject stereo detection
-    float cleanMarginFromImageBorder = 20;
+    float cleanMarginFromImageBorder = 0;
     if (leftCamDetections.size() == 0)
         return;
 
@@ -146,6 +104,7 @@ void camera::CameraBase::CreateThreeDDetections(
         this->ProjectPointTo3DByDepth((*pMatchedLeftCamDetection)._esitmated3DDepth, keypt1_x, keypt1_y, X, Y);
         Vec3_t keypt1InCam(X, Y, pMatchedLeftCamDetection->_esitmated3DDepth);
         float horizontalSize = pMatchedLeftCamDetection->_bWidth * pMatchedLeftCamDetection->_esitmated3DDepth / _kk(0, 0);
+
         ThreeDDetection new3DDetection(
             objectCenterInRefFrame,
             detectionID,
@@ -163,7 +122,7 @@ void camera::CameraBase::CreateThreeDDetections(
     }
     // filter non-plane 3d detections
     std::vector<int> indicesThreeDPoints;
-    FilterNonPlanePoints(threeDPoints, indicesThreeDPoints);
+    mathutils::FilterNonPlanePoints(threeDPoints, 0.2, indicesThreeDPoints);
     for (const int indexPoint : indicesThreeDPoints){
         threeDDetections.push_back(threeDDetectionCandidates[indexPoint]);
     }

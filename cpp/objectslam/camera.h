@@ -13,6 +13,7 @@ namespace camera{
 class CameraBase {
 
 public:
+    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
     unsigned int _cameraID;
     //! width of image
     unsigned int _cols;

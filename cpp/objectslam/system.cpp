@@ -206,19 +206,19 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
     Mat44_t cameraInWorldTransform = Eigen::Matrix4f::Identity();
     Mat44_t nextFrameInCameraTransform = Eigen::Matrix4f::Identity();
 
-    // seq0, seq2
-    Eigen::Quaternionf q;
-    q.x() = -0.49999999999999956;
-    q.y() = 0.5000000218556936;
-    q.z() = 0.49999999999999956;
-    q.w() = -0.49999997814430636; 
-    Eigen::Matrix3f rWorldToRealWorld = q.toRotationMatrix();
-    Mat44_t worldInRealWorld = Eigen::Matrix4f::Identity();
-    worldInRealWorld.block(0, 0, 3, 3) = rWorldToRealWorld;
-    worldInRealWorld.block(0, 2, 3, 1) *= -1;
-    TDO_LOG_DEBUG("rWorldToRealWorld: " << rWorldToRealWorld);
-    Eigen::Vector3f tWorldToRealWorld(-9.255331993103027, 7.211221218109131, 2.187476634979248);
-    worldInRealWorld.block(0, 3, 3, 1) = tWorldToRealWorld;
+    // // seq0, seq2
+    // Eigen::Quaternionf q;
+    // q.x() = -0.49999999999999956;
+    // q.y() = 0.5000000218556936;
+    // q.z() = 0.49999999999999956;
+    // q.w() = -0.49999997814430636; 
+    // Eigen::Matrix3f rWorldToRealWorld = q.toRotationMatrix();
+    // Mat44_t worldInRealWorld = Eigen::Matrix4f::Identity();
+    // worldInRealWorld.block(0, 0, 3, 3) = rWorldToRealWorld;
+    // worldInRealWorld.block(0, 2, 3, 1) *= -1;
+    // TDO_LOG_DEBUG("rWorldToRealWorld: " << rWorldToRealWorld);
+    // Eigen::Vector3f tWorldToRealWorld(-9.255331993103027, 7.211221218109131, 2.187476634979248);
+    // worldInRealWorld.block(0, 3, 3, 1) = tWorldToRealWorld;
     
     // //seq1
     // Mat44_t worldInRealWorld;
@@ -226,6 +226,8 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
     //                     1., 7.590408e-9,-4.304732e-8, -2.2000,
     //                     -0., -9.848077e-1, -1.736483e-1, 2.3650,
     //                     0., 0., 0., 1.;
+
+    Mat44_t worldInRealWorld = Eigen::Matrix4f::Identity();
 
     std::filesystem::path trackResultPath = sStereoSequencePath;
     trackResultPath.append("cameraTrackRealTime.txt");
@@ -334,8 +336,6 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
                 bool isSuccess = _tracker.Do2DTrackingBasedTrack(*pOneFrame, (*_pFrameStack.back()), nextFrameInCameraTransform, isDebug);
                 // TODO: if fail again, need another track trial from keyframe.
                 if (!isSuccess){
-                    // nextFrameInCameraTransform = (*_pFrameStack.back()).GetPose();
-                    // bool isSuccess = _tracker.DoMotionBasedTrack(*pOneFrame, (*_tracker._pRefKeyframe->_pRefFrame), nextFrameInCameraTransform, isDebug);
                     // try relocalize from map
                     bool isSuccess = _tracker.DoRelocalizeFromMap(*pOneFrame, (*_pFrameStack.back()), _pMapDb, nextFrameInCameraTransform, isDebug);
                     if (!isSuccess){
@@ -343,7 +343,6 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
                     }
                 }
             }
-
 
             // insert new key frame if detection increased than previous frame
             if (isSuccess && (pOneFrame->_threeDDetections.size() > (*_pFrameStack.back())._threeDDetections.size())){
@@ -400,7 +399,6 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
         pOneFrame->_pRefKeyframe = _tracker._pRefKeyframe;
         _tracker._pRefKeyframe->_vFrames_ids[pOneFrame] = pOneFrame->_frameID;
         _pFrameStack.push_back(pOneFrame);
-
     }
     outputFile.close();
     // FIXME: the first keyframe will be optimized and bias from (0, 0, 0). Compensate it before saving.

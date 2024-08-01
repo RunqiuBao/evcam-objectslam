@@ -15,6 +15,8 @@ add_library(ObjectSlam SHARED
 add_subdirectory(pangolinviewer)
 add_subdirectory(optimize)
 
+# Include Armadillo directories
+target_include_directories(ObjectSlam PRIVATE ${ARMADILLO_INCLUDE_DIRS})
 target_include_directories(ObjectSlam PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}
         ${INSTALLED_RAPIDJSON_LIB_PATH}/../include/
@@ -32,6 +34,7 @@ target_link_libraries(ObjectSlam PRIVATE
         ${PCL_IO_LIBRARIES}
         ${PCL_SEGMENTATION_LIBRARIES})
 target_link_libraries(ObjectSlam PUBLIC ${Pangolin_LIBRARIES})
+target_link_libraries(ObjectSlam PRIVATE ${ARMADILLO_LIBRARIES})
 
 install(TARGETS ObjectSlam
         RUNTIME DESTINATION lib)

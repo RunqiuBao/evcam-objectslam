@@ -166,5 +166,5 @@ cmake \
   -DINSTALL_PATH_ALLTARGETS=${INSTALL_PATH} \
   -DINSTALLED_PCL_LIB_PATH=${PCL_LIB_PATH} \
   ..
-make
+make -j12
 make install)

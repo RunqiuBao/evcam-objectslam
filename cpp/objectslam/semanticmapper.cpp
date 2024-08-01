@@ -53,6 +53,7 @@ void SemanticMapper::_DoPruneKeyframes(std::shared_ptr<KeyFrame> pCurrKeyfrm, co
 void SemanticMapper::_DoPruneLandmarks2() {
     TDO_LOG_DEBUG_FORMAT("------------- NumLandmarks in database before: %d ----------------", _pMapDb->_landmarks.size());
     std::vector<std::shared_ptr<LandMark>> allLandmarksInDb = _pMapDb->GetAllLandmarks();
+    
     for (auto pLandmark : allLandmarksInDb) {
         auto observableKeyframes = _pMapDb->GetObservableKeyframes(pLandmark, _numMinObservableToPruneLandmark);
         TDO_LOG_DEBUG_FORMAT("landmark(%d): posXYZ %f, %f, %f; numObservs %d; observables %d",

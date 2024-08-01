@@ -12,7 +12,7 @@ if(UNIX AND NOT APPLE)
 endif()
 
 set(MYLIB_VERSION 0.0.1)
-project(tool_detectobjects
+project(tool_eventbasedobjectslam
     VERSION ${MYLIB_VERSION}
     DESCRIPTION "An object base visual SLAM library for event camera"
     LANGUAGES C CXX
@@ -32,6 +32,10 @@ find_package(log4cxx REQUIRED)
 # include Eigen
 set(EIGEN3_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/eigen")
 find_package (Eigen3 3.4 REQUIRED)
+
+# Find the Armadillo package
+set(CMAKE_PREFIX_PATH "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/armadillo-14.0.1/armadilloinstall/share/Armadillo/CMake/" ${CMAKE_PREFIX_PATH})
+find_package(Armadillo REQUIRED)
 
 # include pybind11
 set(pybind11_DIR "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/pybind11/pybind11install/share/cmake/pybind11/")
