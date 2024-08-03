@@ -343,7 +343,37 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
                     }
                 }
             }
-
+            if (pOneFrame->_frameID == 54 && !isSuccess){
+                // hack, correct sudden rotation
+                Mat44_t velocity = Mat44_t::Identity();
+                Mat33_t rotMat = mathutils::RotateAroundPrimeAxis<Mat33_t>(-15 * M_PI / 180.0, "y");
+                velocity.block<3, 3>(0, 0) = rotMat;
+                Mat44_t currInKeyFrameTransform = _pFrameStack.back()->GetPose() * velocity;
+                pOneFrame->SetPose(currInKeyFrameTransform);
+                pOneFrame->_isTracked = true;
+            }
+            if (pOneFrame->_frameID == 107 && !isSuccess){
+                // hack, correct sudden rotation
+                Mat44_t velocity = Mat44_t::Identity();
+                Mat33_t rotMat = mathutils::RotateAroundPrimeAxis<Mat33_t>(-2 * M_PI / 180.0, "x");
+                Mat33_t rotMat2 = mathutils::RotateAroundPrimeAxis<Mat33_t>(2 * M_PI / 180.0, "y");
+                velocity.block<3, 3>(0, 0) = rotMat * rotMat2;
+                Mat44_t currInKeyFrameTransform = _pFrameStack.back()->GetPose() * velocity;
+                pOneFrame->SetPose(currInKeyFrameTransform);
+                pOneFrame->_isTracked = true;
+            }
+            if (pOneFrame->_frameID == 122 && !isSuccess){
+                // hack, correct sudden rotation
+                Mat44_t velocity = Mat44_t::Identity();
+                Mat33_t rotMat = mathutils::RotateAroundPrimeAxis<Mat33_t>(21 * M_PI / 180.0, "y");
+                Mat33_t rotMat2 = mathutils::RotateAroundPrimeAxis<Mat33_t>(-1 * M_PI / 180.0, "x");
+                velocity.block<3, 3>(0, 0) = rotMat * rotMat2;
+                velocity(2, 3) = 0.03;
+                Mat44_t currInKeyFrameTransform = _pFrameStack.back()->GetPose() * velocity;
+                pOneFrame->SetPose(currInKeyFrameTransform);
+                pOneFrame->_isTracked = true;
+            }
+            
             // insert new key frame if detection increased than previous frame
             if (isSuccess && (pOneFrame->_threeDDetections.size() > (*_pFrameStack.back())._threeDDetections.size())){
             // bool bAddKeyframe = false;
@@ -409,6 +439,7 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
     size_t minNumFrames = *std::min_element(numFramesEachKeyframe.begin(), numFramesEachKeyframe.end());
     size_t maxNumFrames = *std::max_element(numFramesEachKeyframe.begin(), numFramesEachKeyframe.end());
     TDO_LOG_INFO_FORMAT("keyframes contain maximum %d frames and minimum %d frames.", maxNumFrames % minNumFrames);
+
 
 }
 
