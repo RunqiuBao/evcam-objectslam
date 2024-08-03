@@ -9,6 +9,7 @@
 
 #include <opencv2/tracking.hpp>
 #include <opencv2/tracking/tracking_legacy.hpp>
+#include <opencv2/imgproc.hpp>
 
 // #include <unsupported/Eigen/MatrixFunctions>
 
@@ -29,7 +30,7 @@ void SaveCvmatForDebug(cv::Mat& debugImg_in, const std::string debugId){
     cv::imwrite("/home/runqiu/tmptmp/debug_" + debugId + ".png", debugImg_int);
 }
 
-static Mat44_d se3Exp(Vec6_d twist){
+static Mat44_d se3Exp(Vec5_d twist){
     // Mat44_d incrementPose;
     // incrementPose << 0, -twist(5), twist(4), twist(0),
     //                 twist(5), 0, -twist(3), twist(1),
@@ -39,10 +40,10 @@ static Mat44_d se3Exp(Vec6_d twist){
 
     arma::mat incrementPoseArma(4, 4);  // Note: eigen unsupported broke g2o
     incrementPoseArma(0, 0) = 0.0;
-    incrementPoseArma(0, 1) = -twist(5);
+    incrementPoseArma(0, 1) = 0;
     incrementPoseArma(0, 2) = twist(4);
     incrementPoseArma(0, 3) = twist(0);
-    incrementPoseArma(1, 0) = twist(5);
+    incrementPoseArma(1, 0) = 0;
     incrementPoseArma(1, 1) = 0.0;
     incrementPoseArma(1, 2) = -twist(3);
     incrementPoseArma(1, 3) = twist(1);
@@ -64,8 +65,8 @@ static Mat44_d se3Exp(Vec6_d twist){
     return expIncrePose;
 }
 
-static Vec6_d se3Log(Mat44_d incrementPose){
-    Vec6_d twist = Vec6_d::Zero();
+static Vec5_d se3Log(Mat44_d incrementPose){
+    Vec5_d twist = Vec5_d::Zero();
     if (incrementPose.isIdentity()){
         return twist;
     }
@@ -91,7 +92,7 @@ static Vec6_d se3Log(Mat44_d incrementPose){
     incrementPoseArma(3, 3) = incrementPose(3, 3);
     arma::cx_mat incrementPoseLogArma = arma::logmat(incrementPoseArma);
     arma::mat incrementPoseLogRealArma = arma::real(incrementPoseLogArma);
-    twist << incrementPoseLogRealArma(0, 3), incrementPoseLogRealArma(1, 3), incrementPoseLogRealArma(2, 3), incrementPoseLogRealArma(2, 1), incrementPoseLogRealArma(0, 2), incrementPoseLogRealArma(1, 0);
+    twist << incrementPoseLogRealArma(0, 3), incrementPoseLogRealArma(1, 3), incrementPoseLogRealArma(2, 3), incrementPoseLogRealArma(2, 1), incrementPoseLogRealArma(0, 2);
     return twist;
 }
 
@@ -154,7 +155,6 @@ void PoseOptimizer::PrepareDepthAndFeatureMapFromBboxes(
     cv::minMaxLoc(residual_debug, &minVal, &maxVal, &minLoc, &maxLoc);
     residual_debug = residual_debug * 255 / maxVal;
     residual_debug.convertTo(residual_int, CV_32S);
-    cv::imwrite("/home/runqiu/tmptmp/debug_featmap.png", residual_int);
 }
 
 void PoseOptimizer::deriveAnalytic(
@@ -162,7 +162,7 @@ void PoseOptimizer::deriveAnalytic(
     const cv::Mat& refImage,
     const std::vector<TwoDBoundingBox>& bboxesRef,
     const cv::Mat& currImage,
-    const Vec6_d& xi,
+    const Vec5_d& xi,
     const Mat33_d kk,
     const int scaleLevel,
     Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>& outJac,
@@ -248,14 +248,13 @@ void PoseOptimizer::deriveAnalytic(
     Eigen::VectorXf mZp = Eigen::Map<Eigen::VectorXf>(const_cast<float*>(zp.ptr<float>()), imageHeight * imageWidth);
 
     // jacobian matrix
-    Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> mJac(imageHeight * imageWidth, 6);
+    Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> mJac(imageHeight * imageWidth, 5);
     mJac.setZero();
     mJac.block(0, 0, imageHeight * imageWidth, 1) = mIxfx.array() / mZp.array();
     mJac.block(0, 1, imageHeight * imageWidth, 1) = mIyfy.array() / mZp.array();
     mJac.block(0, 2, imageHeight * imageWidth, 1) = - (mIxfx.array() * mXp.array() + mIyfy.array() * mYp.array()) / (mZp.array() * mZp.array());
     mJac.block(0, 3, imageHeight * imageWidth, 1) = -(mIxfx.array() * mXp.array() * mYp.array()) / (mZp.array() * mZp.array()) - mIyfy.array() * (1 + (mYp.array() / mZp.array()).square());
     mJac.block(0, 4, imageHeight * imageWidth, 1) = mIxfx.array() * (1 + (mXp.array() / mZp.array()).square()) + (mIyfy.array() * mXp.array() * mYp.array()) / (mZp.array() * mZp.array());
-    mJac.block(0, 5, imageHeight * imageWidth, 1) = (-mIxfx.array() * mYp.array() + mIyfy.array() * mXp.array()) / mZp.array();
     outJac = std::move(mJac);
 
     // plot residual image for debug
@@ -267,7 +266,6 @@ void PoseOptimizer::deriveAnalytic(
     cv::Mat residual_int;
     cv::Mat residual_debug = cv::abs(residual.clone());
     cv::Scalar sum = cv::sum(residual_debug);
-    std::cout << "sum of residual: " << sum[0] << std::endl; 
     double minVal, maxVal;
     cv::Point minLoc, maxLoc;
     cv::minMaxLoc(residual_debug, &minVal, &maxVal, &minLoc, &maxLoc);
@@ -284,7 +282,7 @@ void PoseOptimizer::EstimatePose(
     const cv::Mat& currImage,
     Mat44_d& currInRefTransform
 ){
-    Vec6_d xi = Vec6_d::Zero();
+    Vec5_d xi = Vec5_d::Zero();
 
     for (size_t iiLevel=_numLevel; iiLevel > 0; iiLevel--){
         // downscale inputs. from rough to fine.
@@ -298,6 +296,7 @@ void PoseOptimizer::EstimatePose(
         DownScale(currDepth_clone, currImage_clone, kk_clone, std::pow(2, iiLevel));
 
         float errorLast = std::numeric_limits<float>::max();
+        Vec5_d xi_last = Vec5_d::Zero();
         Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> outJac;
         Eigen::VectorXf outResidual;
         bool haveDecreased = false;
@@ -317,24 +316,27 @@ void PoseOptimizer::EstimatePose(
             outJac = outJac.unaryExpr([](float v) { return std::isnan(v) ? 0.0f : v; });
             outResidual = outResidual.unaryExpr([](float v) { return std::isnan(v) ? 0.0f : v; });
             
-            Eigen::Matrix<float, 6, 6> coeffMat = -(outJac.transpose() * outJac);
-            Eigen::Vector<float, 6> constMat = outJac.transpose() * outResidual;
-            Vec6_d upd = (coeffMat.ldlt().solve(constMat)).cast<double>();
+            Eigen::Matrix<float, 5, 5> coeffMat = -(outJac.transpose() * outJac);  // Note: no motion around Z
+            Eigen::Vector<float, 5> constMat = outJac.transpose() * outResidual;
+            Vec5_d upd = (coeffMat.ldlt().solve(constMat)).cast<double>();
 
             xi = se3Log(se3Exp(upd) * se3Exp(xi));
 
             float avgError = (outResidual.array() * outResidual.array()).mean();
+            if (avgError == 0){
+                break;  // Note: bboxesRef is empty
+            }
             if (avgError / errorLast > 0.99995 && haveDecreased){
+                xi = xi_last;
                 std::cout << "level: " << iiLevel << ", iter: " << iter <<  ", estimate pose converge early. avgError: " << avgError << std::endl;
                 break;
             }
-            else if (avgError < errorLast){
+            else if (avgError < errorLast && errorLast < (std::numeric_limits<float>::max() / 2)){
                 haveDecreased = true;  // Note: have got good estimate at least once.
             }
-            else{
-                std::cout << "level: " << iiLevel << ", iter: " << iter <<  ", avgError: " << avgError << std::endl;
-            }
+            std::cout << "level: " << iiLevel << ", iter: " << iter <<  ", avgError: " << avgError << std::endl;
             errorLast = avgError;
+            xi_last = xi;
         }
 
     }
@@ -723,7 +725,7 @@ bool FrameTracker::DoMotionBasedTrack(Frame& currentFrame, const Frame& lastFram
         }
     }
 
-    if (!isSuccess){
+    if (!isSuccess && objectPoints.size() > 0){
         TDO_LOG_DEBUG("try once dense alignment");
         indexRefObject = 0;
         std::vector<TwoDBoundingBox> leftCamDetections_ref, rightCamDetections_ref, leftCamDetections, rightCamDetections;
@@ -754,7 +756,8 @@ bool FrameTracker::DoMotionBasedTrack(Frame& currentFrame, const Frame& lastFram
         float rotAngleDenseAlignDeg = Eigen::AngleAxisf(velocity.block<3, 3>(0, 0)).angle() * 180.0 / M_PI;
         if (
             velocity.block(0, 3, 3, 1).norm() > maxPoseError ||
-            std::abs(rotAngleDenseAlignDeg) > maxRotationAngleDeg
+            std::abs(rotAngleDenseAlignDeg) > maxRotationAngleDeg ||
+            currInRefTransform.col(3).head<3>().norm() == 0  // Note: tracking completely failed.
         ){
             TDO_LOG_DEBUG("track by dense align fail. not updating camera pose. velocity is \n" << velocity << ", translation is " << velocity.block(0, 3, 3, 1) << ", rotations are " << rotAngleDenseAlignDeg);
             // track by dense align failed
