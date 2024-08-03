@@ -82,9 +82,9 @@ public:
     float _horizontalSize;  // diameter of the cylinder.
     int _detectionID;
     float _detectionScore;  // Note: used for records of confidence of the detection.
-    const std::shared_ptr<TwoDBoundingBox> _pLeftBbox;
-    const std::shared_ptr<TwoDBoundingBox> _pRightBbox;
-    const std::shared_ptr<object::ObjectBase> _pObjectInfo;
+    std::shared_ptr<TwoDBoundingBox> _pLeftBbox;  // Note; should not be changed after initialization.
+    std::shared_ptr<TwoDBoundingBox> _pRightBbox;
+    std::shared_ptr<object::ObjectBase> _pObjectInfo;
 
     ThreeDDetection(
         const Vec3_t objectCenterInRefFrame,
@@ -107,6 +107,26 @@ public:
       _horizontalSize(horizontalSize),
       _pObjectInfo(pObjectInfo)
     {
+        _vertices3DInRefFrame = GetVerticesOf3DBoundingCylinderForObject(
+            4,
+            _horizontalSize,
+            _objectCenterInRefFrame,
+            _keypt1InRefFrame
+        );
+    }
+
+    ThreeDDetection(){}  // default constructor.
+
+    void initialize(const ThreeDDetection& other){
+        _objectCenterInRefFrame = other._objectCenterInRefFrame;
+        _detectionID = other._detectionID;
+        _cameraID = other._cameraID;
+        _detectionScore = other._detectionScore;
+        _pLeftBbox = other._pLeftBbox;
+        _pRightBbox = other._pRightBbox;
+        _keypt1InRefFrame = other._keypt1InRefFrame;
+        _horizontalSize = other._horizontalSize;
+        _pObjectInfo = other._pObjectInfo;
         _vertices3DInRefFrame = GetVerticesOf3DBoundingCylinderForObject(
             4,
             _horizontalSize,

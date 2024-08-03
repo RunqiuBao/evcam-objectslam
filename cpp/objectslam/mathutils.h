@@ -1,8 +1,10 @@
 #ifndef MATHUTILS_H
 #define MATHUTILS_H
 
-#include <Eigen/Core>
+#include <stdexcept>
 #include <cassert>
+
+#include <Eigen/Core>
 #include <opencv2/opencv.hpp>
 
 #include <pcl/point_types.h>
@@ -27,6 +29,30 @@ MatrixType TransformPoints(const MatrixType& transform, const MatrixType& points
     else{
         return (transform.block(0, 0, 3, 3) * points.transpose()).colwise() + transform.block(0, 3, 3, 1).col(0);
     }
+}
+
+template<typename T>
+T RotateAroundPrimeAxis(const double theta, const std::string axisName){
+    T rotMat = T::Identity();
+    if (axisName == "x"){
+        rotMat << 1, 0, 0,
+                  0, std::cos(theta), -std::sin(theta),
+                  0, std::sin(theta), std::cos(theta);
+    }
+    else if (axisName == "y"){
+        rotMat << std::cos(theta), 0, std::sin(theta),
+                  0, 1, 0,
+                  -std::sin(theta), 0, std::cos(theta);
+    }
+    else if (axisName == "z"){
+        rotMat << std::cos(theta), -std::sin(theta), 0,
+                  std::sin(theta), std::cos(theta), 0,
+                  0, 0, 1; 
+    }
+    else{
+        throw std::invalid_argument("Invalid axisName: " + axisName);
+    }
+    return rotMat;
 }
 
 

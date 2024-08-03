@@ -564,16 +564,21 @@ bool FrameTracker::DoMotionBasedTrack(Frame& currentFrame, const Frame& lastFram
     camera::CameraBase myStereoCamera = *_camera;
     cv::Mat displayRefObjects(myStereoCamera._rows, myStereoCamera._cols, CV_8UC1, cv::Scalar(0));
     cv::Mat displayDetections(myStereoCamera._rows, myStereoCamera._cols, CV_8UC1, cv::Scalar(0));
+    // for projection based dense alignment
+    std::vector<TwoDBoundingBox> leftCamProjections_ref, rightCamProjections_ref, leftCamProjections, rightCamProjections;
     for (std::shared_ptr<RefObject> refObject : refObjects){
         Eigen::MatrixXf transformedVertices = mathutils::TransformPoints<Eigen::MatrixXf>((lastFrame.GetPose() * velocity).inverse(), refObject->_detection._vertices3DInRefFrame);
         std::vector<cv::Point> points2DCV = mathutils::ProjectPoints3DToPoints2D(transformedVertices, myStereoCamera);
         cv::Mat refObjectPoseMask = mathutils::Draw2DHullMaskFrom2DPointsSet(points2DCV, myStereoCamera._rows, myStereoCamera._cols);
+
         if (isDebug){
             cv::bitwise_or(refObjectPoseMask, displayRefObjects, displayRefObjects);
         }
         size_t countDetection = 0;
         int indexLargestOverlap = -1;
         float largestIoU = -1;
+        cv::Mat currentDetectionPoseMask_Best;
+        ThreeDDetection currentDetection_Best;
         for (ThreeDDetection currentDetection : currentFrame._threeDDetections){
             std::vector<cv::Point> points2DCV = mathutils::ProjectPoints3DToPoints2D(currentDetection._vertices3DInRefFrame, myStereoCamera);
             cv::Mat currentDetectionPoseMask = mathutils::Draw2DHullMaskFrom2DPointsSet(points2DCV, myStereoCamera._rows, myStereoCamera._cols);
@@ -585,6 +590,8 @@ bool FrameTracker::DoMotionBasedTrack(Frame& currentFrame, const Frame& lastFram
             if ((sumOverlaps[0] / sumUnions[0]) > largestIoU && (sumOverlaps[0] / sumUnions[0]) > minIoUToReject){
                 indexLargestOverlap = countDetection;
                 largestIoU = (sumOverlaps[0] / sumUnions[0]);
+                currentDetectionPoseMask_Best = currentDetectionPoseMask;
+                currentDetection_Best.initialize(currentDetection);
             }
             // TDO_LOG_DEBUG_FORMAT("RefObject No.%d, detection No.%d, overlapping area: %d", countRefObject % countDetection % sum[0]);
             countDetection++;
@@ -594,6 +601,54 @@ bool FrameTracker::DoMotionBasedTrack(Frame& currentFrame, const Frame& lastFram
         }
         if (indexLargestOverlap >= 0){
             TDO_LOG_DEBUG("found corresponding detection for refObject " << std::to_string(countRefObject) << ", IoU :" << std::to_string(largestIoU));
+            // generate new bbox for curr projections
+            std::vector<std::vector<cv::Point>> currObjectContours;
+            cv::findContours(currentDetectionPoseMask_Best * 255, currObjectContours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
+            cv::Rect bboxCurrObjProj = cv::boundingRect(currObjectContours[0]);
+            leftCamProjections.push_back(std::move(TwoDBoundingBox(
+                bboxCurrObjProj.x + bboxCurrObjProj.width / 2,
+                bboxCurrObjProj.y + bboxCurrObjProj.height / 2,
+                bboxCurrObjProj.width,
+                bboxCurrObjProj.height,
+                refObject->_detection._pObjectInfo,
+                -1.,  // Note: not used.
+                std::vector<Vec2_t>()  // Note: not used.
+            )));
+            float disparityCurr = currentDetection_Best._pLeftBbox->_centerX - currentDetection_Best._pRightBbox->_centerX;
+            rightCamProjections.push_back(std::move(TwoDBoundingBox(
+                bboxCurrObjProj.x + bboxCurrObjProj.width / 2 - disparityCurr,
+                bboxCurrObjProj.y + bboxCurrObjProj.height / 2,
+                bboxCurrObjProj.width,  // Note: not important to be precise
+                bboxCurrObjProj.height,
+                refObject->_detection._pObjectInfo,
+                -1.,  // Note: not used.
+                std::vector<Vec2_t>()  // Note: not used.
+            )));
+            // generate new bbox for ref projections
+            std::vector<std::vector<cv::Point>> refObjectContours;
+            cv::findContours(refObjectPoseMask * 255, refObjectContours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
+            if (refObjectContours.size() > 0){
+                cv::Rect bboxRefObjProj = cv::boundingRect(refObjectContours[0]);
+                leftCamProjections_ref.push_back(std::move(TwoDBoundingBox(
+                    bboxRefObjProj.x + bboxRefObjProj.width / 2,
+                    bboxRefObjProj.y + bboxRefObjProj.height / 2,
+                    bboxRefObjProj.width,
+                    bboxRefObjProj.height,
+                    refObject->_detection._pObjectInfo,
+                    -1.,  // Note: not used.
+                    std::vector<Vec2_t>()  // Note: not used.
+                )));
+                float disparityRefObj = refObject->_detection._pLeftBbox->_centerX - refObject->_detection._pRightBbox->_centerX;
+                rightCamProjections_ref.push_back(std::move(TwoDBoundingBox(
+                    bboxRefObjProj.x + bboxRefObjProj.width / 2 - disparityRefObj,
+                    bboxRefObjProj.y + bboxRefObjProj.height / 2,
+                    bboxRefObjProj.width,  // Note: not important to be precise
+                    bboxRefObjProj.height,
+                    refObject->_detection._pObjectInfo,
+                    -1.,  // Note: not used.
+                    std::vector<Vec2_t>()  // Note: not used.
+                )));
+            }
         }
         indicesCorrespondingDetecton.push_back(indexLargestOverlap);
 
@@ -770,6 +825,42 @@ bool FrameTracker::DoMotionBasedTrack(Frame& currentFrame, const Frame& lastFram
             currentFrame._isTracked = true;
             currentFrame._detectionIDsOfCorrespondingRefObjects = indicesCorrespondingDetecton;
             TDO_LOG_DEBUG("track by dense align succeeded. (rotAngleDeg, " << rotAngleDenseAlignDeg << "). currentFrameInLast:\n" << velocity);
+            isSuccess = true;
+        }
+    }
+
+    // Note: use projected instances to do dense alignment
+    if (!isSuccess && leftCamProjections.size() > 0 && currentFrame._frameID == 123){
+        cv::Mat refDepth, refImage, currDepth, currImage;
+        const int imageWidth = _camera->_cols;
+        const int imageHeight = _camera->_rows;
+        _pPoseOptimizer->PrepareDepthAndFeatureMapFromBboxes(leftCamProjections_ref, rightCamProjections_ref, imageWidth, imageHeight, refImage, refDepth);
+        _pPoseOptimizer->PrepareDepthAndFeatureMapFromBboxes(leftCamProjections, rightCamProjections, imageWidth, imageHeight, currImage, currDepth);
+        if (isDebug){
+            SaveCvmatForDebug(refImage, "ref_2");
+            SaveCvmatForDebug(currImage, "curr_2");
+        }
+        Mat44_d currInRefTransform;
+        _pPoseOptimizer->EstimatePose(refDepth, refImage, leftCamProjections_ref, currDepth, currImage, currInRefTransform);
+        velocity = currInRefTransform.cast<float>();  // Note; ref were projected to previous frame. therefore currInRef == velocity
+        float rotAngleDenseAlignDeg = Eigen::AngleAxisf(velocity.block<3, 3>(0, 0)).angle() * 180.0 / M_PI;
+        if (
+            velocity.block(0, 3, 3, 1).norm() > maxPoseError ||
+            std::abs(rotAngleDenseAlignDeg) > maxRotationAngleDeg ||
+            currInRefTransform.col(3).head<3>().norm() == 0  // Note: tracking completely failed.
+        ){
+            TDO_LOG_DEBUG("track by dense align round2 fail. not updating camera pose. velocity is \n" << velocity << ", translation is " << velocity.block(0, 3, 3, 1) << ", rotations are " << rotAngleDenseAlignDeg);
+            // track by dense align failed
+            velocity = Eigen::Matrix4f::Identity();
+            currentFrame.SetPose(lastFrame.GetPose() * velocity);
+            // not updating cameraInWorld
+        }
+        else{
+            Mat44_t currInKeyframeTransform = lastFrame.GetPose() * velocity;
+            currentFrame.SetPose(currInKeyframeTransform);
+            currentFrame._isTracked = true;
+            currentFrame._detectionIDsOfCorrespondingRefObjects = indicesCorrespondingDetecton;
+            TDO_LOG_DEBUG("track by dense align round2 succeeded. (rotAngleDeg, " << rotAngleDenseAlignDeg << "). currentFrameInLast:\n" << velocity);
             isSuccess = true;
         }
     }
