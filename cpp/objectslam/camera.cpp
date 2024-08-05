@@ -27,9 +27,10 @@ static const bool CheckTooCloseToImageBorder(
     else if ((centerX + bWidth / 2) > (imgWidth - borderDistanceThreshold)){
         return true;
     }
-    else if ((centerY - bHeight / 2) < borderDistanceThreshold) {
-        return true;
-    }
+    // Note: do not delete bottom ones
+    // else if ((centerY - bHeight / 2) < borderDistanceThreshold) {
+    //     return true;
+    // }
     else if ((centerY + bHeight / 2) > (imgHeight - borderDistanceThreshold)) {
         return true;
     }
