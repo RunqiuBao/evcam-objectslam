@@ -555,7 +555,7 @@ bool FrameTracker::DoRelocalizeFromMap(Frame& currentFrame, const Frame& lastFra
 bool FrameTracker::DoMotionBasedTrack(Frame& currentFrame, const Frame& lastFrame, Mat44_t& velocity, const bool isDebug) const{
     float minIoUToReject = 0.2;
     float maxPoseError = 0.2;
-    float maxRotationAngleDeg = 10.0;
+    float maxRotationAngleDeg = 7.0;
 
     std::vector<std::shared_ptr<RefObject>> refObjects = _pRefKeyframe->_refObjects;
     // project 3d refObjects and 3d detections to current camera pose and find correspondences.
@@ -1019,6 +1019,8 @@ bool FrameTracker::Do2DTrackingBasedTrack(Frame& currentFrame, const Frame& last
 
 void FrameTracker::CreateNewLandmarks(std::shared_ptr<KeyFrame> pRefKeyFrame, std::shared_ptr<MapDataBase> pMapDb, const bool isDebug){
     float minIoUForCorrespondence = 0.6;
+    float angleDiffThresholdToFit = 10;  // if landmark y axis angle diff is very small with a world prime axis (initial cam y negative axis), then fit to that prime axis. Prevent non-realistic gravity direction.
+    float inPlaneDistanceThreshold = 0.07;
     // float sizeDiffToReject = 0.5;
 
     std::vector<std::shared_ptr<LandMark>> visibleLandmarks = pMapDb->GetVisibleLandmarks(pRefKeyFrame);  // Note: find landmarks that might fall within FoV of this keyframe.
@@ -1079,6 +1081,35 @@ void FrameTracker::CreateNewLandmarks(std::shared_ptr<KeyFrame> pRefKeyFrame, st
                 Mat44_t poseLandmarkInWorld;
                 Vec3_t keypt1InLandmark;
                 LandMark::ComputeLandmarkPoseInWorldAndKeypt1InWolrd(pRefKeyFrame, pRefObject, poseLandmarkInWorld, keypt1InLandmark);
+
+                // do not create gravity non-realistic landmark
+                Vec3_t keypt1InWorld = poseLandmarkInWorld.block<3, 3>(0, 0) * keypt1InLandmark + poseLandmarkInWorld.col(3).head<3>();
+                Vec3_t vecPt1InWorld = keypt1InWorld - poseLandmarkInWorld.col(3).head<3>();
+                vecPt1InWorld = vecPt1InWorld / vecPt1InWorld.norm();
+                float angleDiffWithWorldAxis_deg = std::acos(-vecPt1InWorld(1)) / M_PI * 180.0;
+                if (angleDiffWithWorldAxis_deg > angleDiffThresholdToFit){
+                    continue;
+                }
+
+                // // if too far from ground plane, skip
+                // std::vector<std::shared_ptr<LandMark>> allLandmarksInDb = pMapDb->GetAllLandmarks();
+                // if (allLandmarksInDb.size() >= 5){
+                //     std::vector<Vec3_t> points(allLandmarksInDb.size());
+                //     for (auto pLandmark : allLandmarksInDb) {
+                //         points.push_back(pLandmark->GetLandmarkPoseInWorld().col(3).head<3>());
+                //     }
+                //     pcl::ModelCoefficients::Ptr planeCoeff(new pcl::ModelCoefficients);
+                //     pcl::PointIndices::Ptr pIndicesInliers(new pcl::PointIndices);
+                //     mathutils::EstimatePlaneFromPoints(points, inPlaneDistanceThreshold, planeCoeff, pIndicesInliers);
+                //     if (pIndicesInliers->indices.size() > (float)allLandmarksInDb.size() * 0.8){
+                //         pcl::PointXYZ curr = pcl::PointXYZ(poseLandmarkInWorld(0, 3), poseLandmarkInWorld(1, 3), poseLandmarkInWorld(2, 3));
+                //         float distanceCurrToGround = mathutils::ComputeDistanceFromPlane(planeCoeff, curr);
+                //         if (distanceCurrToGround > inPlaneDistanceThreshold){
+                //             TDO_LOG_DEBUG("skip landmark due to distanceCurrToGround: " << distanceCurrToGround);
+                //             continue;
+                //         }
+                //     }
+                // }
 
                 // // if size too different, abandon
                 // Vec3_t objectSize = pMapDb->GetObjectSize();
