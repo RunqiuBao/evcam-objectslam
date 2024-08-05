@@ -831,7 +831,7 @@ bool FrameTracker::DoMotionBasedTrack(Frame& currentFrame, const Frame& lastFram
     }
 
     // Note: use projected instances to do dense alignment
-    if (!isSuccess && leftCamProjections.size() > 0 && currentFrame._frameID == 123){
+    if (false && !isSuccess && leftCamProjections.size() > 0){
         cv::Mat refDepth, refImage, currDepth, currImage;
         const int imageWidth = _camera->_cols;
         const int imageHeight = _camera->_rows;
