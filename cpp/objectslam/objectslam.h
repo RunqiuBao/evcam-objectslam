@@ -18,27 +18,26 @@
 
 namespace eventobjectslam {
 
-typedef Eigen::Matrix4f Mat44_t;
-typedef Eigen::Matrix3f Mat33_t;
-typedef Eigen::Vector3f Vec3_t;
-typedef Eigen::Vector2f Vec2_t;
-typedef Eigen::Vector3d Vec3_d;
-typedef Eigen::Matrix<double, 5, 1> Vec5_d;
-typedef std::array<float, 3> ObjectExtents;
-
-// -------- double precision, mainly used in g2outils -----------
-template<size_t R, size_t C>
-using MatRC_d = Eigen::Matrix<double, R, C>;
-
-using Mat33_d = Eigen::Matrix3d;
-using Mat44_d = Eigen::Matrix4d;
-
 template<size_t R>
 using VecR_d = Eigen::Matrix<double, R, 1>;
 
-using Vec3_d = Eigen::Vector3d;
-using Vec6_d = VecR_d<6>;
-using Vec7_d = VecR_d<7>;
+template<size_t R, size_t C>
+using MatRC_d = Eigen::Matrix<double, R, C>;
+
+typedef Eigen::Matrix4f Mat44_t;
+typedef Eigen::Matrix3f Mat33_t;
+using Mat33_d = Eigen::Matrix3d;
+using Mat44_d = Eigen::Matrix4d;
+
+typedef Eigen::Vector3f Vec3_t;
+typedef Eigen::Vector2f Vec2_t;
+typedef Eigen::Vector3d Vec3_d;
+typedef VecR_d<5> Vec5_d;
+typedef VecR_d<4> Vec4_d;
+typedef VecR_d<6> Vec6_d;
+typedef VecR_d<7> Vec7_d;
+
+typedef std::array<float, 3> ObjectExtents;
 
 }
 
