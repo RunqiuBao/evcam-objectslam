@@ -7,16 +7,40 @@ TDO_LOGGER("objectslam.mathutils")
 
 namespace eventobjectslam {
 
-void mathutils::FilterNonPlanePoints(
+Mat33_t mathutils::GetRotationMatrixFromVectors(const Vec3_t& vectorA, const Vec3_t& vectorB) {
+    Vec3_t v = vectorA.cross(vectorB);
+    float c = vectorA.dot(vectorB);
+    float s = std::sqrt(1 - c * c);
+
+    Mat33_t vx;
+    vx << 0, -v.z(), v.y(),
+          v.z(), 0, -v.x(),
+          -v.y(), v.x(), 0;
+
+    Mat33_t rotationMatrix = Mat33_t::Identity() + vx + vx * vx * ((1 - c) / (s * s));
+
+    return rotationMatrix;
+}
+
+float mathutils::ComputeDistanceFromPlane(const pcl::ModelCoefficients::Ptr plane_coefficients, const pcl::PointXYZ& query_point) {
+    // Extract the coefficients
+    float a = plane_coefficients->values[0];
+    float b = plane_coefficients->values[1];
+    float c = plane_coefficients->values[2];
+    float d = plane_coefficients->values[3];
+
+    // Compute the distance from the point to the plane
+    float distance = std::abs(a * query_point.x + b * query_point.y + c * query_point.z + d) / std::sqrt(a * a + b * b + c * c);
+
+    return distance;
+}
+
+void mathutils::EstimatePlaneFromPoints(
     const std::vector<Vec3_t> points,
     const float planeDistanceThreshold,
-    std::vector<int>& indicesPoints
+    pcl::ModelCoefficients::Ptr& planeCoeff,
+    pcl::PointIndices::Ptr& pIndicesInliers
 ){
-    if (points.size() < 5) {
-        indicesPoints.resize(points.size());
-        std::iota(indicesPoints.begin(), indicesPoints.end(), 0);
-        return;
-    }
     pcl::PointCloud<pcl::PointXYZ>::Ptr pPoints(new pcl::PointCloud<pcl::PointXYZ>);
     pPoints->width = 1;
     pPoints->height = points.size();
@@ -31,11 +55,24 @@ void mathutils::FilterNonPlanePoints(
     seg.setMethodType(pcl::SAC_RANSAC);
     seg.setMaxIterations(3);
     seg.setDistanceThreshold(planeDistanceThreshold);  // unit is meter.
-    pcl::ModelCoefficients::Ptr planeCoeff(new pcl::ModelCoefficients);
-    pcl::PointIndices::Ptr pIndicesInliers(new pcl::PointIndices);
     
     seg.setInputCloud(pPoints);
     seg.segment(*pIndicesInliers, *planeCoeff);
+}
+
+void mathutils::FilterNonPlanePoints(
+    const std::vector<Vec3_t> points,
+    const float planeDistanceThreshold,
+    std::vector<int>& indicesPoints
+){
+    if (points.size() < 5) {
+        indicesPoints.resize(points.size());
+        std::iota(indicesPoints.begin(), indicesPoints.end(), 0);
+        return;
+    }
+    pcl::ModelCoefficients::Ptr planeCoeff(new pcl::ModelCoefficients);
+    pcl::PointIndices::Ptr pIndicesInliers(new pcl::PointIndices);
+    EstimatePlaneFromPoints(points, planeDistanceThreshold, planeCoeff, pIndicesInliers);
 
     if (pIndicesInliers->indices.size() == 0){
         TDO_LOG_DEBUG_FORMAT("plane fitting zero inliers from %d points, plane distance threshold = %f", points.size() % planeDistanceThreshold);

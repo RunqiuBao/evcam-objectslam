@@ -1,5 +1,4 @@
-#ifndef MATHUTILS_H
-#define MATHUTILS_H
+#pragma once
 
 #include <stdexcept>
 #include <cassert>
@@ -17,6 +16,17 @@
 namespace eventobjectslam {
 
 namespace mathutils {
+
+void EstimatePlaneFromPoints(
+    const std::vector<Vec3_t> points,
+    const float planeDistanceThreshold,
+    pcl::ModelCoefficients::Ptr& planeCoeff,
+    pcl::PointIndices::Ptr& pIndicesInliers
+);
+
+float ComputeDistanceFromPlane(const pcl::ModelCoefficients::Ptr plane_coefficients, const pcl::PointXYZ& query_point);
+
+Mat33_t GetRotationMatrixFromVectors(const Vec3_t& vectorA, const Vec3_t& vectorB);
 
 template<typename MatrixType>
 MatrixType TransformPoints(const MatrixType& transform, const MatrixType& points){
@@ -83,5 +93,3 @@ std::vector<size_t> GetListOfRandomIndex(const size_t iStart, const size_t iEnd,
 } // end of mathutils
 
 } // end of eventobjectslam
-
-#endif  // MATHUTILS_H
