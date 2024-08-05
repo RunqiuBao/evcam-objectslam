@@ -49,7 +49,7 @@ public:
         const cv::Mat& refImage,
         const std::vector<TwoDBoundingBox>& bboxesRef,
         const cv::Mat& currImage,
-        const Vec5_d& xi,
+        const Vec6_d& xi,
         const Mat33_d kk,
         const int scaleLevel,
         Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>& outJac,
