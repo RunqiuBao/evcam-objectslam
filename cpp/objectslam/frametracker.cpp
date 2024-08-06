@@ -166,7 +166,9 @@ void PoseOptimizer::deriveAnalytic(
     const Mat33_d kk,
     const int scaleLevel,
     Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>& outJac,
-    Eigen::VectorXf& outResidual
+    Eigen::VectorXf& outResidual,
+    bool isDebug,
+    float opt_rate
 ){
     Mat44_d T = se3Exp(xi);
     Mat33_d R = T.block<3, 3>(0, 0);
@@ -258,21 +260,23 @@ void PoseOptimizer::deriveAnalytic(
     mJac.block(0, 5, imageHeight * imageWidth, 1) = (-mIxfx.array() * mYp.array() + mIyfy.array() * mXp.array()) / mZp.array();
     outJac = std::move(mJac);
 
-    // plot residual image for debug
     cv::Mat currImage_warp;
     cv::remap(currImage, currImage_warp, xImg, yImg, cv::INTER_CUBIC, cv::BORDER_CONSTANT, cv::Scalar(0.));
-    cv::Mat residual = (currImage_warp - refImage);
+    cv::Mat residual = (currImage_warp - refImage) * opt_rate;
     outResidual = Eigen::Map<Eigen::VectorXf>(const_cast<float*>(residual.ptr<float>()), imageHeight * imageWidth);
-    
-    cv::Mat residual_int;
-    cv::Mat residual_debug = cv::abs(residual.clone());
-    cv::Scalar sum = cv::sum(residual_debug);
-    double minVal, maxVal;
-    cv::Point minLoc, maxLoc;
-    cv::minMaxLoc(residual_debug, &minVal, &maxVal, &minLoc, &maxLoc);
-    residual_debug = residual_debug * 255 / maxVal;
-    residual_debug.convertTo(residual_int, CV_32S);
-    cv::imwrite("/home/runqiu/tmptmp/debug.png", residual_int);
+
+    // plot residual image for debug
+    if (isDebug){
+        cv::Mat residual_int;
+        cv::Mat residual_debug = cv::abs(residual.clone());
+        cv::Scalar sum = cv::sum(residual_debug);
+        double minVal, maxVal;
+        cv::Point minLoc, maxLoc;
+        cv::minMaxLoc(residual_debug, &minVal, &maxVal, &minLoc, &maxLoc);
+        residual_debug = residual_debug * 255 / maxVal;
+        residual_debug.convertTo(residual_int, CV_32S);
+        cv::imwrite("/home/runqiu/tmptmp/debug.png", residual_int);
+    }
 }
 
 void PoseOptimizer::EstimatePose(
@@ -283,7 +287,13 @@ void PoseOptimizer::EstimatePose(
     const cv::Mat& currImage,
     Mat44_d& currInRefTransform
 ){
+    bool isDebug = true;
+    float opt_rate = 0.1;
     Vec6_d xi = Vec6_d::Zero();
+
+    std::vector<Vec6_d> xi_history;
+    std::vector<float> avgError_history;
+    int index_bestxi = 0;
 
     for (size_t iiLevel=_numLevel; iiLevel > 0; iiLevel--){
         // downscale inputs. from rough to fine.
@@ -297,7 +307,6 @@ void PoseOptimizer::EstimatePose(
         DownScale(currDepth_clone, currImage_clone, kk_clone, std::pow(2, iiLevel));
 
         float errorLast = std::numeric_limits<float>::max();
-        Vec6_d xi_last = Vec6_d::Zero();
         Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> outJac;
         Eigen::VectorXf outResidual;
         bool haveDecreased = false;
@@ -311,7 +320,9 @@ void PoseOptimizer::EstimatePose(
                 kk_level.cast<double>(),
                 iiLevel,
                 outJac,
-                outResidual
+                outResidual,
+                isDebug,
+                opt_rate
             );
             // remove nan values
             outJac = outJac.unaryExpr([](float v) { return std::isnan(v) ? 0.0f : v; });
@@ -322,13 +333,14 @@ void PoseOptimizer::EstimatePose(
             Vec6_d upd = (coeffMat.ldlt().solve(constMat)).cast<double>();
 
             xi = se3Log(se3Exp(upd) * se3Exp(xi));
+            xi_history.push_back(xi);
 
             float avgError = (outResidual.array() * outResidual.array()).mean();
+            avgError_history.push_back(avgError);
             if (avgError == 0){
                 break;  // Note: bboxesRef is empty
             }
-            if (avgError / errorLast > 0.99995 && haveDecreased){
-                xi = xi_last;
+            if (avgError / errorLast > 0.9 && haveDecreased){
                 std::cout << "level: " << iiLevel << ", iter: " << iter <<  ", estimate pose converge early. avgError: " << avgError << std::endl;
                 break;
             }
@@ -337,10 +349,15 @@ void PoseOptimizer::EstimatePose(
             }
             std::cout << "level: " << iiLevel << ", iter: " << iter <<  ", avgError: " << avgError << std::endl;
             errorLast = avgError;
-            xi_last = xi;
         }
 
     }
+
+    // select the best xi from history
+    auto minElementIter = std::min_element(avgError_history.begin(), avgError_history.end());
+    int indexMin = std::distance(avgError_history.begin(), minElementIter);
+    xi = xi_history[indexMin];
+
     currInRefTransform = se3Exp(xi);
     std::cout << "currInRefTransform:\n" << currInRefTransform << std::endl;
 
@@ -410,9 +427,6 @@ static void TrackWithPnP(
 }
 
 bool FrameTracker::DoRelocalizeFromMap(Frame& currentFrame, const Frame& lastFrame, std::shared_ptr<MapDataBase> pMapDb, Mat44_t& velocity, const bool isDebug){
-    float maxPoseError = 0.2;
-    float minIoUToReject = 0.2;
-
     std::vector<std::shared_ptr<LandMark>> visibleLandmarks = pMapDb->GetVisibleLandmarks(_pRefKeyframe);
     if (visibleLandmarks.size() < 4) {
         velocity = Eigen::Matrix4f::Identity();
@@ -552,35 +566,28 @@ bool FrameTracker::DoRelocalizeFromMap(Frame& currentFrame, const Frame& lastFra
 
 }
 
-bool FrameTracker::DoMotionBasedTrack(Frame& currentFrame, const Frame& lastFrame, Mat44_t& velocity, const bool isDebug) const{
-    float minIoUToReject = 0.2;
-    float maxPoseError = 0.2;
-    float maxRotationAngleDeg = 7.0;
-
+bool FrameTracker::DoDenseAlignmentBasedTrack(Frame& currentFrame, const Frame& lastFrame, const bool isDebug) const {
     std::vector<std::shared_ptr<RefObject>> refObjects = _pRefKeyframe->_refObjects;
-    // project 3d refObjects and 3d detections to current camera pose and find correspondences.
-    std::vector<int> indicesCorrespondingDetecton;
-    indicesCorrespondingDetecton.reserve(refObjects.size());
+    // project 3d refobjects to previous frame and do dense refinement with current frame
+    std::vector<int> indicesCorrespondingDetection;
+    indicesCorrespondingDetection.reserve(refObjects.size());
     size_t countRefObject = 0;
+    int imgHeight =  (*_pRefKeyframe->_pCamera)._rows;
+    int imgWidth = (*_pRefKeyframe->_pCamera)._cols;
+    cv::Mat displayDetections(imgHeight, imgWidth, CV_8UC1, cv::Scalar(0));
     camera::CameraBase myStereoCamera = *_camera;
-    cv::Mat displayRefObjects(myStereoCamera._rows, myStereoCamera._cols, CV_8UC1, cv::Scalar(0));
-    cv::Mat displayDetections(myStereoCamera._rows, myStereoCamera._cols, CV_8UC1, cv::Scalar(0));
-    // for projection based dense alignment
     std::vector<TwoDBoundingBox> leftCamProjections_ref, rightCamProjections_ref, leftCamProjections, rightCamProjections;
     for (std::shared_ptr<RefObject> refObject : refObjects){
-        Eigen::MatrixXf transformedVertices = mathutils::TransformPoints<Eigen::MatrixXf>((lastFrame.GetPose() * velocity).inverse(), refObject->_detection._vertices3DInRefFrame);
-        std::vector<cv::Point> points2DCV = mathutils::ProjectPoints3DToPoints2D(transformedVertices, myStereoCamera);
-        cv::Mat refObjectPoseMask = mathutils::Draw2DHullMaskFrom2DPointsSet(points2DCV, myStereoCamera._rows, myStereoCamera._cols);
+        Eigen::MatrixXf transformedVertices = mathutils::TransformPoints<Eigen::MatrixXf>(lastFrame.GetPose().inverse(), refObject->_detection._vertices3DInRefFrame);
+        std::vector<cv::Point> poionts2DCV = mathutils::ProjectPoints3DToPoints2D(transformedVertices, myStereoCamera);
+        cv::Mat refObjectPoseMask = mathutils::Draw2DHullMaskFrom2DPointsSet(poionts2DCV, myStereoCamera._rows, myStereoCamera._cols);
 
-        if (isDebug){
-            cv::bitwise_or(refObjectPoseMask, displayRefObjects, displayRefObjects);
-        }
         size_t countDetection = 0;
         int indexLargestOverlap = -1;
         float largestIoU = -1;
         cv::Mat currentDetectionPoseMask_Best;
         ThreeDDetection currentDetection_Best;
-        for (ThreeDDetection currentDetection : currentFrame._threeDDetections){
+        for (ThreeDDetection& currentDetection : currentFrame._threeDDetections){
             std::vector<cv::Point> points2DCV = mathutils::ProjectPoints3DToPoints2D(currentDetection._vertices3DInRefFrame, myStereoCamera);
             cv::Mat currentDetectionPoseMask = mathutils::Draw2DHullMaskFrom2DPointsSet(points2DCV, myStereoCamera._rows, myStereoCamera._cols);
             cv::Mat overlaps, unions;
@@ -588,20 +595,18 @@ bool FrameTracker::DoMotionBasedTrack(Frame& currentFrame, const Frame& lastFram
             cv::bitwise_or(refObjectPoseMask, currentDetectionPoseMask, unions);
             cv::Scalar sumOverlaps = cv::sum(overlaps);
             cv::Scalar sumUnions = cv::sum(unions);
-            if ((sumOverlaps[0] / sumUnions[0]) > largestIoU && (sumOverlaps[0] / sumUnions[0]) > minIoUToReject){
+            if ((sumOverlaps[0 ] / sumUnions[0]) > largestIoU && (sumOverlaps[0] / sumUnions[0] > 0)) {
                 indexLargestOverlap = countDetection;
                 largestIoU = (sumOverlaps[0] / sumUnions[0]);
                 currentDetectionPoseMask_Best = currentDetectionPoseMask;
-                currentDetection_Best.initialize(currentDetection);
+                currentDetection_Best.assign(currentDetection);
             }
-            // TDO_LOG_DEBUG_FORMAT("RefObject No.%d, detection No.%d, overlapping area: %d", countRefObject % countDetection % sum[0]);
             countDetection++;
-            if (isDebug && countRefObject == 0){
+            if (isDebug && countRefObject == 0) {
                 cv::bitwise_or(currentDetectionPoseMask, displayDetections, displayDetections);
             }
         }
-        if (indexLargestOverlap >= 0){
-            TDO_LOG_DEBUG("found corresponding detection for refObject " << std::to_string(countRefObject) << ", IoU :" << std::to_string(largestIoU));
+        if (indexLargestOverlap >= 0) {
             // generate new bbox for curr projections
             std::vector<std::vector<cv::Point>> currObjectContours;
             cv::findContours(currentDetectionPoseMask_Best * 255, currObjectContours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
@@ -650,6 +655,165 @@ bool FrameTracker::DoMotionBasedTrack(Frame& currentFrame, const Frame& lastFram
                     std::vector<Vec2_t>()  // Note: not used.
                 )));
             }
+        }
+        indicesCorrespondingDetection.push_back(indexLargestOverlap);
+        countRefObject++;
+        
+    }
+
+    TDO_LOG_DEBUG("try once dense alignment");
+    cv::Mat refDepth, refImage, currDepth, currImage;
+    const int imageWidth = _camera->_cols;
+    const int imageHeight = _camera->_rows;
+    _pPoseOptimizer->PrepareDepthAndFeatureMapFromBboxes(leftCamProjections_ref, rightCamProjections_ref, imageWidth, imageHeight, refImage, refDepth);
+    _pPoseOptimizer->PrepareDepthAndFeatureMapFromBboxes(leftCamProjections, rightCamProjections, imageWidth, imageHeight, currImage, currDepth);
+    if (isDebug){
+        std::vector<cv::Mat> channels;
+        cv::Mat zeroChannel(myStereoCamera._rows, myStereoCamera._cols, CV_32FC1, cv::Scalar(0.0));
+        channels.push_back(refImage * 4);
+        channels.push_back(currImage * 4);
+        channels.push_back(zeroChannel);
+        cv::Mat debugTracking;
+        cv::merge(channels, debugTracking);
+        std::filesystem::path debugTrackingPath = _sStereoSequencePathForDebug;
+        debugTrackingPath.append("debugTrackingByDenseAlign/");
+        if (!std::filesystem::exists(debugTrackingPath) && !std::filesystem::create_directory(debugTrackingPath)){
+            TDO_LOG_ERROR_FORMAT("Failed to create the folder: %s", debugTrackingPath.string());
+            throw std::runtime_error("Debug");
+        }
+        debugTrackingPath.append(mathutils::FillZeros(std::to_string(static_cast<int>(currentFrame._timestamp)), 6) + ".png");
+        cv::imwrite(debugTrackingPath.string() , debugTracking);
+    }
+    Mat44_d currInPreviousTransform;
+    _pPoseOptimizer->EstimatePose(refDepth, refImage, leftCamProjections_ref, currDepth, currImage, currInPreviousTransform);
+    TDO_LOG_DEBUG("currInPreviousTransform by dense align: \n" << currInPreviousTransform);
+    Mat44_t velocity = currInPreviousTransform.cast<float>();
+    float rotAngleDenseAlignDeg = Eigen::AngleAxisf(velocity.block<3, 3>(0, 0)).angle() * 180.0 / M_PI;
+    bool isSuccess = false;
+
+    if (isDebug) {
+        cv::Mat debugRefAfterTransform = cv::Mat::zeros(myStereoCamera._rows, myStereoCamera._cols, CV_8UC1);
+        Mat44_t currInRefTransform = lastFrame.GetPose() * velocity;
+        for (std::shared_ptr<RefObject> refObject : refObjects){
+            Eigen::MatrixXf transformedVertices = mathutils::TransformPoints<Eigen::MatrixXf>(currInRefTransform.inverse(), refObject->_detection._vertices3DInRefFrame);
+            std::vector<cv::Point> poionts2DCV = mathutils::ProjectPoints3DToPoints2D(transformedVertices, myStereoCamera);
+            cv::Mat refObjectPoseMask = mathutils::Draw2DHullMaskFrom2DPointsSet(poionts2DCV, myStereoCamera._rows, myStereoCamera._cols);
+            cv::bitwise_or(refObjectPoseMask, debugRefAfterTransform, debugRefAfterTransform);
+        }
+        cv::Mat debugCurrDets = cv::Mat::zeros(myStereoCamera._rows, myStereoCamera._cols, CV_8UC1);
+        for (ThreeDDetection& currentDetection : currentFrame._threeDDetections){
+            std::vector<cv::Point> points2DCV = mathutils::ProjectPoints3DToPoints2D(currentDetection._vertices3DInRefFrame, myStereoCamera);
+            cv::Mat currentDetectionPoseMask = mathutils::Draw2DHullMaskFrom2DPointsSet(points2DCV, myStereoCamera._rows, myStereoCamera._cols);
+            cv::bitwise_or(currentDetectionPoseMask, debugCurrDets, debugCurrDets);
+        }
+        cv::Mat zeroChannel(myStereoCamera._rows, myStereoCamera._cols, CV_8UC1, cv::Scalar(0));
+        std::vector<cv::Mat> channels;
+        channels.push_back(debugRefAfterTransform);
+        channels.push_back(debugCurrDets);
+        channels.push_back(zeroChannel);
+        cv::Mat debugTracking;
+        cv::merge(channels, debugTracking);
+        debugTracking = debugTracking * 255;
+
+        std::filesystem::path debugTrackingPath = _sStereoSequencePathForDebug;
+        debugTrackingPath.append("debugTrackingByDenseAlign_afterTransform/");
+        if (!std::filesystem::exists(debugTrackingPath) && !std::filesystem::create_directory(debugTrackingPath)){
+            TDO_LOG_ERROR_FORMAT("Failed to create the folder: %s", debugTrackingPath.string());
+            throw std::runtime_error("Debug");
+        }
+        debugTrackingPath.append(mathutils::FillZeros(std::to_string(static_cast<int>(currentFrame._timestamp)), 6) + ".png");
+        cv::imwrite(debugTrackingPath.string() , debugTracking);
+
+        cv::Mat debugRefBeforeTransform = cv::Mat::zeros(myStereoCamera._rows, myStereoCamera._cols, CV_8UC1);
+        for (std::shared_ptr<RefObject> refObject : refObjects){
+            Eigen::MatrixXf transformedVertices = refObject->_detection._vertices3DInRefFrame;
+            std::vector<cv::Point> poionts2DCV = mathutils::ProjectPoints3DToPoints2D(transformedVertices, myStereoCamera);
+            cv::Mat refObjectPoseMask = mathutils::Draw2DHullMaskFrom2DPointsSet(poionts2DCV, myStereoCamera._rows, myStereoCamera._cols);
+            cv::bitwise_or(refObjectPoseMask, debugRefBeforeTransform, debugRefBeforeTransform);
+        }
+        channels.clear();
+        channels.push_back(debugRefBeforeTransform);
+        channels.push_back(debugCurrDets);
+        channels.push_back(zeroChannel);
+        cv::Mat debugTracking_before;
+        cv::merge(channels, debugTracking_before);
+        debugTracking_before = debugTracking_before * 255;
+        std::filesystem::path debugTrackingPath_before = _sStereoSequencePathForDebug;
+        debugTrackingPath_before.append("debugTrackingByDenseAlign_beforeTransform/");
+        if (!std::filesystem::exists(debugTrackingPath_before) && !std::filesystem::create_directory(debugTrackingPath_before)){
+            TDO_LOG_ERROR_FORMAT("Failed to create the folder: %s", debugTrackingPath.string());
+            throw std::runtime_error("Debug");
+        }
+        debugTrackingPath_before.append(mathutils::FillZeros(std::to_string(static_cast<int>(currentFrame._timestamp)), 6) + ".png");
+        cv::imwrite(debugTrackingPath_before.string() , debugTracking_before);
+    }
+    if (
+        velocity.block(0, 3, 3, 1).norm() > maxPoseError ||
+        std::abs(rotAngleDenseAlignDeg) > maxRotationAngleDeg ||
+        velocity.col(3).head<3>().norm() == 0  // Note: tracking completely failed.
+    ){
+        TDO_LOG_DEBUG("track by dense align fail. not updating camera pose. velocity is \n" << velocity << ", translation is " << velocity.block(0, 3, 3, 1) << ", rotations are " << rotAngleDenseAlignDeg);
+        // track by dense align failed
+        velocity = Eigen::Matrix4f::Identity();
+        currentFrame.SetPose(lastFrame.GetPose() * velocity);
+        // not updating cameraInWorld
+    }
+    else{
+        Mat44_t currInRefTransform = lastFrame.GetPose() * velocity;
+        currentFrame.SetPose(currInRefTransform.cast<float>());
+        currentFrame._isTracked = true;
+        currentFrame._detectionIDsOfCorrespondingRefObjects = indicesCorrespondingDetection;
+        TDO_LOG_DEBUG("track by dense align succeeded. (rotAngleDeg, " << rotAngleDenseAlignDeg << "). currentFrameInLast:\n" << velocity);
+        isSuccess = true;
+    }
+    return isSuccess;
+
+}
+
+bool FrameTracker::DoMotionBasedTrack(Frame& currentFrame, const Frame& lastFrame, Mat44_t& velocity, const bool isDebug) const{
+    std::vector<std::shared_ptr<RefObject>> refObjects = _pRefKeyframe->_refObjects;
+    // project 3d refObjects and 3d detections to current camera pose and find correspondences.
+    std::vector<int> indicesCorrespondingDetecton;
+    indicesCorrespondingDetecton.reserve(refObjects.size());
+    size_t countRefObject = 0;
+    camera::CameraBase myStereoCamera = *_camera;
+    cv::Mat displayRefObjects(myStereoCamera._rows, myStereoCamera._cols, CV_8UC1, cv::Scalar(0));
+    cv::Mat displayDetections(myStereoCamera._rows, myStereoCamera._cols, CV_8UC1, cv::Scalar(0));
+    for (std::shared_ptr<RefObject> refObject : refObjects){
+        Eigen::MatrixXf transformedVertices = mathutils::TransformPoints<Eigen::MatrixXf>((lastFrame.GetPose() * velocity).inverse(), refObject->_detection._vertices3DInRefFrame);
+        std::vector<cv::Point> points2DCV = mathutils::ProjectPoints3DToPoints2D(transformedVertices, myStereoCamera);
+        cv::Mat refObjectPoseMask = mathutils::Draw2DHullMaskFrom2DPointsSet(points2DCV, myStereoCamera._rows, myStereoCamera._cols);
+
+        if (isDebug){
+            cv::bitwise_or(refObjectPoseMask, displayRefObjects, displayRefObjects);
+        }
+        size_t countDetection = 0;
+        int indexLargestOverlap = -1;
+        float largestIoU = -1;
+        cv::Mat currentDetectionPoseMask_Best;
+        ThreeDDetection currentDetection_Best;
+        for (ThreeDDetection& currentDetection : currentFrame._threeDDetections){
+            std::vector<cv::Point> points2DCV = mathutils::ProjectPoints3DToPoints2D(currentDetection._vertices3DInRefFrame, myStereoCamera);
+            cv::Mat currentDetectionPoseMask = mathutils::Draw2DHullMaskFrom2DPointsSet(points2DCV, myStereoCamera._rows, myStereoCamera._cols);
+            cv::Mat overlaps, unions;
+            cv::bitwise_and(refObjectPoseMask, currentDetectionPoseMask, overlaps);
+            cv::bitwise_or(refObjectPoseMask, currentDetectionPoseMask, unions);
+            cv::Scalar sumOverlaps = cv::sum(overlaps);
+            cv::Scalar sumUnions = cv::sum(unions);
+            if ((sumOverlaps[0] / sumUnions[0]) > largestIoU && (sumOverlaps[0] / sumUnions[0]) > minIoUToReject){
+                indexLargestOverlap = countDetection;
+                largestIoU = (sumOverlaps[0] / sumUnions[0]);
+                currentDetectionPoseMask_Best = currentDetectionPoseMask;
+                currentDetection_Best.assign(currentDetection);
+            }
+            // TDO_LOG_DEBUG_FORMAT("RefObject No.%d, detection No.%d, overlapping area: %d", countRefObject % countDetection % sum[0]);
+            countDetection++;
+            if (isDebug && countRefObject == 0){
+                cv::bitwise_or(currentDetectionPoseMask, displayDetections, displayDetections);
+            }
+        }
+        if (indexLargestOverlap >= 0){
+            TDO_LOG_DEBUG("found corresponding detection for refObject " << std::to_string(countRefObject) << ", IoU :" << std::to_string(largestIoU));
         }
         indicesCorrespondingDetecton.push_back(indexLargestOverlap);
 
@@ -781,90 +945,6 @@ bool FrameTracker::DoMotionBasedTrack(Frame& currentFrame, const Frame& lastFram
         }
     }
 
-    if (!isSuccess && objectPoints.size() > 0){
-        TDO_LOG_DEBUG("try once dense alignment");
-        indexRefObject = 0;
-        std::vector<TwoDBoundingBox> leftCamDetections_ref, rightCamDetections_ref, leftCamDetections, rightCamDetections;
-        for (int indexCorrespondingDetection : indicesCorrespondingDetecton){
-            if (indexCorrespondingDetection < 0){
-                indexRefObject++;
-                continue;
-            }
-            leftCamDetections_ref.push_back(*refObjects[indexRefObject]->_detection._pLeftBbox);
-            rightCamDetections_ref.push_back(*refObjects[indexRefObject]->_detection._pRightBbox);
-            leftCamDetections.push_back(*currentFrame._matchedLeftCamDetections[indexCorrespondingDetection]);
-            rightCamDetections.push_back(*currentFrame._matchedRightCamDetections[indexCorrespondingDetection]);
-            indexRefObject++;
-        }
-        cv::Mat refDepth, refImage, currDepth, currImage;
-        const int imageWidth = _camera->_cols;
-        const int imageHeight = _camera->_rows;
-        _pPoseOptimizer->PrepareDepthAndFeatureMapFromBboxes(leftCamDetections_ref, rightCamDetections_ref, imageWidth, imageHeight, refImage, refDepth);
-        _pPoseOptimizer->PrepareDepthAndFeatureMapFromBboxes(leftCamDetections, rightCamDetections, imageWidth, imageHeight, currImage, currDepth);
-        if (isDebug){
-            SaveCvmatForDebug(refImage, "ref");
-            SaveCvmatForDebug(currImage, "curr");
-        }
-        Mat44_d currInRefTransform;
-        _pPoseOptimizer->EstimatePose(refDepth, refImage, leftCamDetections_ref, currDepth, currImage, currInRefTransform);
-        TDO_LOG_DEBUG("currentCameraInRefKeyFrame by dense align: \n" << currInRefTransform);
-        velocity = lastFrame.GetPose().inverse() * currInRefTransform.cast<float>();
-        float rotAngleDenseAlignDeg = Eigen::AngleAxisf(velocity.block<3, 3>(0, 0)).angle() * 180.0 / M_PI;
-        if (
-            velocity.block(0, 3, 3, 1).norm() > maxPoseError ||
-            std::abs(rotAngleDenseAlignDeg) > maxRotationAngleDeg ||
-            currInRefTransform.col(3).head<3>().norm() == 0  // Note: tracking completely failed.
-        ){
-            TDO_LOG_DEBUG("track by dense align fail. not updating camera pose. velocity is \n" << velocity << ", translation is " << velocity.block(0, 3, 3, 1) << ", rotations are " << rotAngleDenseAlignDeg);
-            // track by dense align failed
-            velocity = Eigen::Matrix4f::Identity();
-            currentFrame.SetPose(lastFrame.GetPose() * velocity);
-            // not updating cameraInWorld
-        }
-        else{
-            currentFrame.SetPose(currInRefTransform.cast<float>());
-            currentFrame._isTracked = true;
-            currentFrame._detectionIDsOfCorrespondingRefObjects = indicesCorrespondingDetecton;
-            TDO_LOG_DEBUG("track by dense align succeeded. (rotAngleDeg, " << rotAngleDenseAlignDeg << "). currentFrameInLast:\n" << velocity);
-            isSuccess = true;
-        }
-    }
-
-    // Note: use projected instances to do dense alignment
-    if (false && !isSuccess && leftCamProjections.size() > 0){
-        cv::Mat refDepth, refImage, currDepth, currImage;
-        const int imageWidth = _camera->_cols;
-        const int imageHeight = _camera->_rows;
-        _pPoseOptimizer->PrepareDepthAndFeatureMapFromBboxes(leftCamProjections_ref, rightCamProjections_ref, imageWidth, imageHeight, refImage, refDepth);
-        _pPoseOptimizer->PrepareDepthAndFeatureMapFromBboxes(leftCamProjections, rightCamProjections, imageWidth, imageHeight, currImage, currDepth);
-        if (isDebug){
-            SaveCvmatForDebug(refImage, "ref_2");
-            SaveCvmatForDebug(currImage, "curr_2");
-        }
-        Mat44_d currInRefTransform;
-        _pPoseOptimizer->EstimatePose(refDepth, refImage, leftCamProjections_ref, currDepth, currImage, currInRefTransform);
-        velocity = currInRefTransform.cast<float>();  // Note; ref were projected to previous frame. therefore currInRef == velocity
-        float rotAngleDenseAlignDeg = Eigen::AngleAxisf(velocity.block<3, 3>(0, 0)).angle() * 180.0 / M_PI;
-        if (
-            velocity.block(0, 3, 3, 1).norm() > maxPoseError ||
-            std::abs(rotAngleDenseAlignDeg) > maxRotationAngleDeg ||
-            currInRefTransform.col(3).head<3>().norm() == 0  // Note: tracking completely failed.
-        ){
-            TDO_LOG_DEBUG("track by dense align round2 fail. not updating camera pose. velocity is \n" << velocity << ", translation is " << velocity.block(0, 3, 3, 1) << ", rotations are " << rotAngleDenseAlignDeg);
-            // track by dense align failed
-            velocity = Eigen::Matrix4f::Identity();
-            currentFrame.SetPose(lastFrame.GetPose() * velocity);
-            // not updating cameraInWorld
-        }
-        else{
-            Mat44_t currInKeyframeTransform = lastFrame.GetPose() * velocity;
-            currentFrame.SetPose(currInKeyframeTransform);
-            currentFrame._isTracked = true;
-            currentFrame._detectionIDsOfCorrespondingRefObjects = indicesCorrespondingDetecton;
-            TDO_LOG_DEBUG("track by dense align round2 succeeded. (rotAngleDeg, " << rotAngleDenseAlignDeg << "). currentFrameInLast:\n" << velocity);
-            isSuccess = true;
-        }
-    }
     return isSuccess;
 }
 
@@ -888,7 +968,6 @@ bool FrameTracker::Do2DTrackingBasedTrack(Frame& currentFrame, const Frame& last
     int nodeSizeHalf = 5;
     int nodeRoiSize = 20;
     int maxTrackSuccessRoiSizeError = 2;
-    float maxPoseError = 0.2;
 
     // Draw nodes for tracking
     cv::Mat nodesCurrentFrame, nodesLastFrame;

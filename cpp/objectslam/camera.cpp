@@ -90,6 +90,8 @@ void camera::CameraBase::CreateThreeDDetections(
     const object::ObjectBase& objectInfo,
     std::vector<ThreeDDetection>& threeDDetections
 ){
+    float angleDiffThresholdToFit = 10;
+
     int detectionID = 0;
     std::vector<Vec3_t> threeDPoints;
     std::vector<ThreeDDetection> threeDDetectionCandidates;
@@ -104,6 +106,7 @@ void camera::CameraBase::CreateThreeDDetections(
         float keypt1_y = (*pMatchedLeftCamDetection)._keypts[0][1];
         this->ProjectPointTo3DByDepth((*pMatchedLeftCamDetection)._esitmated3DDepth, keypt1_x, keypt1_y, X, Y);
         Vec3_t keypt1InCam(X, Y, pMatchedLeftCamDetection->_esitmated3DDepth);
+
         float horizontalSize = pMatchedLeftCamDetection->_bWidth * pMatchedLeftCamDetection->_esitmated3DDepth / _kk(0, 0);
 
         ThreeDDetection new3DDetection(

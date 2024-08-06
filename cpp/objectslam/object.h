@@ -117,7 +117,7 @@ public:
 
     ThreeDDetection(){}  // default constructor.
 
-    void initialize(const ThreeDDetection& other){
+    void assign(const ThreeDDetection& other){
         _objectCenterInRefFrame = other._objectCenterInRefFrame;
         _detectionID = other._detectionID;
         _cameraID = other._cameraID;

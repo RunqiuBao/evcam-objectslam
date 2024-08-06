@@ -11,6 +11,10 @@
 
 #include <armadillo>
 
+const float minIoUToReject = 0.2f;  // used in tracking methods to build correspondences
+const float maxPoseError = 0.2f;  //  used in tracking methods to filter bad track
+const float maxRotationAngleDeg = 7.0f;  // used in tracking method to filter bad track
+
 namespace eventobjectslam{
 
 // tracker state
@@ -44,6 +48,7 @@ public:
         cv::Mat& depthMap
     );
 
+
     void deriveAnalytic(
         const cv::Mat& refDepth,
         const cv::Mat& refImage,
@@ -53,7 +58,9 @@ public:
         const Mat33_d kk,
         const int scaleLevel,
         Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>& outJac,
-        Eigen::VectorXf& outResidual
+        Eigen::VectorXf& outResidual,
+        bool isDebug,
+        float opt_rate
     );
 
     void EstimatePose(
@@ -75,6 +82,8 @@ public:
     FrameTracker(std::shared_ptr<camera::CameraBase> camera)
     : _camera(camera), _pPoseOptimizer(std::make_shared<PoseOptimizer>(camera->_kk, camera->_baseline, 3))
     {}
+
+    bool DoDenseAlignmentBasedTrack(Frame& currentFrame, const Frame& lastFrame, const bool isDebug) const;
 
     bool DoMotionBasedTrack(Frame& currentFrame, const Frame& lastFrame, Mat44_t& velocity, const bool isDebug = false) const;
 
