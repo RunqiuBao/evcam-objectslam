@@ -332,46 +332,28 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
             Mat44_t nextFrameInCameraTransformBackup = nextFrameInCameraTransform;  // Note: backup in case first track fails and nextFrameInCameraTransform will be set to identity,
             bool isSuccess = _tracker.DoMotionBasedTrack(*pOneFrame, (*_pFrameStack.back()), nextFrameInCameraTransform, isDebug);
 
-            if ((!isSuccess) && ((*_pFrameStack.back())._isTracked)){
-                bool isSuccess = _tracker.Do2DTrackingBasedTrack(*pOneFrame, (*_pFrameStack.back()), nextFrameInCameraTransform, isDebug);
-                // TODO: if fail again, need another track trial from keyframe.
-                if (!isSuccess){
-                    // try relocalize from map
-                    bool isSuccess = _tracker.DoRelocalizeFromMap(*pOneFrame, (*_pFrameStack.back()), _pMapDb, nextFrameInCameraTransform, isDebug);
-                    if (!isSuccess){
-                        TDO_LOG_DEBUG("track trial from keyframe also failed.");
-                    }
+            // if (!isSuccess){
+            //     // TODO: project all ref objects to previous frame then track.
+            //     bool isSuccess = _tracker.Do2DTrackingBasedTrack(*pOneFrame, (*_pFrameStack.back()), nextFrameInCameraTransform, isDebug);
+            // }
+
+            if (!isSuccess){
+                bool isSuccess = _tracker.DoDenseAlignmentBasedTrack(*pOneFrame, (*_pFrameStack.back()), isDebug);
+                if (isSuccess){
+                    nextFrameInCameraTransform = (*_pFrameStack.back()).GetPose().inverse() * pOneFrame->GetPose();
                 }
             }
-            if (pOneFrame->_frameID == 54 && !isSuccess){
-                // hack, correct sudden rotation
-                Mat44_t velocity = Mat44_t::Identity();
-                Mat33_t rotMat = mathutils::RotateAroundPrimeAxis<Mat33_t>(-15 * M_PI / 180.0, "y");
-                velocity.block<3, 3>(0, 0) = rotMat;
-                Mat44_t currInKeyFrameTransform = _pFrameStack.back()->GetPose() * velocity;
-                pOneFrame->SetPose(currInKeyFrameTransform);
-                pOneFrame->_isTracked = true;
+
+            if (!isSuccess){
+                // try relocalize from map
+                bool isSuccess = _tracker.DoRelocalizeFromMap(*pOneFrame, (*_pFrameStack.back()), _pMapDb, nextFrameInCameraTransform, isDebug);
+                if (!isSuccess){
+                    TDO_LOG_DEBUG("relocalization also failed.");
+                }
             }
-            if (pOneFrame->_frameID == 107 && !isSuccess){
-                // hack, correct sudden rotation
-                Mat44_t velocity = Mat44_t::Identity();
-                Mat33_t rotMat = mathutils::RotateAroundPrimeAxis<Mat33_t>(-2 * M_PI / 180.0, "x");
-                Mat33_t rotMat2 = mathutils::RotateAroundPrimeAxis<Mat33_t>(2 * M_PI / 180.0, "y");
-                velocity.block<3, 3>(0, 0) = rotMat * rotMat2;
-                Mat44_t currInKeyFrameTransform = _pFrameStack.back()->GetPose() * velocity;
-                pOneFrame->SetPose(currInKeyFrameTransform);
-                pOneFrame->_isTracked = true;
-            }
-            if (pOneFrame->_frameID == 122 && !isSuccess){
-                // hack, correct sudden rotation
-                Mat44_t velocity = Mat44_t::Identity();
-                Mat33_t rotMat = mathutils::RotateAroundPrimeAxis<Mat33_t>(21 * M_PI / 180.0, "y");
-                Mat33_t rotMat2 = mathutils::RotateAroundPrimeAxis<Mat33_t>(-1 * M_PI / 180.0, "x");
-                velocity.block<3, 3>(0, 0) = rotMat * rotMat2;
-                velocity(2, 3) = 0.03;
-                Mat44_t currInKeyFrameTransform = _pFrameStack.back()->GetPose() * velocity;
-                pOneFrame->SetPose(currInKeyFrameTransform);
-                pOneFrame->_isTracked = true;
+
+            if (pOneFrame->_frameID == 280) {
+                TDO_LOG_DEBUG("baodebug");
             }
             
             // insert new key frame if detection increased than previous frame
