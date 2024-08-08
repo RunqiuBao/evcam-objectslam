@@ -427,6 +427,8 @@ static void TrackWithPnP(
 }
 
 bool FrameTracker::DoRelocalizeFromMap(Frame& currentFrame, const Frame& lastFrame, std::shared_ptr<MapDataBase> pMapDb, Mat44_t& velocity, const bool isDebug){
+    const float maxPoseError = 0.1f;  //  used in tracking methods to filter bad track
+    const float maxRotationAngleDeg = 1.0f;  // used in tracking method to filter bad track
     std::vector<std::shared_ptr<LandMark>> visibleLandmarks = pMapDb->GetVisibleLandmarks(_pRefKeyframe);
     if (visibleLandmarks.size() < 4) {
         velocity = Eigen::Matrix4f::Identity();
@@ -546,8 +548,10 @@ bool FrameTracker::DoRelocalizeFromMap(Frame& currentFrame, const Frame& lastFra
         TDO_LOG_DEBUG("relocalization result current Frame in world: \n" << currentFrameInWorld);
         currentFrameInRefKeyFrame = (_pRefKeyframe->GetKeyframePoseInWorld()).inverse() * currentFrameInWorld;
         velocity = lastFrame.GetPose().inverse() * currentFrameInRefKeyFrame;
+        float rotAngleDenseAlignDeg = Eigen::AngleAxisf(velocity.block<3, 3>(0, 0)).angle() * 180.0 / M_PI;
         if (
-            velocity.block(0, 3, 3, 1).norm() > maxPoseError
+            velocity.block(0, 3, 3, 1).norm() > maxPoseError ||
+            std::abs(rotAngleDenseAlignDeg) > maxRotationAngleDeg
         ){
             // track failed
             velocity = Eigen::Matrix4f::Identity();
@@ -567,6 +571,9 @@ bool FrameTracker::DoRelocalizeFromMap(Frame& currentFrame, const Frame& lastFra
 }
 
 bool FrameTracker::DoDenseAlignmentBasedTrack(Frame& currentFrame, const Frame& lastFrame, const bool isDebug) const {
+    const float maxPoseError = 0.1f;  //  used in tracking methods to filter bad track
+    const float maxRotationAngleDeg = 1.0f;  // used in tracking method to filter bad track
+
     std::vector<std::shared_ptr<RefObject>> refObjects = _pRefKeyframe->_refObjects;
     // project 3d refobjects to previous frame and do dense refinement with current frame
     std::vector<int> indicesCorrespondingDetection;

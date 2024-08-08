@@ -80,8 +80,12 @@ void LoadDetections(
         y_r = boost::lexical_cast<float>(splitSDetection[6].c_str()) * imageHeight;
         bWidth_r = boost::lexical_cast<float>(splitSDetection[7].c_str()) * imageWidth;
         bHeight_r = boost::lexical_cast<float>(splitSDetection[8].c_str()) * imageHeight;
+        float keypt1XRatio = boost::lexical_cast<float>(splitSDetection[9].c_str());
+        if (std::abs(keypt1XRatio - 0.5) > 0.05) {
+            keypt1XRatio = 0.4998;
+        } 
         Vec2_t keypt1(
-            x - bWidth / 2 + boost::lexical_cast<float>(splitSDetection[9].c_str()) * bWidth,
+            x - bWidth / 2 +  keypt1XRatio * bWidth,
             y - bHeight / 2 + boost::lexical_cast<float>(splitSDetection[10].c_str()) * bHeight
         );
         Vec2_t keypt2(
@@ -93,7 +97,7 @@ void LoadDetections(
 
         leftDetections.push_back(TwoDBoundingBox(x, y, bWidth, bHeight, pColorcone, detectionScore, keypts));
         Vec2_t keypt1_r(
-            x_r - bWidth_r / 2 + boost::lexical_cast<float>(splitSDetection[9].c_str()) * bWidth_r,
+            x_r - bWidth_r / 2 + keypt1XRatio * bWidth_r,
             y_r - bHeight / 2 + boost::lexical_cast<float>(splitSDetection[10].c_str()) * bHeight
         );
         Vec2_t keypt2_r(
@@ -197,7 +201,7 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
             filenames.push_back(oneFilePath.path().filename().stem());
         }
     }
-    std::sort(filenames.begin(), filenames.end());
+    std::sort(filenames.begin(), filenames.end(), std::greater<std::string>());
 
     std::string objectName = sysConfigJson["objects"]["0"]["objectName"].GetString();
     object::ObjectBase colorcone(objectName);
@@ -337,22 +341,22 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
             //     bool isSuccess = _tracker.Do2DTrackingBasedTrack(*pOneFrame, (*_pFrameStack.back()), nextFrameInCameraTransform, isDebug);
             // }
 
-            if (!isSuccess){
-                bool isSuccess = _tracker.DoDenseAlignmentBasedTrack(*pOneFrame, (*_pFrameStack.back()), isDebug);
+            if (!isSuccess && frameCount > 850){
+                isSuccess = _tracker.DoDenseAlignmentBasedTrack(*pOneFrame, (*_pFrameStack.back()), isDebug);
                 if (isSuccess){
                     nextFrameInCameraTransform = (*_pFrameStack.back()).GetPose().inverse() * pOneFrame->GetPose();
                 }
             }
 
-            if (!isSuccess){
+            if (!isSuccess && frameCount > 850){
                 // try relocalize from map
-                bool isSuccess = _tracker.DoRelocalizeFromMap(*pOneFrame, (*_pFrameStack.back()), _pMapDb, nextFrameInCameraTransform, isDebug);
+                isSuccess = _tracker.DoRelocalizeFromMap(*pOneFrame, (*_pFrameStack.back()), _pMapDb, nextFrameInCameraTransform, isDebug);
                 if (!isSuccess){
                     TDO_LOG_DEBUG("relocalization also failed.");
                 }
             }
 
-            if (pOneFrame->_frameID == 280) {
+            if (frameCount == 871) {
                 TDO_LOG_DEBUG("baodebug");
             }
             

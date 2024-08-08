@@ -140,7 +140,7 @@ void SemanticMapper::Run() {
         TDO_LOG_DEBUG_FORMAT("one localBA(%d) task finished in %d milisec. keyframe (%d).", _countBA % duration.count() % _pCurrKeyfrm->_keyFrameID);
         _countBA++;
 
-        if (_pMapDb->GetAllKeyframes().size() > maxNumKeyframesInFullCovisibleSubset){
+        if (false && _pMapDb->GetAllKeyframes().size() > maxNumKeyframesInFullCovisibleSubset){
             starttime = std::chrono::steady_clock::now();
             _DoPruneKeyframes(_pCurrKeyfrm, maxNumKeyframesInFullCovisibleSubset);
             duration = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - starttime);
