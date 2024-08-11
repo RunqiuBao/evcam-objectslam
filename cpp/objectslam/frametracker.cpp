@@ -428,7 +428,7 @@ static void TrackWithPnP(
 
 bool FrameTracker::DoRelocalizeFromMap(Frame& currentFrame, const Frame& lastFrame, std::shared_ptr<MapDataBase> pMapDb, Mat44_t& velocity, const bool isDebug){
     const float maxPoseError = 0.1f;  //  used in tracking methods to filter bad track
-    const float maxRotationAngleDeg = 1.0f;  // used in tracking method to filter bad track
+    const float maxRotationAngleDeg = 3.0f;  // used in tracking method to filter bad track
     std::vector<std::shared_ptr<LandMark>> visibleLandmarks = pMapDb->GetVisibleLandmarks(_pRefKeyframe);
     if (visibleLandmarks.size() < 4) {
         velocity = Eigen::Matrix4f::Identity();
@@ -572,7 +572,7 @@ bool FrameTracker::DoRelocalizeFromMap(Frame& currentFrame, const Frame& lastFra
 
 bool FrameTracker::DoDenseAlignmentBasedTrack(Frame& currentFrame, const Frame& lastFrame, const bool isDebug) const {
     const float maxPoseError = 0.1f;  //  used in tracking methods to filter bad track
-    const float maxRotationAngleDeg = 1.0f;  // used in tracking method to filter bad track
+    const float maxRotationAngleDeg = 3.0f;  // used in tracking method to filter bad track
 
     std::vector<std::shared_ptr<RefObject>> refObjects = _pRefKeyframe->_refObjects;
     // project 3d refobjects to previous frame and do dense refinement with current frame
@@ -777,7 +777,15 @@ bool FrameTracker::DoDenseAlignmentBasedTrack(Frame& currentFrame, const Frame& 
 
 }
 
-bool FrameTracker::DoMotionBasedTrack(Frame& currentFrame, const Frame& lastFrame, Mat44_t& velocity, const bool isDebug) const{
+bool FrameTracker::DoMotionBasedTrack(Frame& currentFrame, const Frame& lastFrame, Mat44_t& velocity, const bool isDebug, const bool isAddMorePoints) const{
+    float minIoUToReject = 0.2f;  // used in tracking methods to build correspondences
+    float maxPoseError = 0.2f;  //  used in tracking methods to filter bad track
+    float maxRotationAngleDeg = 7.0f;  // used in tracking method to filter bad track
+    if (isAddMorePoints){
+        minIoUToReject = 0.1f;  // used in tracking methods to build correspondences
+        maxPoseError = 0.3f;  //  used in tracking methods to filter bad track
+        maxRotationAngleDeg = 10.0f;  // used in tracking method to filter bad track
+    }
     std::vector<std::shared_ptr<RefObject>> refObjects = _pRefKeyframe->_refObjects;
     // project 3d refObjects and 3d detections to current camera pose and find correspondences.
     std::vector<int> indicesCorrespondingDetecton;
@@ -882,7 +890,7 @@ bool FrameTracker::DoMotionBasedTrack(Frame& currentFrame, const Frame& lastFram
     }
 
     indexRefObject = 0;
-    if (objectPoints.size() < 8){
+    if (objectPoints.size() < 8 || isAddMorePoints){
         // not enough detection. Add keypts as well for tracking.
         for (int indexCorrespondingDetection : indicesCorrespondingDetecton){
             if (indexCorrespondingDetection < 0){
@@ -905,6 +913,45 @@ bool FrameTracker::DoMotionBasedTrack(Frame& currentFrame, const Frame& lastFram
             indexRefObject++;
         }
 
+    }
+
+    indexRefObject = 0;
+    if (isAddMorePoints){
+        for (int indexCorrespondingDetection : indicesCorrespondingDetecton){
+            if (indexCorrespondingDetection < 0){
+                indexRefObject++;
+                continue;
+            }
+            // bbox edge middle points
+            cv::Point2f point2D_topmiddle(
+                (*currentFrame._matchedLeftCamDetections[indexCorrespondingDetection])._centerX,
+                (*currentFrame._matchedLeftCamDetections[indexCorrespondingDetection])._centerY - (*currentFrame._matchedLeftCamDetections[indexCorrespondingDetection])._bHeight / 2
+            );
+            imagePoints.push_back(point2D_topmiddle);
+            float X, Y;
+            _camera->ProjectPointTo3DByDepth(refObjects[indexRefObject]->_detection._pLeftBbox->_esitmated3DDepth, refObjects[indexRefObject]->_detection._pLeftBbox->_centerX, refObjects[indexRefObject]->_detection._pLeftBbox->_centerY - refObjects[indexRefObject]->_detection._pLeftBbox->_bHeight / 2, X, Y);
+            cv::Point3f point3D_topmiddle(
+                X,
+                Y,
+                refObjects[indexRefObject]->_detection._pLeftBbox->_esitmated3DDepth
+            );
+            objectPoints.push_back(point3D_topmiddle);
+
+            cv::Point2f point2D_bottommiddle(
+                (*currentFrame._matchedLeftCamDetections[indexCorrespondingDetection])._centerX,
+                (*currentFrame._matchedLeftCamDetections[indexCorrespondingDetection])._centerY + (*currentFrame._matchedLeftCamDetections[indexCorrespondingDetection])._bHeight / 2
+            );
+            imagePoints.push_back(point2D_bottommiddle);
+            _camera->ProjectPointTo3DByDepth(refObjects[indexRefObject]->_detection._pLeftBbox->_esitmated3DDepth, refObjects[indexRefObject]->_detection._pLeftBbox->_centerX, refObjects[indexRefObject]->_detection._pLeftBbox->_centerY + refObjects[indexRefObject]->_detection._pLeftBbox->_bHeight / 2, X, Y);
+            cv::Point3f point3D_bottommiddle(
+                X,
+                Y,
+                refObjects[indexRefObject]->_detection._pLeftBbox->_esitmated3DDepth
+            );
+            objectPoints.push_back(point3D_bottommiddle);
+
+            indexRefObject++;
+        }
     }
 
     bool isSuccess = false;

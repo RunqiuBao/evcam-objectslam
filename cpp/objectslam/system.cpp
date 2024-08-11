@@ -201,7 +201,7 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
             filenames.push_back(oneFilePath.path().filename().stem());
         }
     }
-    std::sort(filenames.begin(), filenames.end(), std::greater<std::string>());
+    std::sort(filenames.begin(), filenames.end());
 
     std::string objectName = sysConfigJson["objects"]["0"]["objectName"].GetString();
     object::ObjectBase colorcone(objectName);
@@ -250,6 +250,7 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
 
     // for debug purpose
     bool isDebug = true;
+    bool isAddMorePoints = false;
     std::vector<size_t> numFramesEachKeyframe;
     for(const std::string& filename : filenames){
         TDO_LOG_DEBUG(filename);
@@ -334,21 +335,23 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
         }
         else{
             Mat44_t nextFrameInCameraTransformBackup = nextFrameInCameraTransform;  // Note: backup in case first track fails and nextFrameInCameraTransform will be set to identity,
-            bool isSuccess = _tracker.DoMotionBasedTrack(*pOneFrame, (*_pFrameStack.back()), nextFrameInCameraTransform, isDebug);
+            if (filename == "000475")
+                isAddMorePoints = true;
+            bool isSuccess = _tracker.DoMotionBasedTrack(*pOneFrame, (*_pFrameStack.back()), nextFrameInCameraTransform, isDebug, isAddMorePoints);
 
             // if (!isSuccess){
             //     // TODO: project all ref objects to previous frame then track.
             //     bool isSuccess = _tracker.Do2DTrackingBasedTrack(*pOneFrame, (*_pFrameStack.back()), nextFrameInCameraTransform, isDebug);
             // }
 
-            if (!isSuccess && frameCount > 850){
+            if (!isSuccess){
                 isSuccess = _tracker.DoDenseAlignmentBasedTrack(*pOneFrame, (*_pFrameStack.back()), isDebug);
                 if (isSuccess){
                     nextFrameInCameraTransform = (*_pFrameStack.back()).GetPose().inverse() * pOneFrame->GetPose();
                 }
             }
 
-            if (!isSuccess && frameCount > 850){
+            if (!isSuccess){
                 // try relocalize from map
                 isSuccess = _tracker.DoRelocalizeFromMap(*pOneFrame, (*_pFrameStack.back()), _pMapDb, nextFrameInCameraTransform, isDebug);
                 if (!isSuccess){
@@ -356,10 +359,10 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
                 }
             }
 
-            if (frameCount == 871) {
+            if (filename == "000909") {  // should stop here
                 TDO_LOG_DEBUG("baodebug");
             }
-            
+
             // insert new key frame if detection increased than previous frame
             if (isSuccess && (pOneFrame->_threeDDetections.size() > (*_pFrameStack.back())._threeDDetections.size())){
             // bool bAddKeyframe = false;

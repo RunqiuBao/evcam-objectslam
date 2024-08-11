@@ -85,7 +85,7 @@ public:
 
     bool DoDenseAlignmentBasedTrack(Frame& currentFrame, const Frame& lastFrame, const bool isDebug) const;
 
-    bool DoMotionBasedTrack(Frame& currentFrame, const Frame& lastFrame, Mat44_t& velocity, const bool isDebug = false) const;
+    bool DoMotionBasedTrack(Frame& currentFrame, const Frame& lastFrame, Mat44_t& velocity, const bool isDebug=false, const bool isAddMorePoints=false) const;
 
     bool Do2DTrackingBasedTrack(Frame& currentFrame, const Frame& lastFrame, Mat44_t& velocity, const bool isDebug = false) const;
 
