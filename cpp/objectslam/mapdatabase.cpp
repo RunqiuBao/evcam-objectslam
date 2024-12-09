@@ -64,7 +64,7 @@ std::vector<std::shared_ptr<KeyFrame>> MapDataBase::GetObservableKeyframes(std::
         TDO_LOG_VERBOSE_FORMAT("angleViewRay: %f, angleFoVLimit: %f", angleViewRay % angleFoVLimit);
         if (angleViewRay < angleFoVLimit){
             // check if the projection is within image and large enough
-            Eigen::MatrixXf transformedVerticesInWorld = mathutils::TransformPoints<Eigen::MatrixXf>(pRefLandmark->GetLandmarkPoseInWorld(), pRefLandmark->_vertices3DInLandmark);
+            Eigen::MatrixXf transformedVerticesInWorld = mathutils::TransformPoints<Eigen::MatrixXf>(pRefLandmark->GetLandmarkPoseInWorld(), pRefLandmark->GetFacetCornersInLandmark());
             Eigen::MatrixXf transformedVerticesInCamera = mathutils::TransformPoints<Eigen::MatrixXf>((id_keyframe.second->GetKeyframePoseInWorld()).inverse(), transformedVerticesInWorld);
             std::vector<cv::Point> oneLandmarkPoints2D = mathutils::ProjectPoints3DToPoints2D(transformedVerticesInCamera, *(id_keyframe.second->_pCamera));
             const size_t cameraCols = id_keyframe.second->_pCamera->_cols;
@@ -200,7 +200,7 @@ void MapDataBase::MergeLandmarkCluster(std::vector<std::shared_ptr<LandMark>> on
     std::lock_guard<std::mutex> lock(_mtxMapLandmarksAccess);
     size_t indexBestLandmark = 0;
     for (size_t indexLandmark = 1; indexLandmark < oneCluster.size(); indexLandmark++) {
-        if (oneCluster[indexLandmark]->GetDistanceFromBestObserv() < oneCluster[indexBestLandmark]->GetDistanceFromBestObserv()) {
+        if (oneCluster[indexLandmark]->GetScoreFromBestObserv() > oneCluster[indexBestLandmark]->GetScoreFromBestObserv()) {
             indexBestLandmark = indexLandmark;
         }
     }

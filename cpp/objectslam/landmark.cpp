@@ -14,16 +14,12 @@ std::atomic<unsigned int> LandMark::_nextID{0};
 
 LandMark::LandMark(
     const Mat44_t poseLandmarkInWorld,
-    const Vec3_t keypt1InLandmark,
+    const std::vector<Vec3_t> facetCornersInLandmark,
     const float horizontalSize,
     const std::shared_ptr<object::ObjectBase> pObjectInfo
 )
-:_poseLandmarkInWorld(poseLandmarkInWorld), _keypt1InLandmark(keypt1InLandmark * makeCylinderLonger), _horizontalSize(horizontalSize), _landmarkID(_nextID++), _pObjectInfo(pObjectInfo), _bIsToDelete(false)
+:_poseLandmarkInWorld(poseLandmarkInWorld), _facetCornersInLandmark(facetCornersInLandmark), _horizontalSize(horizontalSize), _landmarkID(_nextID++), _pObjectInfo(pObjectInfo), _bIsToDelete(false)
 {
-    Vec3_t landmarkCenter = Eigen::Vector3f::Zero(3);
-    _vertices3DInLandmark = GetVerticesOf3DBoundingCylinderForObject(4, horizontalSize, landmarkCenter, _keypt1InLandmark);
-    _observedHeight = _keypt1InLandmark.norm() * 2;
-
     _bestDetectionScore = std::numeric_limits<float>::max();
     if (_landmarkID > 200) {
         TDO_LOG_ERROR_FORMAT("too much landmarks initialized (%d)", _landmarkID);
@@ -43,25 +39,24 @@ void LandMark::AddObservation(std::shared_ptr<KeyFrame> pRefKeyFrame, unsigned i
     _observations_indices[pRefKeyFrame] = idx;
     if (_observations_indices.size() == 1){
         _bestDetectionScore = pRefKeyFrame->_refObjects[idx]->_detection._detectionScore;
-        _distanceFromBestRefKeyframe = (_poseLandmarkInWorld.block(0, 3, 3, 1) - pRefKeyFrame->GetKeyframePoseInWorld().block(0, 3, 3, 1)).norm();
     }
     else{
-        float distanceToInputKeyFrame = pRefKeyFrame->_refObjects[idx]->_detection._objectCenterInRefFrame.norm();
+        float incomingDetectionScore = pRefKeyFrame->_refObjects[idx]->_detection._detectionScore;
         if (
-            // CompareDetectionScoreIfBetter("linemod", _bestDetectionScore, pRefKeyFrame->_refObjects[idx]->_detection._detectionScore) &&
-            (distanceToInputKeyFrame < _distanceFromBestRefKeyframe)
+            (incomingDetectionScore > _bestDetectionScore)
         ){
-            // Note: update landmark pose, if got an closer view from the input keyframe.
+            // Note: update landmark pose, if got a better view from the input keyframe.
             Mat44_t poseLandmarkInWorldNew;
-            Vec3_t keypt1InLandmarkNew;
-            ComputeLandmarkPoseInWorldAndKeypt1InWolrd(pRefKeyFrame, pRefKeyFrame->_refObjects[idx], poseLandmarkInWorldNew, keypt1InLandmarkNew);
-            keypt1InLandmarkNew *= makeCylinderLonger;
-            TDO_LOG_INFO_FORMAT("updated landmark (%d), due to betterDistance (with keyframe %d): %f -> %f ; detection score change: %f -> %f", _landmarkID % pRefKeyFrame->_keyFrameID % _distanceFromBestRefKeyframe % distanceToInputKeyFrame % _bestDetectionScore % pRefKeyFrame->_refObjects[idx]->_detection._detectionScore);
-            _bestDetectionScore = pRefKeyFrame->_refObjects[idx]->_detection._detectionScore;
+            std::vector<Vec3_t> facetCornersInLandmarkNew;
+            ComputeLandmarkPoseInWorldByFacet(
+                pRefKeyFrame,
+                pRefKeyFrame->_refObjects[idx],
+                poseLandmarkInWorldNew,
+                facetCornersInLandmarkNew);
+            TDO_LOG_INFO_FORMAT("updated landmark (%d), due to better observation (with keyframe %d): %f -> %f ; detection score change: %f -> %f", _landmarkID % pRefKeyFrame->_keyFrameID % _bestDetectionScore % incomingDetectionScore);
+            _bestDetectionScore = incomingDetectionScore;
             SetLandmarkPoseInWorld(poseLandmarkInWorldNew);
-            SetKeypt1InLandmark(keypt1InLandmarkNew);
-            SetLandmarkSize(keypt1InLandmarkNew.norm() * 2, pRefKeyFrame->_refObjects[idx]->_detection._horizontalSize);
-            _distanceFromBestRefKeyframe = distanceToInputKeyFrame;
+            SetFacetCornersInLandmark(facetCornersInLandmarkNew);
         }
     }
 
@@ -84,25 +79,27 @@ static void GetRotationMatFromVecZ(
 }
 
 // class static method
-void LandMark::ComputeLandmarkPoseInWorldAndKeypt1InWolrd(
+void LandMark::ComputeLandmarkPoseInWorldByFacet(
     const std::shared_ptr<KeyFrame> pRefKeyFrame,
     const std::shared_ptr<RefObject> pRefObjInKeyFrame,
     Mat44_t& poseLandmarkInWorld,
-    Vec3_t& keypt1InLandmark
+    std::vector<Vec3_t>& facetCornersInLandmark
 ){
     poseLandmarkInWorld = Eigen::Matrix4f::Identity();
     Vec3_t objCenterInWorld = pRefKeyFrame->GetKeyframePoseInWorld().block<3, 3>(0, 0) * pRefObjInKeyFrame->_detection._objectCenterInRefFrame + pRefKeyFrame->GetKeyframePoseInWorld().col(3).head<3>();
     poseLandmarkInWorld(0, 3) = objCenterInWorld(0);
     poseLandmarkInWorld(1, 3) = objCenterInWorld(1);
     poseLandmarkInWorld(2, 3) = objCenterInWorld(2);
-    Vec3_t keypt1InWorld = pRefKeyFrame->GetKeyframePoseInWorld().block<3, 3>(0, 0) * pRefObjInKeyFrame->_detection._keypt1InRefFrame + pRefKeyFrame->GetKeyframePoseInWorld().col(3).head<3>();
-    Vec3_t oc2Keypt1 = keypt1InWorld - objCenterInWorld;
+    Vec3_t facetNormalInWorld = pRefKeyFrame->GetKeyframePoseInWorld().block<3, 3>(0, 0) * pRefObjInKeyFrame->_detection._normalOfFacet;
     Mat33_t rotMat;
-    GetRotationMatFromVecZ(oc2Keypt1 / oc2Keypt1.norm(), rotMat);
+    GetRotationMatFromVecZ(facetNormalInWorld, rotMat);
     poseLandmarkInWorld.block<3, 3>(0, 0) = rotMat;
 
-    keypt1InLandmark = keypt1InLandmark.setZero();
-    keypt1InLandmark(2) = oc2Keypt1.norm();  // align landmark z axis with the center2Keypt1 vector.
+    for (int indexCorner=0; indexCorner < 4; indexCorner++){
+        Vec3_t facetCornerInWorld = pRefKeyFrame->GetKeyframePoseInWorld().block<3, 3>(0, 0) * pRefObjInKeyFrame->_detection._facetCornersInRefFrame[indexCorner] + pRefKeyFrame->GetKeyframePoseInWorld().col(3).head<3>();
+        Vec3_t facetCornerInLandmark = poseLandmarkInWorld.block<3, 3>(0, 0) * facetCornerInWorld + poseLandmarkInWorld.col(3).head<3>();
+        facetCornersInLandmark.push_back(facetCornerInLandmark);
+    }
 }
 
 void LandMark::DeleteObservation(std::shared_ptr<KeyFrame> pRefKeyFrame) {
@@ -123,9 +120,9 @@ void LandMark::SetLandmarkPoseInWorld(const Mat44_t& poseLandmarkInWorld) {
     _poseLandmarkInWorld = poseLandmarkInWorld;  // Note: for Eigen matrix, `=` is deep copy.
 }
 
-void LandMark::SetKeypt1InLandmark(const Vec3_t& keypt1InLandmark) {
+void LandMark::SetFacetCornersInLandmark(const std::vector<Vec3_t>& facetCornersInLandmark) {
     std::lock_guard<std::mutex> lock(_mtxLandmarkSize);
-    _keypt1InLandmark = keypt1InLandmark;
+    _facetCornersInLandmark = facetCornersInLandmark;
 }
 
 void LandMark::SetLandmarkSize(const float observedHeight, const float horizontalSize) {
@@ -134,8 +131,8 @@ void LandMark::SetLandmarkSize(const float observedHeight, const float horizonta
     _observedHeight = observedHeight;
 }
 
-Vec3_t LandMark::GetKeypt1InLandmark() const {
-    return _keypt1InLandmark;
+Vec3_t LandMark::GetOneFacetCornerInWorld(size_t indexCorner) const {
+    return _poseLandmarkInWorld.block<3, 3>(0, 0) * _facetCornersInLandmark[indexCorner] + _poseLandmarkInWorld.col(3).head<3>();
 }
 
 }  // end of namespace eventobjectslam

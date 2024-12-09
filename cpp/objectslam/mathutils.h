@@ -76,7 +76,7 @@ void FilterNonPlanePoints(
  *   mPoints3D: 3xn Eigen matrix
  * 
 **/
-std::vector<cv::Point> ProjectPoints3DToPoints2D(Eigen::MatrixXf& mPoints3D, camera::CameraBase& camera);
+std::vector<cv::Point> ProjectPoints3DToPoints2D(const Eigen::MatrixXf& mPoints3D, camera::CameraBase& camera);
 
 cv::Mat Draw2DHullMaskFrom2DPointsSet(const std::vector<cv::Point>& points2DCV, const size_t imageH, const size_t imageW);
 
@@ -89,6 +89,44 @@ Eigen::Matrix4f ConvertMatrixFromQuat(const Eigen::Vector4f quat);
 std::string FillZeros(const std::string& str, const int width);
 
 std::vector<size_t> GetListOfRandomIndex(const size_t iStart, const size_t iEnd, const size_t numElements);
+
+
+// ==================== Two view recontruction methods ====================
+int CheckRT(const Eigen::Matrix3f& R, const Eigen::Vector3f& t, const std::vector<cv::Point2f> &vKeys1, const std::vector<cv::Point2f> &vKeys2,
+            const Eigen::Matrix3f& K, std::vector<cv::Point3f>& vP3D, float th2, std::vector<bool>& vbGood, float& parallax);
+
+bool ReconstructH(
+    int numMatchedPoints,
+    Eigen::Matrix3f& H21,
+    const Eigen::Matrix3f& K,
+    Eigen::Matrix4f& T21,
+    std::vector<cv::Point2f>& vKeyPts1,
+    std::vector<cv::Point2f>& vKeyPts2,
+    std::vector<cv::Point3f>& vP3D,
+    std::vector<bool> &vbTriangulated,
+    float minParallax,
+    int minTriangulated
+);
+
+/**
+ * args: 
+ *      
+ */
+bool TrackWithHomography(
+    std::vector<cv::Point2f>& srcPoints2D,
+    std::vector<cv::Point2f>& dstPoints2D,
+    std::vector<cv::Point3f>& currPoints3D,
+    const Eigen::Matrix3f& cameraMatrix,
+    Mat44_t& currFrameInRefKeyFrame
+);
+
+void RestoreTranslationScale(
+    Eigen::Matrix4f& T21,
+    std::vector<cv::Point2f>& c1Points2D,
+    std::vector<cv::Point2f>& c2Points2D,
+    std::vector<cv::Point3f>& c1Points3D,
+    const Eigen::Matrix3f& K
+);
 
 } // end of mathutils
 

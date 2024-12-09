@@ -63,10 +63,10 @@ ObjectBase::ObjectBase(const std::string objectName)
 
 } // end of namespace object
 
-TwoDBoundingBox::TwoDBoundingBox(const float x, const float y, const float bWidth, const float bHeight, const std::shared_ptr<object::ObjectBase> pObjectInfo, const float detectionScore, const std::vector<Vec2_t> keypts)
-:_centerX(x), _centerY(y), _bWidth(bWidth), _bHeight(bHeight), _pObjectInfo(pObjectInfo), _detectionScore(detectionScore), _keypts(keypts)
+TwoDBoundingBox::TwoDBoundingBox(const float x, const float y, const float bWidth, const float bHeight, const std::shared_ptr<object::ObjectBase> pObjectInfo, const float detectionScore, const std::vector<Vec2_t> facetCorners)
+:_centerX(x), _centerY(y), _bWidth(bWidth), _bHeight(bHeight), _pObjectInfo(pObjectInfo), _detectionScore(detectionScore), _facetCorners(facetCorners)
 {
-    TDO_LOG_DEBUG_FORMAT("created 2d bbox for object %s with %d keypts!",  pObjectInfo->_objectName % _keypts.size());
+    TDO_LOG_DEBUG_FORMAT("created 2d bbox for object %s with a facet! confidence: %f",  pObjectInfo->_objectName % detectionScore);
 }
 
 }  // end of eventobjectslam

@@ -17,7 +17,7 @@ public:
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
     LandMark(
         const Mat44_t poseLandmarkInWorld,
-        const Vec3_t keypt1InLandmark,
+        const std::vector<Vec3_t> facetCornersInLandmark,
         const float horizontalSize,
         const std::shared_ptr<object::ObjectBase> pObjectInfo
     );
@@ -36,23 +36,31 @@ public:
 
     size_t GetNumObservations() { return _observations_indices.size(); }
 
-    float GetDistanceFromBestObserv() { return _distanceFromBestRefKeyframe; }
+    float GetScoreFromBestObserv() { return _bestDetectionScore; }
 
     Mat44_t GetLandmarkPoseInWorld();
 
-    Vec3_t GetKeypt1InLandmark() const;
+    Vec3_t GetOneFacetCornerInWorld(size_t indexCorner) const;
+
+    const Eigen::MatrixXf GetFacetCornersInLandmark() {
+        Eigen::MatrixXf mFacetCorners(4, 3);
+        for (int indexCorner=0; indexCorner < 4; indexCorner++){
+            mFacetCorners.row(indexCorner) = _facetCornersInLandmark[indexCorner];
+        }
+        return mFacetCorners;
+    }
 
     void SetLandmarkPoseInWorld(const Mat44_t& poseLandmarkInWorld);
 
-    void SetKeypt1InLandmark(const Vec3_t& keypt1InLandmark);
+    void SetFacetCornersInLandmark(const std::vector<Vec3_t>& facetCornersInLandmark);
 
     void SetLandmarkSize(const float observedHeight, const float horizontalSize);
 
-    static void ComputeLandmarkPoseInWorldAndKeypt1InWolrd(
+    static void ComputeLandmarkPoseInWorldByFacet(
         const std::shared_ptr<KeyFrame> pRefKeyFrame,
         const std::shared_ptr<RefObject> pRefObjInKeyFrame,
         Mat44_t& poseLandmarkInWorld,
-        Vec3_t& keypt1InLandmark
+        std::vector<Vec3_t>& facetCornersInLandmark
     );
 
     // ------------------- member variables --------------------------
@@ -61,21 +69,20 @@ public:
     const unsigned int _landmarkID;
 
     const std::shared_ptr<object::ObjectBase> _pObjectInfo;
-    Eigen::MatrixXf _vertices3DInLandmark;  // 3D bounding box in landmark frame.
-    float _horizontalSize;  // diameter of a cylinder.
-    float _observedHeight;  // height of the cylinder = 2 * norm(oc - keypt1)
 
     void DeleteThis() { _bIsToDelete = true; }
     bool IsToDelete() { return _bIsToDelete; }
+
+    float _horizontalSize;
+    float _observedHeight;
 
 private:
     std::map<std::shared_ptr<KeyFrame>, unsigned int> _observations_indices;  //Note: uint is the refOject index in this keyframe.
 
     Mat44_t _poseLandmarkInWorld;
-    Vec3_t _keypt1InLandmark;
+    std::vector<Vec3_t> _facetCornersInLandmark;
 
-    float _bestDetectionScore;  // (deprecated) if detection score becomes better, update detection orientation. 
-    float _distanceFromBestRefKeyframe;  // TODO: this is a problamtic design. To deprecate.
+    float _bestDetectionScore;  // if detection score becomes better, update landmark pose and corners.
     bool _bIsToDelete;
 
     mutable std::mutex _mtxObservations;

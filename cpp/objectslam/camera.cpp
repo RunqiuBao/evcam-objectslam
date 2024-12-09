@@ -90,8 +90,6 @@ void camera::CameraBase::CreateThreeDDetections(
     const object::ObjectBase& objectInfo,
     std::vector<ThreeDDetection>& threeDDetections
 ){
-    float angleDiffThresholdToFit = 10;
-
     int detectionID = 0;
     std::vector<Vec3_t> threeDPoints;
     std::vector<ThreeDDetection> threeDDetectionCandidates;
@@ -101,13 +99,17 @@ void camera::CameraBase::CreateThreeDDetections(
         float X, Y;
         this->ProjectPointTo3DByDepth((*pMatchedLeftCamDetection)._esitmated3DDepth, (*pMatchedLeftCamDetection)._centerX, (*pMatchedLeftCamDetection)._centerY, X, Y);
         Vec3_t objectCenterInRefFrame(X, Y, (*pMatchedLeftCamDetection)._esitmated3DDepth);
-        // get keypt1 in 3D
-        float keypt1_x = (*pMatchedLeftCamDetection)._keypts[0][0];
-        float keypt1_y = (*pMatchedLeftCamDetection)._keypts[0][1];
-        this->ProjectPointTo3DByDepth((*pMatchedLeftCamDetection)._esitmated3DDepth, keypt1_x, keypt1_y, X, Y);
-        Vec3_t keypt1InCam(X, Y, pMatchedLeftCamDetection->_esitmated3DDepth);
-
-        float horizontalSize = pMatchedLeftCamDetection->_bWidth * pMatchedLeftCamDetection->_esitmated3DDepth / _kk(0, 0);
+        std::vector<Vec3_t> facetCornersInRefFrame;
+        // get facet corners in 3D
+        for (int indexCorner=0; indexCorner < 4; indexCorner++){
+            float corner_x = (*pMatchedLeftCamDetection)._facetCorners[indexCorner][0];
+            float corner_y = (*pMatchedLeftCamDetection)._facetCorners[indexCorner][1];
+            float corner_x_r = (*pMatchedRightCamDetection)._facetCorners[indexCorner][0];
+            float depthCorner = this->TriangulateDepthInStereoCamera(corner_x - corner_x_r);
+            this->ProjectPointTo3DByDepth(depthCorner, corner_x, corner_y, X, Y);
+            Vec3_t cornerInRefFrame(X, Y, depthCorner);
+            facetCornersInRefFrame.push_back(cornerInRefFrame);
+        }
 
         ThreeDDetection new3DDetection(
             objectCenterInRefFrame,
@@ -116,19 +118,12 @@ void camera::CameraBase::CreateThreeDDetections(
             pMatchedLeftCamDetection->_detectionScore,
             pMatchedLeftCamDetection,
             pMatchedRightCamDetection,
-            keypt1InCam,
-            horizontalSize,
+            facetCornersInRefFrame,
             pMatchedLeftCamDetection->_pObjectInfo
         );
-        threeDDetectionCandidates.push_back(new3DDetection);
+        threeDDetections.push_back(new3DDetection);
         threeDPoints.push_back(objectCenterInRefFrame);
         detectionID++;
-    }
-    // filter non-plane 3d detections
-    std::vector<int> indicesThreeDPoints;
-    mathutils::FilterNonPlanePoints(threeDPoints, 0.2, indicesThreeDPoints);
-    for (const int indexPoint : indicesThreeDPoints){
-        threeDDetections.push_back(threeDDetectionCandidates[indexPoint]);
     }
     TDO_LOG_DEBUG_FORMAT("created %d threeD detections in camera %d", threeDDetections.size() % this->_cameraID);
     return;

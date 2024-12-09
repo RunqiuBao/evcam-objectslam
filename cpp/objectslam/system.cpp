@@ -58,6 +58,100 @@ void SLAMSystem::Startup() {
     _pMapperThread  = std::unique_ptr<std::thread>(new std::thread(&SemanticMapper::Run, _pMapper.get()));
 }
 
+void LoadDetectionsWithFacet(
+    const std::vector<std::string>& sDetections,
+    std::vector<TwoDBoundingBox>& leftDetections,
+    std::vector<TwoDBoundingBox>& rightDetections,
+    std::shared_ptr<object::ObjectBase> pFacetObject    
+){
+    leftDetections.reserve(sDetections.size());
+    rightDetections.reserve(sDetections.size());
+    for (std::string sDetection : sDetections){
+        std::vector<std::string> splitSDetection;
+        boost::split(splitSDetection, sDetection, boost::is_any_of(" "));
+        Vec2_t corner0(
+            boost::lexical_cast<float>(splitSDetection[1].c_str()),
+            boost::lexical_cast<float>(splitSDetection[2].c_str())
+        );
+        Vec2_t corner1(
+            boost::lexical_cast<float>(splitSDetection[3].c_str()),
+            boost::lexical_cast<float>(splitSDetection[4].c_str())
+        );
+        Vec2_t corner2(
+            boost::lexical_cast<float>(splitSDetection[5].c_str()),
+            boost::lexical_cast<float>(splitSDetection[6].c_str())
+        );
+        Vec2_t corner3(
+            boost::lexical_cast<float>(splitSDetection[7].c_str()),
+            boost::lexical_cast<float>(splitSDetection[8].c_str())
+        );
+
+        std::vector<Vec2_t> corners_left = {corner0, corner1, corner2, corner3};  // all the corners are in the order of clockwise, from topleft point. Assmuing rotation around z be less than 45 deg.
+        // compute a bounding box for the corners
+        float min_x = corners_left[0][0], min_y = corners_left[0][1];
+        float max_x = corners_left[0][0], max_y = corners_left[0][1];
+        for (const auto& corner : corners_left) {
+            min_x = std::min(min_x, corner[0]);
+            min_y = std::min(min_y, corner[1]);
+            max_x = std::max(max_x, corner[0]);
+            max_y = std::max(max_y, corner[1]);
+        }
+
+        leftDetections.push_back(
+            TwoDBoundingBox(
+                (min_x + max_x) / 2,
+                (min_y + max_y) / 2,
+                max_x - min_x,
+                max_y - min_y,
+                pFacetObject, 
+                1,
+                corners_left));
+        TDO_LOG_DEBUG_FORMAT("one 2d facet at (left): %f, %f", ((min_x + max_x) / 2) % ((min_y + max_y) / 2));
+
+        Vec2_t corner0_r(
+            boost::lexical_cast<float>(splitSDetection[9].c_str()),
+            boost::lexical_cast<float>(splitSDetection[10].c_str())
+        );
+        Vec2_t corner1_r(
+            boost::lexical_cast<float>(splitSDetection[11].c_str()),
+            boost::lexical_cast<float>(splitSDetection[12].c_str())
+        );
+        Vec2_t corner2_r(
+            boost::lexical_cast<float>(splitSDetection[13].c_str()),
+            boost::lexical_cast<float>(splitSDetection[14].c_str())
+        );
+        Vec2_t corner3_r(
+            boost::lexical_cast<float>(splitSDetection[15].c_str()),
+            boost::lexical_cast<float>(splitSDetection[16].c_str())
+        );
+        std::vector<Vec2_t> corners_right = {corner0_r, corner1_r, corner2_r, corner3_r};  // all the corners are in the order of clockwise, from topleft point. Assmuing rotation around z be less than 45 deg.
+        // compute a bounding box for the corners
+        min_x = corners_right[0][0], min_y = corners_right[0][1];
+        max_x = corners_right[0][0], max_y = corners_right[0][1];
+        for (const auto& corner : corners_right) {
+            min_x = std::min(min_x, corner[0]);
+            min_y = std::min(min_y, corner[1]);
+            max_x = std::max(max_x, corner[0]);
+            max_y = std::max(max_y, corner[1]);
+        }
+
+        std::string sConfidence = splitSDetection[17];
+        sConfidence.pop_back();
+        float confidence = boost::lexical_cast<float>(sConfidence);
+
+        rightDetections.push_back(
+            TwoDBoundingBox(
+                (min_x + max_x) / 2,
+                (min_y + max_y) / 2,
+                max_x - min_x,
+                max_y - min_y,
+                pFacetObject, 
+                confidence,
+                corners_right));
+    }
+
+}
+
 void LoadDetections(
     const std::vector<std::string>& sDetections,
     std::vector<TwoDBoundingBox>& leftDetections,
@@ -163,9 +257,9 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
     rapidjson::Document& sysConfigJson = _cfg->_jsonConfigNode;
 
     Vec3_t objectSize;
-    objectSize << sysConfigJson["objects"]["0"]["objectSize"][0].GetFloat(),
-                  sysConfigJson["objects"]["0"]["objectSize"][1].GetFloat(),
-                  sysConfigJson["objects"]["0"]["objectSize"][2].GetFloat();
+    objectSize << sysConfigJson["objects"]["1"]["objectSize"][0].GetFloat(),
+                  sysConfigJson["objects"]["1"]["objectSize"][1].GetFloat(),
+                  sysConfigJson["objects"]["1"]["objectSize"][2].GetFloat();
     _pMapDb->SetObjectSize(objectSize);
 
     Eigen::Matrix3f kk;
@@ -188,7 +282,7 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
     TDO_LOG_DEBUG_FORMAT("myStereoCamera imageWidth: %d", myStereoCamera._cols);
 
     std::filesystem::path detectionsPath = sStereoSequencePath;
-    detectionsPath.append("detections");
+    detectionsPath.append("facets");
     TDO_LOG_DEBUG("entered test track");
 
     std::vector<std::string> filenames;
@@ -199,9 +293,10 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
     }
     std::sort(filenames.begin(), filenames.end());
 
-    std::string objectName = sysConfigJson["objects"]["0"]["objectName"].GetString();
-    object::ObjectBase colorcone(objectName);
-    std::shared_ptr<object::ObjectBase> pColorcone = std::make_shared<object::ObjectBase>(colorcone);
+    std::string objectName = sysConfigJson["objects"]["1"]["objectName"].GetString();
+    TDO_LOG_DEBUG("objectName: " << objectName);
+    object::ObjectBase monitor(objectName);
+    std::shared_ptr<object::ObjectBase> pMonitor = std::make_shared<object::ObjectBase>(monitor);
 
     Mat44_t cameraInWorldTransform = Eigen::Matrix4f::Identity();
     Mat44_t nextFrameInCameraTransform = Eigen::Matrix4f::Identity();
@@ -248,6 +343,9 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
     bool isDebug = true;
     std::vector<size_t> numFramesEachKeyframe;
     for(const std::string& filename : filenames){
+        // if (frameCount > 10){
+        //     break;
+        // }
         TDO_LOG_DEBUG(filename);
 
         auto starttime = std::chrono::steady_clock::now();
@@ -277,7 +375,8 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
         }
 
         std::vector<TwoDBoundingBox> leftCamDetections, rightCamDetections;  // Note: load left and right detections and list correspondingly.
-        LoadDetections(sDetections, leftCamDetections, rightCamDetections, myStereoCamera._cols, myStereoCamera._rows, pColorcone);
+        // LoadDetections(sDetections, leftCamDetections, rightCamDetections, myStereoCamera._cols, myStereoCamera._rows, pColorcone);
+        LoadDetectionsWithFacet(sDetections, leftCamDetections, rightCamDetections, pMonitor);
 
         pOneFrame->SetDetectionsFromExternalSrc(std::move(leftCamDetections), std::move(rightCamDetections));
 
@@ -286,33 +385,33 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
         matchedLeftCamDetections = std::get<0>(matchedDetections);
         matchedRightCamDetections = std::get<1>(matchedDetections);
 
-        if (isDebug){
-            std::filesystem::path leftCamImagePath = sStereoSequencePath;
-            leftCamImagePath.append("concentrated/left/").append(filename + ".png");
-            cv::Mat display3DDetections = cv::imread(leftCamImagePath.string(), cv::IMREAD_COLOR);
-            std::vector<ThreeDDetection> threeDDetections = pOneFrame->_threeDDetections;
-            int countThreeDDetection = 0;
-            for (ThreeDDetection oneDetection : threeDDetections){
-                Eigen::Matrix<float, 2, Eigen::Dynamic> dstPoints(2, 2);
-                Eigen::Matrix<float, 3, Eigen::Dynamic> threeDKeypoints(3, 2);
-                threeDKeypoints << oneDetection._keypt1InRefFrame(0), oneDetection._objectCenterInRefFrame(0),
-                                   oneDetection._keypt1InRefFrame(1), oneDetection._objectCenterInRefFrame(1),
-                                   oneDetection._keypt1InRefFrame(2), oneDetection._objectCenterInRefFrame(2);
-                myStereoCamera.ProjectPoints(threeDKeypoints, dstPoints);
-                viszutils::Draw5DDetections(dstPoints, display3DDetections);
+        // if (isDebug){
+        //     std::filesystem::path leftCamImagePath = sStereoSequencePath;
+        //     leftCamImagePath.append("concentrated/left/").append(filename + ".png");
+        //     cv::Mat display3DDetections = cv::imread(leftCamImagePath.string(), cv::IMREAD_COLOR);
+        //     std::vector<ThreeDDetection> threeDDetections = pOneFrame->_threeDDetections;
+        //     int countThreeDDetection = 0;
+        //     for (ThreeDDetection oneDetection : threeDDetections){
+        //         Eigen::Matrix<float, 2, Eigen::Dynamic> dstPoints(2, 2);
+        //         Eigen::Matrix<float, 3, Eigen::Dynamic> threeDKeypoints(3, 2);
+        //         threeDKeypoints << oneDetection._keypt1InRefFrame(0), oneDetection._objectCenterInRefFrame(0),
+        //                            oneDetection._keypt1InRefFrame(1), oneDetection._objectCenterInRefFrame(1),
+        //                            oneDetection._keypt1InRefFrame(2), oneDetection._objectCenterInRefFrame(2);
+        //         myStereoCamera.ProjectPoints(threeDKeypoints, dstPoints);
+        //         viszutils::Draw5DDetections(dstPoints, display3DDetections);
 
-                countThreeDDetection++;
-            }
+        //         countThreeDDetection++;
+        //     }
 
-            std::filesystem::path debug3DDetectionPath = sStereoSequencePath;
-            debug3DDetectionPath.append("debug3DDetections/");
-            if (!std::filesystem::exists(debug3DDetectionPath) && !std::filesystem::create_directory(debug3DDetectionPath)){
-                TDO_LOG_ERROR_FORMAT("Failed to create the folder: %s", debug3DDetectionPath.string());
-                throw std::runtime_error("OS Error");
-            }
-            debug3DDetectionPath.append(filename + ".png");
-            cv::imwrite(debug3DDetectionPath.string() , display3DDetections);
-        }
+        //     std::filesystem::path debug3DDetectionPath = sStereoSequencePath;
+        //     debug3DDetectionPath.append("debug3DDetections/");
+        //     if (!std::filesystem::exists(debug3DDetectionPath) && !std::filesystem::create_directory(debug3DDetectionPath)){
+        //         TDO_LOG_ERROR_FORMAT("Failed to create the folder: %s", debug3DDetectionPath.string());
+        //         throw std::runtime_error("OS Error");
+        //     }
+        //     debug3DDetectionPath.append(filename + ".png");
+        //     cv::imwrite(debug3DDetectionPath.string() , display3DDetections);
+        // }
 
         // // input the correct detections to frameTracker, get pose return from frameTracker and print.
 
@@ -330,25 +429,17 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
         }
         else{
             Mat44_t nextFrameInCameraTransformBackup = nextFrameInCameraTransform;  // Note: backup in case first track fails and nextFrameInCameraTransform will be set to identity,
-            bool isSuccess = _tracker.DoMotionBasedTrack(*pOneFrame, (*_pFrameStack.back()), nextFrameInCameraTransform, isDebug);
-
-            // if (!isSuccess){
-            //     // TODO: project all ref objects to previous frame then track.
-            //     bool isSuccess = _tracker.Do2DTrackingBasedTrack(*pOneFrame, (*_pFrameStack.back()), nextFrameInCameraTransform, isDebug);
-            // }
+            bool isSuccess = _tracker.DoFacetBasedTrack(*pOneFrame, (*_pFrameStack.back()), nextFrameInCameraTransform, isDebug, 0.2, 7);
 
             if (!isSuccess){
-                bool isSuccess = _tracker.DoDenseAlignmentBasedTrack(*pOneFrame, (*_pFrameStack.back()), isDebug);
-                if (isSuccess){
-                    nextFrameInCameraTransform = (*_pFrameStack.back()).GetPose().inverse() * pOneFrame->GetPose();
-                }
-            }
-
-            if (!isSuccess){
-                // try relocalize from map
-                bool isSuccess = _tracker.DoRelocalizeFromMap(*pOneFrame, (*_pFrameStack.back()), _pMapDb, nextFrameInCameraTransform, isDebug);
+                // try track from key frame
+                isSuccess = _tracker.DoFacetBasedTrack(*pOneFrame, (*_pFrameStack.back()), nextFrameInCameraTransform, isDebug, 0.3, 30);
                 if (!isSuccess){
-                    TDO_LOG_DEBUG("relocalization also failed.");
+                    TDO_LOG_DEBUG("tracking from keyframe also failed.");
+                    // try relocalize from map
+                    isSuccess = _tracker.DoRelocalizeFromMap(*pOneFrame, (*_pFrameStack.back()), _pMapDb, nextFrameInCameraTransform, isDebug);
+                    if (!isSuccess)
+                        TDO_LOG_DEBUG("relocalization also failed.");
                 }
             }
 
@@ -357,22 +448,8 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
             }
             
             // insert new key frame if detection increased than previous frame
-            if (isSuccess && (pOneFrame->_threeDDetections.size() > (*_pFrameStack.back())._threeDDetections.size())){
-            // bool bAddKeyframe = false;
-            // if (_pFrameStack.size() < 2) {
-            //     if (isSuccess && (pOneFrame->_threeDDetections.size() > (*_pFrameStack.back())._threeDDetections.size())) {
-            //         bAddKeyframe = true;
-            //     }
-            // }
-            // else if (_pFrameStack.size() >= 2){
-            //     if (isSuccess
-            //         && (pOneFrame->_threeDDetections.size() > (*_pFrameStack.back())._threeDDetections.size())
-            //         && (pOneFrame->_threeDDetections.size() > (*_pFrameStack[_pFrameStack.size() - 2])._threeDDetections.size())
-            //     ) {
-            //         bAddKeyframe = true;
-            //     }
-            // }
-            // if (bAddKeyframe){  // for vibration
+            // if (isSuccess && (pOneFrame->_threeDDetections.size() > (*_pFrameStack.back())._threeDDetections.size())){
+            if (isSuccess){  // for debug
                 TDO_LOG_DEBUG_FORMAT("Last Keyframe(%d) contains %d frames.", _pKeyFrameStack.back()->_keyFrameID % _pKeyFrameStack.back()->_vFrames_ids.size());
                 numFramesEachKeyframe.push_back(_pKeyFrameStack.back()->_vFrames_ids.size());  // debug code
                 std::shared_ptr<KeyFrame> pOneKeyframe = std::make_shared<KeyFrame>(pOneFrame, _tracker._pRefKeyframe->GetKeyframePoseInWorld(), _camera);
@@ -393,16 +470,20 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
                     keyframeCount = _pMapDb->_keyframes.size();
                 }
                 // start BA
-                while (!_pMapper->PushKeyframeForBA(pOneKeyframe)){
-                    // Note: Force optimize every keyframe.
-                    std::this_thread::sleep_for(std::chrono::microseconds(static_cast<unsigned int>(0.05 * 1e6)));
+                if (false){
+                    while (!_pMapper->PushKeyframeForBA(pOneKeyframe)){
+                        // Note: Force optimize every keyframe.
+                        std::this_thread::sleep_for(std::chrono::microseconds(static_cast<unsigned int>(0.05 * 1e6)));
+                    }
                 }
             }
-
+ 
         }
         TDO_LOG_INFO("------------- End of one frame ------------");
         auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - starttime);
         TDO_LOG_INFO_FORMAT("frame(%s) tracking finished in %d milisec.", filename % duration.count());
+        TDO_LOG_DEBUG("keyframe pose in world: \n" << _tracker._pRefKeyframe->GetKeyframePoseInWorld());
+        TDO_LOG_DEBUG("frame pose in keyframe: \n" << pOneFrame->GetPose());
         cameraInRealWorld = worldInRealWorld * _tracker._pRefKeyframe->GetKeyframePoseInWorld() * pOneFrame->GetPose();  //Note: think like there is a point in current frame, first it will be transformed into keyframe, then to world, then to realWorld.
         Eigen::Quaternionf myQuaternion(cameraInRealWorld.block<3, 3>(0, 0));
         outputFile << std::to_string(frameCount) << " " << cameraInRealWorld(0, 3) << " " << cameraInRealWorld(1, 3) << " " << cameraInRealWorld(2, 3) << " " << myQuaternion.x() << " " << myQuaternion.y() << " " << myQuaternion.z() << " " << myQuaternion.w() << std::endl;
@@ -418,9 +499,14 @@ void SLAMSystem::TestTrackStereoSequence(const std::string sStereoSequencePath){
     SaveLandmarks(sStereoSequencePath, _pMapDb, worldInRealWorld);
 
     // print debug infos
-    size_t minNumFrames = *std::min_element(numFramesEachKeyframe.begin(), numFramesEachKeyframe.end());
-    size_t maxNumFrames = *std::max_element(numFramesEachKeyframe.begin(), numFramesEachKeyframe.end());
-    TDO_LOG_INFO_FORMAT("keyframes contain maximum %d frames and minimum %d frames.", maxNumFrames % minNumFrames);
+    if (numFramesEachKeyframe.size() > 0){
+        size_t minNumFrames = *std::min_element(numFramesEachKeyframe.begin(), numFramesEachKeyframe.end());
+        size_t maxNumFrames = *std::max_element(numFramesEachKeyframe.begin(), numFramesEachKeyframe.end());
+        TDO_LOG_INFO_FORMAT("keyframes contain maximum %d frames and minimum %d frames.", maxNumFrames % minNumFrames);
+    }
+    else{
+        TDO_LOG_INFO("keyframes contain zero frames. Something is wrong.");
+    }
 
 
 }

@@ -12,7 +12,7 @@
 #include <armadillo>
 
 const float minIoUToReject = 0.2f;  // used in tracking methods to build correspondences
-const float maxPoseError = 0.2f;  //  used in tracking methods to filter bad track
+const float maxPoseError = 0.3f;  //  used in tracking methods to filter bad track
 const float maxRotationAngleDeg = 7.0f;  // used in tracking method to filter bad track
 
 namespace eventobjectslam{
@@ -86,6 +86,7 @@ public:
     bool DoDenseAlignmentBasedTrack(Frame& currentFrame, const Frame& lastFrame, const bool isDebug) const;
 
     bool DoMotionBasedTrack(Frame& currentFrame, const Frame& lastFrame, Mat44_t& velocity, const bool isDebug = false) const;
+    bool DoFacetBasedTrack(Frame& currentFrame, const Frame& lastFrame, Mat44_t& velocity, const bool isDebug, const float minPoseError, const float maxRotationAngleDeg) const;
 
     bool Do2DTrackingBasedTrack(Frame& currentFrame, const Frame& lastFrame, Mat44_t& velocity, const bool isDebug = false) const;
 
