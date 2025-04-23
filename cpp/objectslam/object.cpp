@@ -24,7 +24,7 @@ Eigen::MatrixXf GetVerticesOf3DBoundingCylinderForObject(
     Vec3_t vRadius = vOc2TopC.cross(vOc2TopC_pert);
     vRadius /= vRadius.norm();
     Vec3_t vRotate = vRadius;
-    float theta = M_PI / 2;
+    float theta = 2 * M_PI / numVerticesOneSide;
     for (size_t indexVertex = 0; indexVertex < numVerticesOneSide; indexVertex++){
         // rodrigues' formula
         vRotate = vRotate * std::cos(theta) + (vOc2TopC.cross(vRotate)) * std::sin(theta) + vOc2TopC * (vOc2TopC.dot(vRotate)) * (1 - std::cos(theta));
