@@ -510,12 +510,14 @@ bool FrameTracker::DoRelocalizeFromMap(Frame& currentFrame, const Frame& lastFra
         // Set the appropriate values for the distCoeffs
         Mat44_t currentFrameInWorld, currentFrameInRefKeyFrame;
         TrackWithPnP(objectPoints, imagePoints, cameraMatrix, distCoeffs, maxPoseError, currentFrameInWorld);
-        TDO_LOG_DEBUG("relocalization result current Frame in world: \n" << currentFrameInWorld);
         currentFrameInRefKeyFrame = (_pRefKeyframe->GetKeyframePoseInWorld()).inverse() * currentFrameInWorld;
+        currentFrameInRefKeyFrame = mathutils::FixRxRz<float>(currentFrameInRefKeyFrame);
+        TDO_LOG_DEBUG("relocalization result current Frame in refKeyFrame: \n" << currentFrameInRefKeyFrame);
         velocity = lastFrame.GetPose().inverse() * currentFrameInRefKeyFrame;
         if (
             velocity.block(0, 3, 3, 1).norm() > maxPoseError
-        ){
+        )
+        {
             // track failed
             velocity = Eigen::Matrix4f::Identity();
             currentFrame.SetPose(lastFrame.GetPose() * velocity);
@@ -661,6 +663,7 @@ bool FrameTracker::DoDenseAlignmentBasedTrack(Frame& currentFrame, const Frame& 
     }
     Mat44_d currInPreviousTransform;
     _pPoseOptimizer->EstimatePose(refDepth, refImage, leftCamProjections_ref, currDepth, currImage, currInPreviousTransform);
+    currInPreviousTransform = mathutils::FixRxRz<double>(currInPreviousTransform);
     TDO_LOG_DEBUG("currInPreviousTransform by dense align: \n" << currInPreviousTransform);
     Mat44_t velocity = currInPreviousTransform.cast<float>();
     float rotAngleDenseAlignDeg = Eigen::AngleAxisf(velocity.block<3, 3>(0, 0)).angle() * 180.0 / M_PI;
@@ -1004,31 +1007,31 @@ bool FrameTracker::DoMotionBasedTrack(Frame& currentFrame, const Frame& lastFram
         indexRefObject++;
     }
 
-    // indexRefObject = 0;
-    // if (objectPoints.size() < 8){
-    //     // not enough detection. Add keypts as well for tracking.
-    //     for (int indexCorrespondingDetection : indicesCorrespondingDetecton){
-    //         if (indexCorrespondingDetection < 0){
-    //             indexRefObject++;
-    //             continue;
-    //         }
-    //         // keypt
-    //         cv::Point3f point3D_keypt(
-    //             refObjects[indexRefObject]->_detection._keypt1InRefFrame(0),
-    //             refObjects[indexRefObject]->_detection._keypt1InRefFrame(1),
-    //             refObjects[indexRefObject]->_detection._keypt1InRefFrame(2)
-    //         );
-    //         objectPoints.push_back(point3D_keypt);
-    //         cv::Point2f point2D_keypt(
-    //             (*currentFrame._matchedLeftCamDetections[indexCorrespondingDetection])._keypts[0][0],
-    //             (*currentFrame._matchedLeftCamDetections[indexCorrespondingDetection])._keypts[0][1]
-    //         );
-    //         imagePoints.push_back(point2D_keypt);
+    indexRefObject = 0;
+    if (objectPoints.size() < 8){
+        // not enough detection. Add keypts as well for tracking.
+        for (int indexCorrespondingDetection : indicesCorrespondingDetecton){
+            if (indexCorrespondingDetection < 0){
+                indexRefObject++;
+                continue;
+            }
+            // keypt
+            cv::Point3f point3D_keypt(
+                refObjects[indexRefObject]->_detection._vertices3DInRefFrame[0](0),
+                refObjects[indexRefObject]->_detection._vertices3DInRefFrame[0](1),
+                refObjects[indexRefObject]->_detection._vertices3DInRefFrame[0](2)
+            );
+            objectPoints.push_back(point3D_keypt);
+            cv::Point2f point2D_keypt(
+                (*currentFrame._matchedLeftCamDetections[indexCorrespondingDetection])._keypts[0][0],
+                (*currentFrame._matchedLeftCamDetections[indexCorrespondingDetection])._keypts[0][1]
+            );
+            imagePoints.push_back(point2D_keypt);
 
-    //         indexRefObject++;
-    //     }
+            indexRefObject++;
+        }
 
-    // }
+    }
 
     bool isSuccess = false;
     // Estimate current frame pose using PnP
@@ -1053,6 +1056,7 @@ bool FrameTracker::DoMotionBasedTrack(Frame& currentFrame, const Frame& lastFram
 
         Mat44_t currentFrameInRefKeyFrame;
         TrackWithPnP(objectPoints, imagePoints, cameraMatrix, distCoeffs, maxPoseError, currentFrameInRefKeyFrame);
+        currentFrameInRefKeyFrame = mathutils::FixRxRz<float>(currentFrameInRefKeyFrame);
         TDO_LOG_DEBUG("currentCameraInRefKeyFrame: \n" << currentFrameInRefKeyFrame);
         velocity = lastFrame.GetPose().inverse() * currentFrameInRefKeyFrame;  // Note: think like there is a point in last frame, first transform it to keyframe then to current frame.
         float rotAngleDeg = Eigen::AngleAxisf(velocity.block<3, 3>(0, 0)).angle() * 180.0 / M_PI;

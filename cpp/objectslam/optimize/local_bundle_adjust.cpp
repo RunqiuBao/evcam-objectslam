@@ -2,6 +2,7 @@
 #include "landmark.h"
 #include "optimize/g2outils.h"
 #include "mapdatabase.h"
+#include "mathutils.h"
 
 #include <unordered_map>
 
@@ -355,8 +356,9 @@ void optimize::DoLocalBA(std::shared_ptr<KeyFrame> pCurrKeyframe, bool* const bF
             auto pLocalKeyfrm = id_localKeyfrm.second;
             auto pKeyfrmVtx = ids_keyfrmVtx[pLocalKeyfrm->_keyFrameID];
             TDO_LOG_DEBUG_FORMAT("updating pose of keyframe(%d)", pLocalKeyfrm->_keyFrameID);
-            
-            pLocalKeyfrm->SetKeyframePoseInWorld(pKeyfrmVtx->estimate().to_homogeneous_matrix().inverse().cast<float>());
+            Mat44_t newKeyframePoseInWorld = pKeyfrmVtx->estimate().to_homogeneous_matrix().inverse().cast<float>();
+            newKeyframePoseInWorld = mathutils::FixRxRz<float>(newKeyframePoseInWorld);
+            pLocalKeyfrm->SetKeyframePoseInWorld(newKeyframePoseInWorld);
         }
 
         for (auto id_localLm : ids_localLandmarks) {

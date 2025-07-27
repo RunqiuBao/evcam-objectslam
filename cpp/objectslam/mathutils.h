@@ -17,6 +17,22 @@ namespace eventobjectslam {
 
 namespace mathutils {
 
+template<typename ValueType>
+Eigen::Matrix<ValueType, 4, 4> FixRxRz(const Eigen::Matrix<ValueType, 4, 4>& pose) {
+    std::cout << "Input pose: \n" << pose << std::endl;
+    Eigen::Matrix<ValueType, 4, 4> fixedPose = pose;
+    Eigen::Matrix<ValueType, 3, 3> rotMat = fixedPose.template block<3, 3>(0, 0);
+    Eigen::Matrix<ValueType, 3, 1> euler = rotMat.eulerAngles(1, 2, 0);
+    ValueType Ry = euler[0];
+    if (Ry > M_PI / 2) {
+        Ry -= M_PI;
+    }
+    Eigen::AngleAxis<ValueType> aaRy(Ry, Eigen::Matrix<ValueType, 3, 1>::UnitY());
+    fixedPose.template block<3, 3>(0, 0) = aaRy.toRotationMatrix();
+    std::cout << "eulerY: " << Ry << ", output pose: \n" << fixedPose << std::endl;
+    return fixedPose;
+}
+
 void EstimatePlaneFromPoints(
     const std::vector<Vec3_t> points,
     const float planeDistanceThreshold,
