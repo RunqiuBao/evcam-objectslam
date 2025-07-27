@@ -24,8 +24,6 @@ namespace g2outils {
 class ShotVertex final : public ::g2o::BaseVertex<6, ::g2o::SE3Quat> {
 
 public:
-    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-
     ShotVertex()
     : BaseVertex<6, ::g2o::SE3Quat>() {}
 
@@ -48,8 +46,6 @@ public:
 
 class LandmarkPointVertex final : public ::g2o::BaseVertex<3, Vec3_d> {
 public:
-    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-
     LandmarkPointVertex()
         : BaseVertex<3, Vec3_d>() {}
 
@@ -73,8 +69,6 @@ public:
 // !Note: don't change function interfaces. As it will be passed to g2o optimizer.
 class StereoPerspectiveReprojEdge final : public ::g2o::BaseBinaryEdge<3, Vec3_d, LandmarkPointVertex, ShotVertex> {
 public:
-    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-
     StereoPerspectiveReprojEdge(const unsigned int edgeId)
         : _edgeId(edgeId), BaseBinaryEdge<3, Vec3_d, LandmarkPointVertex, ShotVertex>() {}
 

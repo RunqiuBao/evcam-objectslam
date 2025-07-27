@@ -92,7 +92,8 @@ void KeyFrame::ReplaceOneObservedLandmark(std::shared_ptr<LandMark> oldLandmark,
 
 Mat44_t KeyFrame::GetKeyframePoseInWorld() {
     std::lock_guard<std::mutex> lock(_mtxKeyframePose);
-    return _poseCurrentFrameInWorld;}
+    return _poseCurrentFrameInWorld;
+}
 
 void KeyFrame::SetKeyframePoseInWorld(const Mat44_t& poseCurrentFrameInWorld) {
     std::lock_guard<std::mutex> lock(_mtxKeyframePose);

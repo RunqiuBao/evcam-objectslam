@@ -99,18 +99,21 @@ void camera::CameraBase::CreateThreeDDetections(
         float X, Y;
         this->ProjectPointTo3DByDepth((*pMatchedLeftCamDetection)._esitmated3DDepth, (*pMatchedLeftCamDetection)._centerX, (*pMatchedLeftCamDetection)._centerY, X, Y);
         Vec3_t objectCenterInRefFrame(X, Y, (*pMatchedLeftCamDetection)._esitmated3DDepth);
-        std::vector<Vec3_t> facetCornersInRefFrame;
-        // get facet corners in 3D
-        for (int indexCorner=0; indexCorner < 4; indexCorner++){
-            float corner_x = (*pMatchedLeftCamDetection)._facetCorners[indexCorner][0];
-            float corner_y = (*pMatchedLeftCamDetection)._facetCorners[indexCorner][1];
-            float corner_x_r = (*pMatchedRightCamDetection)._facetCorners[indexCorner][0];
-            float depthCorner = this->TriangulateDepthInStereoCamera(corner_x - corner_x_r);
-            this->ProjectPointTo3DByDepth(depthCorner, corner_x, corner_y, X, Y);
-            Vec3_t cornerInRefFrame(X, Y, depthCorner);
-            facetCornersInRefFrame.push_back(cornerInRefFrame);
+        std::vector<Vec3_t> vertices3DInRefFrame;
+        // get keypoints in 3D
+        int numKeypoints = pMatchedLeftCamDetection->_keypts.size();
+        assert(numKeypoints == pMatchedRightCamDetection->_keypts.size());
+        for (int indexKeypoint=0; indexKeypoint < numKeypoints; indexKeypoint++){
+            float keypt_x = (*pMatchedLeftCamDetection)._keypts[indexKeypoint][0];
+            float keypt_y = (*pMatchedLeftCamDetection)._keypts[indexKeypoint][1];
+            float keypt_x_r = (*pMatchedRightCamDetection)._keypts[indexKeypoint][0];
+            float depth = this->TriangulateDepthInStereoCamera(keypt_x - keypt_x_r);
+            this->ProjectPointTo3DByDepth(depth, keypt_x, keypt_y, X, Y);
+            Vec3_t keypointInRefFrame(X, Y, depth);
+            vertices3DInRefFrame.push_back(keypointInRefFrame);
         }
 
+        float horizontalSize = pMatchedLeftCamDetection->_bWidth * pMatchedLeftCamDetection->_esitmated3DDepth / _kk(0, 0);
         ThreeDDetection new3DDetection(
             objectCenterInRefFrame,
             detectionID,
@@ -118,8 +121,9 @@ void camera::CameraBase::CreateThreeDDetections(
             pMatchedLeftCamDetection->_detectionScore,
             pMatchedLeftCamDetection,
             pMatchedRightCamDetection,
-            facetCornersInRefFrame,
-            pMatchedLeftCamDetection->_pObjectInfo
+            vertices3DInRefFrame,
+            pMatchedLeftCamDetection->_pObjectInfo,
+            horizontalSize
         );
         threeDDetections.push_back(new3DDetection);
         threeDPoints.push_back(objectCenterInRefFrame);

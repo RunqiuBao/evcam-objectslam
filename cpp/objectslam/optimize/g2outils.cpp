@@ -10,8 +10,12 @@ namespace optimize {
 namespace g2outils {
 
 static ::g2o::SE3Quat ConvertToG2oSE3(const Mat44_d& campose) {
-    const Mat33_d rot = campose.block<3, 3>(0, 0);
-    const Vec3_d trans = campose.block<3, 1>(0, 3);
+    Mat33_d rot;
+    rot << campose(0, 0), campose(0, 1), campose(0, 2),
+           campose(1, 0), campose(1, 1), campose(1, 2),
+           campose(2, 0), campose(2, 1), campose(2, 2);
+    Vec3_d trans;
+    trans << campose(0, 3), campose(1, 3), campose(2, 3);
     return ::g2o::SE3Quat{rot, trans};
 }
 

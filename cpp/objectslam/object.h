@@ -55,14 +55,16 @@ public:
 class TwoDBoundingBox {
 
 public:
+    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
     float _centerX;
     float _centerY;
     float _bWidth;
     float _bHeight;
     float _esitmated3DDepth;
     float _detectionScore;
+    bool _hasFacet;
     std::vector<Vec2_t> _keypts;
-    std::vector<Vec2_t> _facetCorners;  // from topleft corner in clockwise direction.
+    std::vector<Vec2_t> _vertices2D;  // from topleft corner in clockwise direction.
     std::shared_ptr<object::ObjectBase> _pObjectInfo;
 
     TwoDBoundingBox(
@@ -72,7 +74,9 @@ public:
         const float bHeight,
         const std::shared_ptr<object::ObjectBase> pObjectInfo,
         const float detectionScore,
-        const std::vector<Vec2_t> facetCorners
+        const std::vector<Vec2_t> vertices2D,
+        const std::vector<Vec2_t> keypts,
+        const bool hasFacet
     );
 
     void Set3DDepth(const float distance){_esitmated3DDepth = distance;}
@@ -85,9 +89,9 @@ public:
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
     unsigned int _cameraID;
     Vec3_t _objectCenterInRefFrame;  // Note: use center->keypt vector to express orientation. refFrame is the frame that observed this detection.
-    std::vector<Vec3_t> _facetCornersInRefFrame;
+    std::vector<Vec3_t> _vertices3DInRefFrame;
     Vec3_t _normalOfFacet;
-    bool hasFacet;
+    bool _hasFacet;
 
     float _horizontalSize;  // diameter of the cylinder.
     int _detectionID;
@@ -103,8 +107,9 @@ public:
         const float detectionScore,
         const  std::shared_ptr<TwoDBoundingBox> pLeftBbox,
         const  std::shared_ptr<TwoDBoundingBox> pRightBbox,
-        const std::vector<Vec3_t> facetCornersInRefFrame,
-        const std::shared_ptr<object::ObjectBase> pObjectInfo
+        const std::vector<Vec3_t> vertices3DInRefFrame,
+        const std::shared_ptr<object::ObjectBase> pObjectInfo,
+        const float horizontalSize
     )
     : _objectCenterInRefFrame(objectCenterInRefFrame),
       _detectionID(detectionID),
@@ -112,21 +117,31 @@ public:
       _detectionScore(detectionScore),
       _pLeftBbox(pLeftBbox),
       _pRightBbox(pRightBbox),
-      _facetCornersInRefFrame(facetCornersInRefFrame),
-      _pObjectInfo(pObjectInfo)
+      _vertices3DInRefFrame(vertices3DInRefFrame),  // is not hasFacet, vertices3DInRefFrame has two keypoints, {top, center}
+      _pObjectInfo(pObjectInfo),
+      _horizontalSize(horizontalSize)
     {
-        if (_facetCornersInRefFrame.size() > 0){
-            Vec3_t c1c4 = facetCornersInRefFrame[3] - facetCornersInRefFrame[0];
-            Vec3_t c1c2 = facetCornersInRefFrame[1] - facetCornersInRefFrame[0];
+        if (pLeftBbox->_hasFacet && pRightBbox->_hasFacet){
+            assert(_vertices3DInRefFrame.size() >= 3);
+            Vec3_t c1c3 = _vertices3DInRefFrame[2] - _vertices3DInRefFrame[0];
+            Vec3_t c1c2 = _vertices3DInRefFrame[1] - _vertices3DInRefFrame[0];
 
-            _normalOfFacet = c1c4.cross(c1c2);
+            _normalOfFacet = c1c3.cross(c1c2);
             _normalOfFacet /= _normalOfFacet.norm();
-            _horizontalSize = (facetCornersInRefFrame[0] - facetCornersInRefFrame[1]).norm();
-            hasFacet = true;
+            _hasFacet = true;
         }
         else{
-            hasFacet = false;
+            // vertices3DInRefFrame has two keypoints, {top, center}
+            assert(_vertices3DInRefFrame.size() == 2);
+            int numBoundingCylinderVerticesHalfSide = 4;
+            Eigen::MatrixXf boundingVertices3DInLandmark = GetVerticesOf3DBoundingCylinderForObject(numBoundingCylinderVerticesHalfSide, horizontalSize, vertices3DInRefFrame[1], vertices3DInRefFrame[0]);
+            // add bounding vertices to _vertices3DInRefFrame
+            for (int indexVertex = 0; indexVertex < numBoundingCylinderVerticesHalfSide * 2; indexVertex++){
+                _vertices3DInRefFrame.push_back(boundingVertices3DInLandmark.col(indexVertex));
+            }
+            _hasFacet = false;
         }
+
     }
 
     ThreeDDetection(){}  // default constructor.
@@ -138,19 +153,29 @@ public:
         _detectionScore = other._detectionScore;
         _pLeftBbox = other._pLeftBbox;
         _pRightBbox = other._pRightBbox;
-        _facetCornersInRefFrame = other._facetCornersInRefFrame;
+        _vertices3DInRefFrame = other._vertices3DInRefFrame;
         _horizontalSize = other._horizontalSize;
         _pObjectInfo = other._pObjectInfo;
-        _normalOfFacet = other._normalOfFacet;
-
+        _hasFacet = other._hasFacet;
+        if (!_hasFacet){
+            int numBoundingCylinderVerticesHalfSide = 4;
+            Eigen::MatrixXf boundingVertices3DInLandmark = GetVerticesOf3DBoundingCylinderForObject(numBoundingCylinderVerticesHalfSide, _horizontalSize, _vertices3DInRefFrame[1], _vertices3DInRefFrame[0]);
+            // add bounding vertices to _vertices3DInRefFrame
+            for (int indexVertex = 0; indexVertex < numBoundingCylinderVerticesHalfSide * 2; indexVertex++){
+                _vertices3DInRefFrame.push_back(boundingVertices3DInLandmark.col(indexVertex));
+            }
+        }
+        else{
+            _normalOfFacet = other._normalOfFacet;
+        }
     }
 
-    const Eigen::MatrixXf GetFacetCornersInEigen(){
-        Eigen::MatrixXf mFacetCorners(3, 4);
-        for (int indexCorner=0; indexCorner < 4; indexCorner++){
-            mFacetCorners.col(indexCorner) = _facetCornersInRefFrame[indexCorner];
+    const Eigen::MatrixXf GetVertices3DInEigen(){
+        Eigen::MatrixXf mVertices3D(3, _vertices3DInRefFrame.size());
+        for (int indexCorner=0; indexCorner < _vertices3DInRefFrame.size(); indexCorner++){
+            mVertices3D.col(indexCorner) = _vertices3DInRefFrame[indexCorner];
         }
-        return mFacetCorners;
+        return mVertices3D;
     }
 
 };
@@ -158,6 +183,7 @@ public:
 class RefObject {
 
 public:
+    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
     ThreeDDetection _detection;
     int _refObjectIDInKeyframe;
 

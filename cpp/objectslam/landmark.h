@@ -17,9 +17,10 @@ public:
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
     LandMark(
         const Mat44_t poseLandmarkInWorld,
-        const std::vector<Vec3_t> facetCornersInLandmark,
+        const std::vector<Vec3_t> vertices3DInLandmark,
         const float horizontalSize,
-        const std::shared_ptr<object::ObjectBase> pObjectInfo
+        const std::shared_ptr<object::ObjectBase> pObjectInfo,
+        const bool hasFacet
     );
 
     std::map<std::shared_ptr<KeyFrame>, unsigned int> GetObservations() {
@@ -40,27 +41,27 @@ public:
 
     Mat44_t GetLandmarkPoseInWorld();
 
-    Vec3_t GetOneFacetCornerInWorld(size_t indexCorner) const;
+    Vec3_t GetOneVertex3DInWorld(size_t indexVertex) const;
 
-    const Eigen::MatrixXf GetFacetCornersInLandmark() {
-        Eigen::MatrixXf mFacetCorners(4, 3);
-        for (int indexCorner=0; indexCorner < 4; indexCorner++){
-            mFacetCorners.row(indexCorner) = _facetCornersInLandmark[indexCorner];
+    const Eigen::MatrixXf GetVertices3DInLandmark() {
+        Eigen::MatrixXf mVertices3D(_vertices3DInLandmark.size(), 3);
+        for (int indexVertex=0; indexVertex < _vertices3DInLandmark.size(); indexVertex++){
+            mVertices3D.row(indexVertex) = _vertices3DInLandmark[indexVertex];
         }
-        return mFacetCorners;
+        return mVertices3D;
     }
 
     void SetLandmarkPoseInWorld(const Mat44_t& poseLandmarkInWorld);
 
-    void SetFacetCornersInLandmark(const std::vector<Vec3_t>& facetCornersInLandmark);
+    void SetVertices3DInLandmark(const std::vector<Vec3_t>& vertices3DInLandmark);
 
     void SetLandmarkSize(const float observedHeight, const float horizontalSize);
 
-    static void ComputeLandmarkPoseInWorldByFacet(
+    static void ComputeLandmarkPoseInWorldByVertices3D(
         const std::shared_ptr<KeyFrame> pRefKeyFrame,
         const std::shared_ptr<RefObject> pRefObjInKeyFrame,
         Mat44_t& poseLandmarkInWorld,
-        std::vector<Vec3_t>& facetCornersInLandmark
+        std::vector<Vec3_t>& vertices3DInLandmark
     );
 
     // ------------------- member variables --------------------------
@@ -75,12 +76,13 @@ public:
 
     float _horizontalSize;
     float _observedHeight;
+    bool _hasFacet;
 
 private:
     std::map<std::shared_ptr<KeyFrame>, unsigned int> _observations_indices;  //Note: uint is the refOject index in this keyframe.
 
     Mat44_t _poseLandmarkInWorld;
-    std::vector<Vec3_t> _facetCornersInLandmark;
+    std::vector<Vec3_t> _vertices3DInLandmark;
 
     float _bestDetectionScore;  // if detection score becomes better, update landmark pose and corners.
     bool _bIsToDelete;

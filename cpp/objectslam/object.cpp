@@ -63,10 +63,20 @@ ObjectBase::ObjectBase(const std::string objectName)
 
 } // end of namespace object
 
-TwoDBoundingBox::TwoDBoundingBox(const float x, const float y, const float bWidth, const float bHeight, const std::shared_ptr<object::ObjectBase> pObjectInfo, const float detectionScore, const std::vector<Vec2_t> facetCorners)
-:_centerX(x), _centerY(y), _bWidth(bWidth), _bHeight(bHeight), _pObjectInfo(pObjectInfo), _detectionScore(detectionScore), _facetCorners(facetCorners)
+TwoDBoundingBox::TwoDBoundingBox(
+    const float x,
+    const float y,
+    const float bWidth,
+    const float bHeight,
+    const std::shared_ptr<object::ObjectBase> pObjectInfo,
+    const float detectionScore,
+    const std::vector<Vec2_t> vertices2D,
+    const std::vector<Vec2_t> keypts,
+    const bool hasFacet
+)
+:_centerX(x), _centerY(y), _bWidth(bWidth), _bHeight(bHeight), _pObjectInfo(pObjectInfo), _detectionScore(detectionScore), _vertices2D(vertices2D), _keypts(keypts), _hasFacet(hasFacet)
 {
-    TDO_LOG_DEBUG_FORMAT("created 2d bbox for object %s with a facet! confidence: %f",  pObjectInfo->_objectName % detectionScore);
+    TDO_LOG_DEBUG_FORMAT("created 2d bbox (facet %d) for object %s! confidence: %f", hasFacet % pObjectInfo->_objectName % detectionScore);
 }
 
 }  // end of eventobjectslam

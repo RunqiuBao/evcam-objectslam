@@ -410,7 +410,7 @@ bool FrameTracker::DoRelocalizeFromMap(Frame& currentFrame, const Frame& lastFra
     camera::CameraBase& camInstance = (*_pRefKeyframe->_pCamera);
     for (int indexVisibleLandmark=0; indexVisibleLandmark < visibleLandmarks.size(); indexVisibleLandmark++){
         std::shared_ptr<LandMark> pOneLandmark = visibleLandmarks[indexVisibleLandmark];
-        Eigen::MatrixXf transformedVerticesInWorld = mathutils::TransformPoints<Eigen::MatrixXf>(pOneLandmark->GetLandmarkPoseInWorld(), pOneLandmark->GetFacetCornersInLandmark());
+        Eigen::MatrixXf transformedVerticesInWorld = mathutils::TransformPoints<Eigen::MatrixXf>(pOneLandmark->GetLandmarkPoseInWorld(), pOneLandmark->GetVertices3DInLandmark());
         Eigen::MatrixXf transformedVerticesInCamera = mathutils::TransformPoints<Eigen::MatrixXf>((_pRefKeyframe->GetKeyframePoseInWorld()).inverse(), transformedVerticesInWorld);
         std::vector<cv::Point> oneLandmarkPoints2D = mathutils::ProjectPoints3DToPoints2D(transformedVerticesInCamera, camInstance);
         cv::Mat oneLandmarkPoseMask = mathutils::Draw2DHullMaskFrom2DPointsSet(oneLandmarkPoints2D, imgHeight, imgWidth);
@@ -421,7 +421,7 @@ bool FrameTracker::DoRelocalizeFromMap(Frame& currentFrame, const Frame& lastFra
         int indexLargestOverlap = -1;
         float largestIoU = -1;
         for (ThreeDDetection& currentDetection : currentFrame._threeDDetections){
-            std::vector<cv::Point> points2DCV = mathutils::ProjectPoints3DToPoints2D(currentDetection.GetFacetCornersInEigen(), camInstance);
+            std::vector<cv::Point> points2DCV = mathutils::ProjectPoints3DToPoints2D(currentDetection.GetVertices3DInEigen(), camInstance);
             cv::Mat currentDetectionPoseMask = mathutils::Draw2DHullMaskFrom2DPointsSet(points2DCV, imgHeight, imgWidth);
             cv::Mat overlaps, unions;
             cv::bitwise_and(oneLandmarkPoseMask, currentDetectionPoseMask, overlaps);
@@ -545,7 +545,7 @@ bool FrameTracker::DoDenseAlignmentBasedTrack(Frame& currentFrame, const Frame& 
     camera::CameraBase myStereoCamera = *_camera;
     std::vector<TwoDBoundingBox> leftCamProjections_ref, rightCamProjections_ref, leftCamProjections, rightCamProjections;
     for (std::shared_ptr<RefObject> refObject : refObjects){
-        Eigen::MatrixXf transformedVertices = mathutils::TransformPoints<Eigen::MatrixXf>(lastFrame.GetPose().inverse(), refObject->_detection.GetFacetCornersInEigen());
+        Eigen::MatrixXf transformedVertices = mathutils::TransformPoints<Eigen::MatrixXf>(lastFrame.GetPose().inverse(), refObject->_detection.GetVertices3DInEigen());
         std::vector<cv::Point> poionts2DCV = mathutils::ProjectPoints3DToPoints2D(transformedVertices, myStereoCamera);
         cv::Mat refObjectPoseMask = mathutils::Draw2DHullMaskFrom2DPointsSet(poionts2DCV, myStereoCamera._rows, myStereoCamera._cols);
 
@@ -555,7 +555,7 @@ bool FrameTracker::DoDenseAlignmentBasedTrack(Frame& currentFrame, const Frame& 
         cv::Mat currentDetectionPoseMask_Best;
         ThreeDDetection currentDetection_Best;
         for (ThreeDDetection& currentDetection : currentFrame._threeDDetections){
-            std::vector<cv::Point> points2DCV = mathutils::ProjectPoints3DToPoints2D(currentDetection.GetFacetCornersInEigen(), myStereoCamera);
+            std::vector<cv::Point> points2DCV = mathutils::ProjectPoints3DToPoints2D(currentDetection.GetVertices3DInEigen(), myStereoCamera);
             cv::Mat currentDetectionPoseMask = mathutils::Draw2DHullMaskFrom2DPointsSet(points2DCV, myStereoCamera._rows, myStereoCamera._cols);
             cv::Mat overlaps, unions;
             cv::bitwise_and(refObjectPoseMask, currentDetectionPoseMask, overlaps);
@@ -585,7 +585,9 @@ bool FrameTracker::DoDenseAlignmentBasedTrack(Frame& currentFrame, const Frame& 
                 bboxCurrObjProj.height,
                 refObject->_detection._pObjectInfo,
                 -1.,  // Note: not used.
-                std::vector<Vec2_t>()  // Note: not used.
+                std::vector<Vec2_t>(),  // Note: not used.
+                std::vector<Vec2_t>(),  // Note: not used.
+                false  // Note: not used.
             )));
             float disparityCurr = currentDetection_Best._pLeftBbox->_centerX - currentDetection_Best._pRightBbox->_centerX;
             rightCamProjections.push_back(std::move(TwoDBoundingBox(
@@ -595,7 +597,9 @@ bool FrameTracker::DoDenseAlignmentBasedTrack(Frame& currentFrame, const Frame& 
                 bboxCurrObjProj.height,
                 refObject->_detection._pObjectInfo,
                 -1.,  // Note: not used.
-                std::vector<Vec2_t>()  // Note: not used.
+                std::vector<Vec2_t>(),  // Note: not used.
+                std::vector<Vec2_t>(),  // Note: not used.
+                false
             )));
             // generate new bbox for ref projections
             std::vector<std::vector<cv::Point>> refObjectContours;
@@ -609,7 +613,9 @@ bool FrameTracker::DoDenseAlignmentBasedTrack(Frame& currentFrame, const Frame& 
                     bboxRefObjProj.height,
                     refObject->_detection._pObjectInfo,
                     -1.,  // Note: not used.
-                    std::vector<Vec2_t>()  // Note: not used.
+                    std::vector<Vec2_t>(),  // Note: not used.
+                    std::vector<Vec2_t>(),  // Note: not used.
+                    false  // Note: not used.
                 )));
                 float disparityRefObj = refObject->_detection._pLeftBbox->_centerX - refObject->_detection._pRightBbox->_centerX;
                 rightCamProjections_ref.push_back(std::move(TwoDBoundingBox(
@@ -619,7 +625,9 @@ bool FrameTracker::DoDenseAlignmentBasedTrack(Frame& currentFrame, const Frame& 
                     bboxRefObjProj.height,
                     refObject->_detection._pObjectInfo,
                     -1.,  // Note: not used.
-                    std::vector<Vec2_t>()  // Note: not used.
+                    std::vector<Vec2_t>(),  // Note: not used.
+                    std::vector<Vec2_t>(),  // Note: not used.
+                    false
                 )));
             }
         }
@@ -662,14 +670,14 @@ bool FrameTracker::DoDenseAlignmentBasedTrack(Frame& currentFrame, const Frame& 
         cv::Mat debugRefAfterTransform = cv::Mat::zeros(myStereoCamera._rows, myStereoCamera._cols, CV_8UC1);
         Mat44_t currInRefTransform = lastFrame.GetPose() * velocity;
         for (std::shared_ptr<RefObject> refObject : refObjects){
-            Eigen::MatrixXf transformedVertices = mathutils::TransformPoints<Eigen::MatrixXf>(currInRefTransform.inverse(), refObject->_detection.GetFacetCornersInEigen());
+            Eigen::MatrixXf transformedVertices = mathutils::TransformPoints<Eigen::MatrixXf>(currInRefTransform.inverse(), refObject->_detection.GetVertices3DInEigen());
             std::vector<cv::Point> poionts2DCV = mathutils::ProjectPoints3DToPoints2D(transformedVertices, myStereoCamera);
             cv::Mat refObjectPoseMask = mathutils::Draw2DHullMaskFrom2DPointsSet(poionts2DCV, myStereoCamera._rows, myStereoCamera._cols);
             cv::bitwise_or(refObjectPoseMask, debugRefAfterTransform, debugRefAfterTransform);
         }
         cv::Mat debugCurrDets = cv::Mat::zeros(myStereoCamera._rows, myStereoCamera._cols, CV_8UC1);
         for (ThreeDDetection& currentDetection : currentFrame._threeDDetections){
-            std::vector<cv::Point> points2DCV = mathutils::ProjectPoints3DToPoints2D(currentDetection.GetFacetCornersInEigen(), myStereoCamera);
+            std::vector<cv::Point> points2DCV = mathutils::ProjectPoints3DToPoints2D(currentDetection.GetVertices3DInEigen(), myStereoCamera);
             cv::Mat currentDetectionPoseMask = mathutils::Draw2DHullMaskFrom2DPointsSet(points2DCV, myStereoCamera._rows, myStereoCamera._cols);
             cv::bitwise_or(currentDetectionPoseMask, debugCurrDets, debugCurrDets);
         }
@@ -693,7 +701,7 @@ bool FrameTracker::DoDenseAlignmentBasedTrack(Frame& currentFrame, const Frame& 
 
         cv::Mat debugRefBeforeTransform = cv::Mat::zeros(myStereoCamera._rows, myStereoCamera._cols, CV_8UC1);
         for (std::shared_ptr<RefObject> refObject : refObjects){
-            Eigen::MatrixXf transformedVertices = refObject->_detection.GetFacetCornersInEigen();
+            Eigen::MatrixXf transformedVertices = refObject->_detection.GetVertices3DInEigen();
             std::vector<cv::Point> poionts2DCV = mathutils::ProjectPoints3DToPoints2D(transformedVertices, myStereoCamera);
             cv::Mat refObjectPoseMask = mathutils::Draw2DHullMaskFrom2DPointsSet(poionts2DCV, myStereoCamera._rows, myStereoCamera._cols);
             cv::bitwise_or(refObjectPoseMask, debugRefBeforeTransform, debugRefBeforeTransform);
@@ -747,7 +755,7 @@ bool FrameTracker::DoFacetBasedTrack(Frame& currentFrame, const Frame& lastFrame
     cv::Mat displayRefObjects(myStereoCamera._rows, myStereoCamera._cols, CV_8UC1, cv::Scalar(0));
     cv::Mat displayDetections(myStereoCamera._rows, myStereoCamera._cols, CV_8UC1, cv::Scalar(0));
     for (std::shared_ptr<RefObject> refObject : refObjects){
-        Eigen::MatrixXf transformedVertices = mathutils::TransformPoints<Eigen::MatrixXf>((lastFrame.GetPose() * velocity).inverse(), refObject->_detection.GetFacetCornersInEigen());
+        Eigen::MatrixXf transformedVertices = mathutils::TransformPoints<Eigen::MatrixXf>((lastFrame.GetPose() * velocity).inverse(), refObject->_detection.GetVertices3DInEigen());
         std::vector<cv::Point> points2DCV = mathutils::ProjectPoints3DToPoints2D(transformedVertices, myStereoCamera);
         cv::Mat refObjectPoseMask = mathutils::Draw2DHullMaskFrom2DPointsSet(points2DCV, myStereoCamera._rows, myStereoCamera._cols);
 
@@ -760,7 +768,7 @@ bool FrameTracker::DoFacetBasedTrack(Frame& currentFrame, const Frame& lastFrame
         cv::Mat currentDetectionPoseMask_Best;
         ThreeDDetection currentDetection_Best;
         for (ThreeDDetection& currentDetection : currentFrame._threeDDetections){
-            std::vector<cv::Point> points2DCV = mathutils::ProjectPoints3DToPoints2D(currentDetection.GetFacetCornersInEigen(), myStereoCamera);
+            std::vector<cv::Point> points2DCV = mathutils::ProjectPoints3DToPoints2D(currentDetection.GetVertices3DInEigen(), myStereoCamera);
             cv::Mat currentDetectionPoseMask = mathutils::Draw2DHullMaskFrom2DPointsSet(points2DCV, myStereoCamera._rows, myStereoCamera._cols);
             cv::Mat overlaps, unions;
             cv::bitwise_and(refObjectPoseMask, currentDetectionPoseMask, overlaps);
@@ -827,9 +835,9 @@ bool FrameTracker::DoFacetBasedTrack(Frame& currentFrame, const Frame& lastFrame
         imagePoints.reserve(4);
         imagePointsRef.reserve(4);
         // current corners 3D
-        const Eigen::MatrixXf mCurrFacetCorners3D = currentFrame._threeDDetections[indexCorrespondingDetection].GetFacetCornersInEigen();
-        std::vector<Vec2_t> currFacetCorners2D = currentFrame._threeDDetections[indexCorrespondingDetection]._pLeftBbox->_facetCorners;
-        std::vector<Vec2_t> refFacetCorners2D = refObjects[indexRefObject]->_detection._pLeftBbox->_facetCorners;
+        const Eigen::MatrixXf mCurrFacetCorners3D = currentFrame._threeDDetections[indexCorrespondingDetection].GetVertices3DInEigen();
+        std::vector<Vec2_t> currFacetCorners2D = currentFrame._threeDDetections[indexCorrespondingDetection]._pLeftBbox->_vertices2D;
+        std::vector<Vec2_t> refFacetCorners2D = refObjects[indexRefObject]->_detection._pLeftBbox->_vertices2D;
         for (int indexCorner=0; indexCorner<4; indexCorner++) {
             cv::Point3f point3D(
                 mCurrFacetCorners3D(0, indexCorner),
@@ -890,7 +898,6 @@ bool FrameTracker::DoFacetBasedTrack(Frame& currentFrame, const Frame& lastFrame
     }
 
     return isSuccess;
-
 }
 
 bool FrameTracker::DoMotionBasedTrack(Frame& currentFrame, const Frame& lastFrame, Mat44_t& velocity, const bool isDebug) const{
@@ -903,7 +910,7 @@ bool FrameTracker::DoMotionBasedTrack(Frame& currentFrame, const Frame& lastFram
     cv::Mat displayRefObjects(myStereoCamera._rows, myStereoCamera._cols, CV_8UC1, cv::Scalar(0));
     cv::Mat displayDetections(myStereoCamera._rows, myStereoCamera._cols, CV_8UC1, cv::Scalar(0));
     for (std::shared_ptr<RefObject> refObject : refObjects){
-        Eigen::MatrixXf transformedVertices = mathutils::TransformPoints<Eigen::MatrixXf>((lastFrame.GetPose() * velocity).inverse(), refObject->_detection.GetFacetCornersInEigen());
+        Eigen::MatrixXf transformedVertices = mathutils::TransformPoints<Eigen::MatrixXf>((lastFrame.GetPose() * velocity).inverse(), refObject->_detection.GetVertices3DInEigen());
         std::vector<cv::Point> points2DCV = mathutils::ProjectPoints3DToPoints2D(transformedVertices, myStereoCamera);
         cv::Mat refObjectPoseMask = mathutils::Draw2DHullMaskFrom2DPointsSet(points2DCV, myStereoCamera._rows, myStereoCamera._cols);
 
@@ -916,7 +923,7 @@ bool FrameTracker::DoMotionBasedTrack(Frame& currentFrame, const Frame& lastFram
         cv::Mat currentDetectionPoseMask_Best;
         ThreeDDetection currentDetection_Best;
         for (ThreeDDetection& currentDetection : currentFrame._threeDDetections){
-            std::vector<cv::Point> points2DCV = mathutils::ProjectPoints3DToPoints2D(currentDetection.GetFacetCornersInEigen(), myStereoCamera);
+            std::vector<cv::Point> points2DCV = mathutils::ProjectPoints3DToPoints2D(currentDetection.GetVertices3DInEigen(), myStereoCamera);
             cv::Mat currentDetectionPoseMask = mathutils::Draw2DHullMaskFrom2DPointsSet(points2DCV, myStereoCamera._rows, myStereoCamera._cols);
             cv::Mat overlaps, unions;
             cv::bitwise_and(refObjectPoseMask, currentDetectionPoseMask, overlaps);
@@ -1231,12 +1238,12 @@ void FrameTracker::CreateNewLandmarks(std::shared_ptr<KeyFrame> pRefKeyFrame, st
     cv::Mat displayVisibleLdms((*pRefKeyFrame->_pCamera)._rows, (*pRefKeyFrame->_pCamera)._cols, CV_8UC1, cv::Scalar(0));
     for (int indexRefObject=0; indexRefObject < pRefKeyFrame->_refObjects.size(); indexRefObject++){
         std::shared_ptr<RefObject> pRefObject = pRefKeyFrame->_refObjects[indexRefObject];
-        TDO_LOG_DEBUG("baodebug pRefObject->_detection.GetFacetCornersInEigen(): \n" << pRefObject->_detection.GetFacetCornersInEigen());
-        std::vector<cv::Point> refObjectPoints2D = mathutils::ProjectPoints3DToPoints2D(pRefObject->_detection.GetFacetCornersInEigen(), (*pRefKeyFrame->_pCamera));
+        TDO_LOG_DEBUG("baodebug pRefObject->_detection.GetVertices3DInEigen(): \n" << pRefObject->_detection.GetVertices3DInEigen());
+        std::vector<cv::Point> refObjectPoints2D = mathutils::ProjectPoints3DToPoints2D(pRefObject->_detection.GetVertices3DInEigen(), (*pRefKeyFrame->_pCamera));
         cv::Mat refObjectPoseMask = mathutils::Draw2DHullMaskFrom2DPointsSet(refObjectPoints2D, (*pRefKeyFrame->_pCamera)._rows, (*pRefKeyFrame->_pCamera)._cols);
         for (int indexVisibleLandmark=0; indexVisibleLandmark < visibleLandmarks.size(); indexVisibleLandmark++){
             std::shared_ptr<LandMark> pOneLandmark = visibleLandmarks[indexVisibleLandmark];
-            Eigen::MatrixXf transformedVerticesInWorld = mathutils::TransformPoints<Eigen::MatrixXf>(pOneLandmark->GetLandmarkPoseInWorld(), pOneLandmark->GetFacetCornersInLandmark());
+            Eigen::MatrixXf transformedVerticesInWorld = mathutils::TransformPoints<Eigen::MatrixXf>(pOneLandmark->GetLandmarkPoseInWorld(), pOneLandmark->GetVertices3DInLandmark());
             Eigen::MatrixXf transformedVerticesInCamera = mathutils::TransformPoints<Eigen::MatrixXf>((pRefKeyFrame->GetKeyframePoseInWorld()).inverse(), transformedVerticesInWorld);
             std::vector<cv::Point> oneLandmarkPoints2D = mathutils::ProjectPoints3DToPoints2D(transformedVerticesInCamera, (*pRefKeyFrame->_pCamera));
             cv::Mat oneLandmarkPoseMask = mathutils::Draw2DHullMaskFrom2DPointsSet(oneLandmarkPoints2D, (*pRefKeyFrame->_pCamera)._rows, (*pRefKeyFrame->_pCamera)._cols);
@@ -1279,21 +1286,21 @@ void FrameTracker::CreateNewLandmarks(std::shared_ptr<KeyFrame> pRefKeyFrame, st
             if (distancesObjectToClosestLandmark[indexRefObject] > distanceThreshold){  // if within certain physical distance, still create correspondence.
                 // if not correspondence, create landmark.
                 Mat44_t poseLandmarkInWorld;
-                Vec3_t facetNormalInLandmark(0, 0, 1);
-                std::vector<Vec3_t> facetCornersInLandmark;
-                LandMark::ComputeLandmarkPoseInWorldByFacet(
+                std::vector<Vec3_t> vertices3DInLandmark;
+                LandMark::ComputeLandmarkPoseInWorldByVertices3D(
                     pRefKeyFrame,
                     pRefObject,
                     poseLandmarkInWorld,
-                    facetCornersInLandmark
+                    vertices3DInLandmark
                 );
 
                 std::shared_ptr<object::ObjectBase> pObjectInfo = pRefObject->_detection._pObjectInfo;
                 std::shared_ptr<LandMark> pOneLandmark = std::make_shared<LandMark>(
                     poseLandmarkInWorld,
-                    facetCornersInLandmark,
+                    vertices3DInLandmark,
                     pRefObject->_detection._horizontalSize,
-                    pObjectInfo
+                    pObjectInfo,
+                    pRefObject->_detection._hasFacet
                 );
                 pOneLandmark->AddObservation(pRefKeyFrame, indexRefObject);
                 pMapDb->AddLandMark(pOneLandmark);
