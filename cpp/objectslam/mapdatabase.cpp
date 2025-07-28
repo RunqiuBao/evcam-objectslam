@@ -207,6 +207,7 @@ void MapDataBase::MergeLandmarkCluster(std::vector<std::shared_ptr<LandMark>> on
     for (size_t indexLandmark = 0; indexLandmark < oneCluster.size(); indexLandmark++) {
         if (indexLandmark != indexBestLandmark) {
             for (auto pKeyframe_indexRefObj : oneCluster[indexLandmark]->GetObservations()) {
+                oneCluster[indexBestLandmark]->AddObservation(pKeyframe_indexRefObj.first, pKeyframe_indexRefObj.second);
                 oneCluster[indexLandmark]->DeleteThis();
                 pKeyframe_indexRefObj.first->ReplaceOneObservedLandmark(oneCluster[indexLandmark], oneCluster[indexBestLandmark]);
             }
