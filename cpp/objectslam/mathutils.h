@@ -18,7 +18,7 @@ namespace eventobjectslam {
 namespace mathutils {
 
 template<typename ValueType>
-Eigen::Matrix<ValueType, 4, 4> FixRxRz(const Eigen::Matrix<ValueType, 4, 4>& pose) {
+Eigen::Matrix<ValueType, 4, 4> FixRxRzAndY(const Eigen::Matrix<ValueType, 4, 4>& pose) {
     std::cout << "Input pose: \n" << pose << std::endl;
     Eigen::Matrix<ValueType, 4, 4> fixedPose = pose;
     Eigen::Matrix<ValueType, 3, 3> rotMat = fixedPose.template block<3, 3>(0, 0);
@@ -29,6 +29,7 @@ Eigen::Matrix<ValueType, 4, 4> FixRxRz(const Eigen::Matrix<ValueType, 4, 4>& pos
     }
     Eigen::AngleAxis<ValueType> aaRy(Ry, Eigen::Matrix<ValueType, 3, 1>::UnitY());
     fixedPose.template block<3, 3>(0, 0) = aaRy.toRotationMatrix();
+    fixedPose(1, 3) = 0;
     std::cout << "eulerY: " << Ry << ", output pose: \n" << fixedPose << std::endl;
     return fixedPose;
 }

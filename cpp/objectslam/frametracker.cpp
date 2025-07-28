@@ -511,7 +511,7 @@ bool FrameTracker::DoRelocalizeFromMap(Frame& currentFrame, const Frame& lastFra
         Mat44_t currentFrameInWorld, currentFrameInRefKeyFrame;
         TrackWithPnP(objectPoints, imagePoints, cameraMatrix, distCoeffs, maxPoseError, currentFrameInWorld);
         currentFrameInRefKeyFrame = (_pRefKeyframe->GetKeyframePoseInWorld()).inverse() * currentFrameInWorld;
-        currentFrameInRefKeyFrame = mathutils::FixRxRz<float>(currentFrameInRefKeyFrame);
+        currentFrameInRefKeyFrame = mathutils::FixRxRzAndY<float>(currentFrameInRefKeyFrame);
         TDO_LOG_DEBUG("relocalization result current Frame in refKeyFrame: \n" << currentFrameInRefKeyFrame);
         velocity = lastFrame.GetPose().inverse() * currentFrameInRefKeyFrame;
         if (
@@ -663,7 +663,7 @@ bool FrameTracker::DoDenseAlignmentBasedTrack(Frame& currentFrame, const Frame& 
     }
     Mat44_d currInPreviousTransform;
     _pPoseOptimizer->EstimatePose(refDepth, refImage, leftCamProjections_ref, currDepth, currImage, currInPreviousTransform);
-    currInPreviousTransform = mathutils::FixRxRz<double>(currInPreviousTransform);
+    currInPreviousTransform = mathutils::FixRxRzAndY<double>(currInPreviousTransform);
     TDO_LOG_DEBUG("currInPreviousTransform by dense align: \n" << currInPreviousTransform);
     Mat44_t velocity = currInPreviousTransform.cast<float>();
     float rotAngleDenseAlignDeg = Eigen::AngleAxisf(velocity.block<3, 3>(0, 0)).angle() * 180.0 / M_PI;
@@ -1056,7 +1056,7 @@ bool FrameTracker::DoMotionBasedTrack(Frame& currentFrame, const Frame& lastFram
 
         Mat44_t currentFrameInRefKeyFrame;
         TrackWithPnP(objectPoints, imagePoints, cameraMatrix, distCoeffs, maxPoseError, currentFrameInRefKeyFrame);
-        currentFrameInRefKeyFrame = mathutils::FixRxRz<float>(currentFrameInRefKeyFrame);
+        currentFrameInRefKeyFrame = mathutils::FixRxRzAndY<float>(currentFrameInRefKeyFrame);
         TDO_LOG_DEBUG("currentCameraInRefKeyFrame: \n" << currentFrameInRefKeyFrame);
         velocity = lastFrame.GetPose().inverse() * currentFrameInRefKeyFrame;  // Note: think like there is a point in last frame, first transform it to keyframe then to current frame.
         float rotAngleDeg = Eigen::AngleAxisf(velocity.block<3, 3>(0, 0)).angle() * 180.0 / M_PI;
