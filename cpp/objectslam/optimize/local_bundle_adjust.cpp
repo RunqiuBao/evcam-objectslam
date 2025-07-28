@@ -34,6 +34,9 @@ void optimize::DoLocalBA(std::shared_ptr<KeyFrame> pCurrKeyframe, bool* const bF
         if (pLocalKeyFrame->IsToDelete()){
             continue;
         }
+        if (pLocalKeyFrame->_keyFrameID == 0) {
+            continue;  // Note: skip the first keyframe.
+        }
         ids_localKeyframes[pLocalKeyFrame->_keyFrameID] = pLocalKeyFrame;
     }
 #endif
@@ -58,6 +61,25 @@ void optimize::DoLocalBA(std::shared_ptr<KeyFrame> pCurrKeyframe, bool* const bF
             ids_localLandmarks[localLandmark_index.first->_landmarkID] = localLandmark_index.first;
 
         }
+    }
+    if (ids_localLandmarks.size() == 0) {
+        TDO_LOG_ERROR_FORMAT("No local landmarks found. Current keyframe is the first keyframe: %d", pCurrKeyframe->_keyFrameID);
+        const std::map<std::shared_ptr<LandMark>, unsigned int> landmarks_indices = pCurrKeyframe->GetObservedLandmarks();
+        for (auto& localLandmark_index : landmarks_indices) {
+            if (!localLandmark_index.first) {
+                TDO_LOG_ERROR("got empty plandmark, something is super wrong!");
+                continue;
+            }
+            if (localLandmark_index.first->IsToDelete()) {
+                continue;
+            }
+
+            // avoid repeat
+            if (ids_localLandmarks.count(localLandmark_index.first->_landmarkID)) {
+                continue;
+            }
+            ids_localLandmarks[localLandmark_index.first->_landmarkID] = localLandmark_index.first;
+        } 
     }
 
     // collect fixed keyframes: the first keyframe, or keyframes that observe local landmarks but NOT in local keyframes.
