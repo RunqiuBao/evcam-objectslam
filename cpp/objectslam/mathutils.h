@@ -17,22 +17,47 @@ namespace eventobjectslam {
 
 namespace mathutils {
 
+/**
+ * Returns: Ry in range of [-pi, pi], std::atan2 is used. Note Ry will be positive when aZ is in the first quadrant when Y pointing into the plane.
+ */
+template<typename ValueType>
+ValueType GetRyFromPose(const Eigen::Matrix<ValueType, 4, 4>& pose) {
+    Eigen::Matrix<ValueType, 3, 1> aZ = pose.template block<3, 1>(0, 2);
+    aZ(1, 0) = 0.0;  // set Y direction to 0, because we want to get Ry from world XZ plane.
+    Eigen::Matrix<ValueType, 3, 1> waZ(0, 0, 1);
+    Eigen::Matrix<ValueType, 3, 1> waY(0, 1, 0);
+    ValueType Ry = std::atan2(waY.dot(waZ.cross(aZ)), aZ.dot(waZ));
+    return Ry;
+}
+
 template<typename ValueType>
 Eigen::Matrix<ValueType, 4, 4> FixRxRzAndY(const Eigen::Matrix<ValueType, 4, 4>& pose) {
     std::cout << "Input pose: \n" << pose << std::endl;
     Eigen::Matrix<ValueType, 4, 4> fixedPose = pose;
-    Eigen::Matrix<ValueType, 3, 3> rotMat = fixedPose.template block<3, 3>(0, 0);
-    Eigen::Matrix<ValueType, 3, 1> euler = rotMat.eulerAngles(1, 2, 0);
-    ValueType Ry = euler[0];
-    if (Ry > M_PI / 2) {
-        Ry -= M_PI;
-    }
+    double Ry = GetRyFromPose(fixedPose);
     Eigen::AngleAxis<ValueType> aaRy(Ry, Eigen::Matrix<ValueType, 3, 1>::UnitY());
     fixedPose.template block<3, 3>(0, 0) = aaRy.toRotationMatrix();
     fixedPose(1, 3) = 0;
     std::cout << "eulerY: " << Ry << ", output pose: \n" << fixedPose << std::endl;
     return fixedPose;
 }
+
+// template<typename ValueType>
+// Eigen::Matrix<ValueType, 4, 4> FixRxRzAndY(const Eigen::Matrix<ValueType, 4, 4>& pose) {
+    // std::cout << "Input pose: \n" << pose << std::endl;
+    // Eigen::Matrix<ValueType, 4, 4> fixedPose = pose;
+    // Eigen::Matrix<ValueType, 3, 3> rotMat = fixedPose.template block<3, 3>(0, 0);
+    // Eigen::Matrix<ValueType, 3, 1> euler = rotMat.eulerAngles(1, 2, 0);
+    // ValueType Ry = euler[0];
+    // if (Ry > M_PI / 2) {
+        // Ry -= M_PI;
+    // }
+    // Eigen::AngleAxis<ValueType> aaRy(Ry, Eigen::Matrix<ValueType, 3, 1>::UnitY());
+    // fixedPose.template block<3, 3>(0, 0) = aaRy.toRotationMatrix();
+    // fixedPose(1, 3) = 0;
+    // std::cout << "eulerY: " << Ry << ", output pose: \n" << fixedPose << std::endl;
+    // return fixedPose;
+// }
 
 void EstimatePlaneFromPoints(
     const std::vector<Vec3_t> points,
