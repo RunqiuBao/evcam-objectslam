@@ -32,6 +32,7 @@ using Mat44_d = Eigen::Matrix4d;
 typedef Eigen::Vector3f Vec3_t;
 typedef Eigen::Vector2f Vec2_t;
 typedef Eigen::Vector3d Vec3_d;
+typedef Eigen::Vector2d Vec2_d;
 typedef VecR_d<5> Vec5_d;
 typedef VecR_d<4> Vec4_d;
 typedef VecR_d<6> Vec6_d;
