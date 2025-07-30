@@ -58,6 +58,21 @@ void optimize::DoLocalBA(std::shared_ptr<KeyFrame> pCurrKeyframe, bool* const bF
             }
             ids_localLandmarks[localLandmark_index.first->_landmarkID] = localLandmark_index.first;
 
+            /* ---------------------------------- Debug code ----------------------------------*/
+            const std::map<std::shared_ptr<KeyFrame>, unsigned int> observations_indices = localLandmark_index.first->GetObservations();
+            bool bFoundCurrKeyframe = false;
+            for (auto& pKeyframe_index : observations_indices) {
+                if (pKeyframe_index.first->_keyFrameID == pCurrKeyframe->_keyFrameID) {
+                    TDO_LOG_ERROR_FORMAT("Found curr keyframe (%d) in observs of landmark (%d).", pCurrKeyframe->_keyFrameID % localLandmark_index.first->_landmarkID);
+                    bFoundCurrKeyframe = true;
+                    break;
+                }
+            }
+            if (!bFoundCurrKeyframe) {
+                TDO_LOG_ERROR_FORMAT("!!!did not find curr keyframe (%d) in observs of landmark (%d).", pCurrKeyframe->_keyFrameID % localLandmark_index.first->_landmarkID);
+            }
+            /* ---------------------------------- Debug code ----------------------------------*/
+
         }
     }
     if (ids_localLandmarks.size() == 0) {

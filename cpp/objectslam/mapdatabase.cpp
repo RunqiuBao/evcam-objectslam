@@ -134,7 +134,7 @@ void MapDataBase::PruneOneKeyframe(std::shared_ptr<KeyFrame> pOneKeyframeToPrune
         return;
     }
     size_t indexClosest = 0;
-    std::shared_ptr<KeyFrame> pKeyframeNeighbor;
+    std::shared_ptr<KeyFrame> pKeyframeNeighbor; // the landmarks and frames in pOneKeyframeToPrune will be moved to stay under this pKeyframeNeighbor.
     float distance = std::numeric_limits<float>::max();
     for (size_t indexCovisible = 0; indexCovisible < rangeToSearchNeighbor; indexCovisible++) {
         float newDistance = (covisibilities[indexCovisible]->GetKeyframePoseInWorld().block(0, 3, 3, 1) - pOneKeyframeToPrune->GetKeyframePoseInWorld().block(0, 3, 3, 1)).norm();
@@ -152,6 +152,8 @@ void MapDataBase::PruneOneKeyframe(std::shared_ptr<KeyFrame> pOneKeyframeToPrune
         TDO_LOG_CRITICAL_FORMAT("can't find a good neighbor. pruneKeyframe failed. (distance: %f / %f)", distance % maxDistanceToPrune);
         return;  // prune failed.
     }
+
+    /* start pruning */
     pKeyframeNeighbor->_bShouldNotPrune = true;  // hack to keep keyframes distributed.
     for (auto pFrame_id : pOneKeyframeToPrune->_vFrames_ids) {
         Mat44_t pose_nk = pKeyframeNeighbor->GetKeyframePoseInWorld().inverse() * pOneKeyframeToPrune->GetKeyframePoseInWorld();
