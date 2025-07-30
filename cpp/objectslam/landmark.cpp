@@ -107,7 +107,7 @@ void LandMark::ComputeLandmarkPoseInWorldByVertices3D(
     }
 
     int numVertices3DOfRefObj = pRefObjInKeyFrame->_detection._vertices3DInRefFrame.size();
-    numVertices3DOfRefObj = (pRefObjInKeyFrame->_detection._hasFacet)?numVertices3DOfRefObj:2;
+    numVertices3DOfRefObj = (pRefObjInKeyFrame->_detection._hasFacet)?numVertices3DOfRefObj:2;  // Note: 2 is for color cone.
     Mat44_t poseWorldInLandmark = poseLandmarkInWorld.inverse();
     for (int indexCorner=0; indexCorner < numVertices3DOfRefObj; indexCorner++){
         Vec3_t vertexInWorld = pRefKeyFrame->GetKeyframePoseInWorld().block<3, 3>(0, 0) * pRefObjInKeyFrame->_detection._vertices3DInRefFrame[indexCorner] + pRefKeyFrame->GetKeyframePoseInWorld().col(3).head<3>();
