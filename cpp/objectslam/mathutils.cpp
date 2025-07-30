@@ -35,6 +35,22 @@ float mathutils::ComputeDistanceFromPlane(const pcl::ModelCoefficients::Ptr plan
     return distance;
 }
 
+float mathutils::GetMedian(std::vector<float>& vec) {
+    if (vec.empty()) {
+        throw std::invalid_argument("Vector is empty");
+    }
+
+    std::sort(vec.begin(), vec.end());
+    size_t size = vec.size();
+    if (size % 2 == 0) {
+        // Even number of elements
+        return (vec[size / 2 - 1] + vec[size / 2]) / 2.0f;
+    } else {
+        // Odd number of elements
+        return vec[size / 2];
+    }
+}
+
 void mathutils::EstimatePlaneFromPoints(
     const std::vector<Vec3_t> points,
     const float planeDistanceThreshold,

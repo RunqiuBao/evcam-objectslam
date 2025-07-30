@@ -9,6 +9,15 @@
 
 #include <opencv2/opencv.hpp>
 
+template <typename K, typename V>
+std::map<V, K> GetInverseMap(const std::map<K, V>& originalMap) {
+    std::map<V, K> invertedMap;
+    for (const auto& pair : originalMap) {
+        invertedMap[pair.second] = pair.first;
+    }
+    return invertedMap;
+}
+
 namespace eventobjectslam{
 
 class Frame;  // Note: due to mutual reference.
@@ -62,6 +71,13 @@ public:
     std::map<std::shared_ptr<LandMark>, unsigned int> GetObservedLandmarks() {
         std::lock_guard<std::mutex> lock(_mtxLandmarks);
         return _observedLandmarks_indicesRefObj;
+    }
+
+    std::shared_ptr<LandMark> GetLandmarkByRefObjIndex(const unsigned int refObjIndex){
+        std::lock_guard<std::mutex> lock(_mtxLandmarks);
+        // Note: construct the inverse map every time, in case landmarks got updated.
+        std::map<unsigned int, std::shared_ptr<LandMark>> indicesRefObj_observedLandmarks = GetInverseMap(_observedLandmarks_indicesRefObj);
+        return indicesRefObj_observedLandmarks[refObjIndex];
     }
     
     std::set<unsigned int> GetProfileOfObservedLandmarks() const;

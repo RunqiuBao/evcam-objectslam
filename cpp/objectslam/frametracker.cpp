@@ -1035,14 +1035,51 @@ bool FrameTracker::DoMotionBasedTrack(Frame& currentFrame, const Frame& lastFram
 
     bool isSuccess = false;
     // Estimate current frame pose using PnP
-    if (objectPoints.size() < 4){
-        // track failed
-        velocity = Eigen::Matrix4f::Identity();
-        currentFrame.SetPose(lastFrame.GetPose() * velocity);
-        TDO_LOG_DEBUG("track fail. not updating camera pose.");
-        // not updating cameraInWorld
+    if (objectPoints.size() <= 4) {
+        indexRefObject = 0;
+        // too few detections, only update camera translation
+        std::vector<float> xUpdates, zUpdates;
+        Mat44_t currFrameMomentumPose = _pRefKeyframe->GetKeyframePoseInWorld() * lastFrame.GetPose() * velocity.inverse();
+        for (int indexCorrespondingDetection : indicesCorrespondingDetecton){
+            if (indexCorrespondingDetection < 0){
+                indexRefObject++;
+                continue;
+            }
+            std::shared_ptr<LandMark> pTheLandmark = _pRefKeyframe->GetLandmarkByRefObjIndex(indexRefObject);
+            if (pTheLandmark && !pTheLandmark->IsToDelete()){
+                Mat44_t landmarkPose = pTheLandmark->GetLandmarkPoseInWorld();
+                Mat44_t landmarkInCurrFramePose = currFrameMomentumPose.inverse() * landmarkPose;
+                Vec3_t detection3DBodyCenterInCurrFrame = currentFrame._threeDDetections[indexCorrespondingDetection]._objectCenterInRefFrame;
+                float zUpdate = detection3DBodyCenterInCurrFrame(2) - landmarkInCurrFramePose(2, 3);
+                zUpdate = zUpdate > maxPoseError? 0 : zUpdate;
+                float xUpdate = detection3DBodyCenterInCurrFrame(0) - landmarkInCurrFramePose(0, 3);
+                xUpdate = xUpdate > maxPoseError? 0 : xUpdate;
+                zUpdates.push_back(zUpdate);
+                xUpdates.push_back(xUpdate);
+            }
+        }
+        float xUpdate = xUpdates.size() > 0 ? mathutils::GetMedian(xUpdates) : 0;
+        float zUpdate = zUpdates.size() > 0 ? mathutils::GetMedian(zUpdates) : 0;
+        currFrameMomentumPose(2, 3) = currFrameMomentumPose(2, 3) - zUpdate;
+        currFrameMomentumPose(0, 3) = currFrameMomentumPose(0, 3) - xUpdate;
+        velocity = lastFrame.GetPose().inverse() * _pRefKeyframe->GetKeyframePoseInWorld().inverse() * currFrameMomentumPose;
+        if (
+            velocity.block(0, 3, 3, 1).norm() > maxPoseError
+            || xUpdates.size() == 0
+        ){
+            TDO_LOG_DEBUG("track fail. only " << objectPoints.size() << " ref objects. and velocity from landmark translation is " << velocity.block(0, 3, 3, 1));
+            velocity = Eigen::Matrix4f::Identity();
+            currentFrame.SetPose(lastFrame.GetPose() * velocity);
+        }
+        else{
+            currentFrame.SetPose(_pRefKeyframe->GetKeyframePoseInWorld().inverse() * currFrameMomentumPose);
+            currentFrame._isTracked = true;
+            currentFrame._detectionIDsOfCorrespondingRefObjects = indicesCorrespondingDetecton;
+            TDO_LOG_DEBUG("track succeeded from landmark translation. (velocity:\n" << velocity);
+            isSuccess = true;
+        }
     }
-    else{
+    else {
         // Camera intrinsic matrix (3x3)
         cv::Mat cameraMatrix = cv::Mat::eye(3, 3, CV_64F);
         cameraMatrix.at<double>(0, 0) = static_cast<double>(myStereoCamera._kk(0, 0));

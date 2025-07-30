@@ -59,6 +59,8 @@ Eigen::Matrix<ValueType, 4, 4> FixRxRzAndY(const Eigen::Matrix<ValueType, 4, 4>&
     // return fixedPose;
 // }
 
+float GetMedian(std::vector<float>& vec);
+
 void EstimatePlaneFromPoints(
     const std::vector<Vec3_t> points,
     const float planeDistanceThreshold,
