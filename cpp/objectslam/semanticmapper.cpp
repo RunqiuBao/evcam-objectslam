@@ -45,6 +45,11 @@ void SemanticMapper::_DoPruneKeyframes(std::shared_ptr<KeyFrame> pCurrKeyfrm, co
         if (pKeyframe->_keyFrameID == 0){  // Note: do not delete the first keyframe.
             continue;
         }
+        if (pKeyframe->_keyFrameID >= pCurrKeyfrm->_keyFrameID) {
+            TDO_LOG_DEBUG_FORMAT("do not prune covisibility keyframes (%d) that are newer than currKeyframe (%d).", pKeyframe->_keyFrameID % pCurrKeyfrm->_keyFrameID);
+            continue;  // Note: do not delete the current keyframe.
+        }
+        TDO_LOG_CRITICAL_FORMAT("pruning pKeyframe (%d), _pCurrKeyfrm is (%d)", pKeyframe->_keyFrameID % _pCurrKeyfrm->_keyFrameID);
         _pMapDb->PruneOneKeyframe(pKeyframe);
     }
     TDO_LOG_CRITICAL_FORMAT("NumKeyframes in database after: %d", _pMapDb->GetAllKeyframes().size());
