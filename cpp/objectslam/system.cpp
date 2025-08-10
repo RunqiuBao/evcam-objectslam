@@ -272,6 +272,17 @@ void LoadDetections(
     }
 }
 
+const bool CheckDetectionsConfidences(const std::vector<ThreeDDetection>& threeDDetections, const float confidenceThreshold) {
+    int count = 0;
+    for (const ThreeDDetection& detection : threeDDetections) {
+        if (detection._pLeftBbox->_detectionScore < confidenceThreshold || detection._pRightBbox->_detectionScore < confidenceThreshold) {
+            TDO_LOG_DEBUG_FORMAT("%d-th Detection with score %f is below threshold.", count % detection._detectionScore);
+            return false;
+        }
+    }
+    return true;
+}
+
 // Mat44_t SLAMSystem::AppendStereoFrame(const cv::Mat& leftImg, const cv::Mat& rightImg, const double timestamp, const cv::Mat& maskImg) {
 //     // TODO:  need to form data::frame before give to tracker
 //     const Mat44_t cam_pose_cw = _frameTracker->TrackStereoImage(leftImg, rightImg, timestamp, maskImg);
@@ -332,7 +343,8 @@ const Mat44_t SLAMSystem::UpdateOneFrame(
 {
     int frameCount = static_cast<int>(_allFramesStack.size());
 
-    std::shared_ptr<Frame> pOneFrame = std::make_shared<Frame>(FrameType::Stereo, static_cast<double>(frameCount), _camera);
+    TDO_LOG_CRITICAL_FORMAT("UpdateOneFrame called with timestamp: %s", timestamp);
+    std::shared_ptr<Frame> pOneFrame = std::make_shared<Frame>(FrameType::Stereo, timestamp, _camera);
     _allFramesStack.push_back(pOneFrame);
 
     TDO_LOG_DEBUG_FORMAT("length of sDetection: %d", sDetections.size());
@@ -430,7 +442,10 @@ const Mat44_t SLAMSystem::UpdateOneFrame(
         
         // insert new key frame if detection increased than previous frame
         // if (isSuccess && (pOneFrame->_threeDDetections.size() > (*_pFrameStack.back())._threeDDetections.size())){
-        if (isSuccess && pOneFrame->_threeDDetections.size() >= 3 && (pOneFrame->_threeDDetections.size() > (*_pFrameStack.back())._threeDDetections.size())){
+        // Note: for keyframe, all the left & right detections need to have confidences larger than threshold.
+        const float keyframeDetectionConfidenceThreshold = 0.8;
+        const bool confidencesIsOkay = CheckDetectionsConfidences(pOneFrame->_threeDDetections, keyframeDetectionConfidenceThreshold);
+        if (isSuccess && confidencesIsOkay && pOneFrame->_threeDDetections.size() >= 3 && (pOneFrame->_threeDDetections.size() > (*_pFrameStack.back())._threeDDetections.size())){
             TDO_LOG_DEBUG_FORMAT("Last Keyframe(%d) contains %d frames.", _pKeyFrameStack.back()->_keyFrameID % _pKeyFrameStack.back()->_vFrames_ids.size());
             std::shared_ptr<KeyFrame> pOneKeyframe = std::make_shared<KeyFrame>(pOneFrame, _frameTracker->_pRefKeyframe->GetKeyframePoseInWorld(), _camera);
             _frameTracker->_pRefKeyframe = pOneKeyframe;
