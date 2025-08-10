@@ -3,6 +3,7 @@
 #include "optimize/g2outils.h"
 #include "mapdatabase.h"
 #include "mathutils.h"
+#include "frametracker.h"
 
 #include <unordered_map>
 
@@ -454,7 +455,14 @@ void optimize::DoLocalBA(std::shared_ptr<KeyFrame> pCurrKeyframe, bool* const bF
             auto pKeyfrmVtx = ids_keyfrmVtx[pLocalKeyfrm->_keyFrameID];
             TDO_LOG_DEBUG_FORMAT("updating pose of keyframe(%d)", pLocalKeyfrm->_keyFrameID);
             const Mat44_t newKeyframePoseInWorld = ReconstructNewCameraPoseInWorld(pKeyfrmVtx, pLocalKeyfrm->GetKeyframePoseInWorld());
+            Vec3_t translation_update = newKeyframePoseInWorld.block<3, 1>(0, 3) - pLocalKeyfrm->GetKeyframePoseInWorld().block<3, 1>(0, 3);
+            if (translation_update.norm() > maxPoseErrorBA) {
+                TDO_LOG_DEBUG_FORMAT("keyframe pose update too large (%f), skip updating keyframe(%d).",
+                                        translation_update.norm() % pLocalKeyfrm->_keyFrameID);
+                continue;
+            }
             pLocalKeyfrm->SetKeyframePoseInWorld(newKeyframePoseInWorld);
+
         }
 
         for (auto id_localLm : ids_localLandmarks) {
@@ -464,6 +472,7 @@ void optimize::DoLocalBA(std::shared_ptr<KeyFrame> pCurrKeyframe, bool* const bF
             Vec3_t landmarkCenterInWorld = landmarkPoseInWorld.block(0, 3, 3, 1);
             landmarkPoseInWorld.block(0, 3, 3, 1) = ReconstructNewPointInWorld(pLmVtx, landmarkCenterInWorld);
             TDO_LOG_DEBUG_FORMAT("updating pose of landmark(%d)", pLocalLm->_landmarkID);
+            // Vec3_t translation_update = landmarkPoseInWorld.block<3, 1>(0, 3) - pLocalLm->GetLandmarkPoseInWorld().block<3, 1>(0, 3);
             pLocalLm->SetLandmarkPoseInWorld(landmarkPoseInWorld);
         }
 
