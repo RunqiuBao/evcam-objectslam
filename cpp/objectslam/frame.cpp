@@ -11,11 +11,9 @@ namespace eventobjectslam {
 
 std::atomic<unsigned int> Frame::_nextID{0};
 
-Frame::Frame(const FrameType frameType, const double timestamp, const std::shared_ptr<camera::CameraBase> pCamera)
+Frame::Frame(const FrameType frameType, const std::string& timestamp, const std::shared_ptr<camera::CameraBase> pCamera)
 : _frameType(frameType), _timestamp(timestamp), _pCamera(pCamera), _isTracked(false), _frameID(_nextID++)
-{
-
-}
+{}
 
 static ThreeDPlane FitPlaneBySVD(std::vector<Eigen::Vector3f> pointsOnPlaneInliers){
     Eigen::MatrixXf mPointsOnPlane(3, pointsOnPlaneInliers.size());
@@ -40,7 +38,7 @@ static ThreeDPlane FitPlaneBySVD(std::vector<Eigen::Vector3f> pointsOnPlaneInlie
     ThreeDPlane planeModel = {centerPoint[0], centerPoint[1], centerPoint[2], normalPlane[0], normalPlane[1], normalPlane[2]};
     return planeModel;
 
-} 
+}
 
 static float ComputeAvgDistanceOfPointsToPlane(ThreeDPlane planeModel, std::vector<Eigen::Vector3f> pointsOnPlaneInliers){
     float averageDistance = 0.;

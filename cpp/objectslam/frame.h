@@ -22,7 +22,7 @@ class Frame {
 
 public:
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-    Frame(const FrameType frameType, const double timestamp, const std::shared_ptr<camera::CameraBase> pCamera);
+    Frame(const FrameType frameType, const std::string& timestamp, const std::shared_ptr<camera::CameraBase> pCamera);
 
     // ~Frame();
 
@@ -65,7 +65,7 @@ public:
     // matched 2D detections
     std::vector<std::shared_ptr<TwoDBoundingBox>> _matchedLeftCamDetections;  // Note: same order as _threeDDetections
     std::vector<std::shared_ptr<TwoDBoundingBox>> _matchedRightCamDetections;
-    double _timestamp;
+    std::string _timestamp;
 
     bool _isTracked = false; // Note: whether tracking succeeded or not on this frame.
 
