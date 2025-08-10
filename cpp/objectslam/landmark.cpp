@@ -41,6 +41,8 @@ void LandMark::AddObservation(std::shared_ptr<KeyFrame> pRefKeyFrame, unsigned i
     if (_observations_indices.size() == 1){
         // phase: initialization of this landmark.
         _bestDetectionScore = pRefKeyFrame->_refObjects[idx]->_detection._detectionScore;
+        // score is 1 / distance to camera
+        // _bestDetectionScore = 1.0f / pRefKeyFrame->_refObjects[idx]->_detection._objectCenterInRefFrame.norm();
     }
     else{
         float incomingDetectionScore = pRefKeyFrame->_refObjects[idx]->_detection._detectionScore;
