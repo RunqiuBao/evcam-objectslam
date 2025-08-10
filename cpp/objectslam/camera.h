@@ -10,6 +10,8 @@ namespace eventobjectslam{
 
 namespace camera{
 
+const float maxVisiableDistance = std::numeric_limits<float>::max(); // no limit for now.
+
 class CameraBase {
 
 public:

@@ -99,6 +99,10 @@ void camera::CameraBase::CreateThreeDDetections(
         float X, Y;
         this->ProjectPointTo3DByDepth((*pMatchedLeftCamDetection)._esitmated3DDepth, (*pMatchedLeftCamDetection)._centerX, (*pMatchedLeftCamDetection)._centerY, X, Y);
         Vec3_t objectCenterInRefFrame(X, Y, (*pMatchedLeftCamDetection)._esitmated3DDepth);
+        if (objectCenterInRefFrame(2) > maxVisiableDistance) {
+            TDO_LOG_DEBUG_FORMAT("Object center in ref frame is too far away: %f, skip this detection.", objectCenterInRefFrame(2));
+            continue;  // Note: skip detections that are too far away.
+        }
         std::vector<Vec3_t> vertices3DInRefFrame;
         // get keypoints in 3D
         int numKeypoints = pMatchedLeftCamDetection->_keypts.size();
