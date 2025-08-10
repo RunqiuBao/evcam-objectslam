@@ -457,7 +457,7 @@ bool FrameTracker::DoRelocalizeFromMap(Frame& currentFrame, const Frame& lastFra
             TDO_LOG_ERROR_FORMAT("Failed to create the folder: %s", debugRelocalPath.string());
             throw std::runtime_error("Debug");
         }
-        debugRelocalPath.append(mathutils::FillZeros(std::to_string(static_cast<int>(currentFrame._timestamp)), 6) + ".png");
+        debugRelocalPath.append(currentFrame._timestamp + ".png");
         cv::imwrite(debugRelocalPath.string() , debugRelocal);
     }
 
@@ -658,7 +658,7 @@ bool FrameTracker::DoDenseAlignmentBasedTrack(Frame& currentFrame, const Frame& 
             TDO_LOG_ERROR_FORMAT("Failed to create the folder: %s", debugTrackingPath.string());
             throw std::runtime_error("Debug");
         }
-        debugTrackingPath.append(mathutils::FillZeros(std::to_string(static_cast<int>(currentFrame._timestamp)), 6) + ".png");
+        debugTrackingPath.append(currentFrame._timestamp + ".png");
         cv::imwrite(debugTrackingPath.string() , debugTracking);
     }
     Mat44_d currInPreviousTransform;
@@ -699,7 +699,7 @@ bool FrameTracker::DoDenseAlignmentBasedTrack(Frame& currentFrame, const Frame& 
             TDO_LOG_ERROR_FORMAT("Failed to create the folder: %s", debugTrackingPath.string());
             throw std::runtime_error("Debug");
         }
-        debugTrackingPath.append(mathutils::FillZeros(std::to_string(static_cast<int>(currentFrame._timestamp)), 6) + ".png");
+        debugTrackingPath.append(currentFrame._timestamp + ".png");
         cv::imwrite(debugTrackingPath.string() , debugTracking);
 
         cv::Mat debugRefBeforeTransform = cv::Mat::zeros(myStereoCamera._rows, myStereoCamera._cols, CV_8UC1);
@@ -722,7 +722,7 @@ bool FrameTracker::DoDenseAlignmentBasedTrack(Frame& currentFrame, const Frame& 
             TDO_LOG_ERROR_FORMAT("Failed to create the folder: %s", debugTrackingPath.string());
             throw std::runtime_error("Debug");
         }
-        debugTrackingPath_before.append(mathutils::FillZeros(std::to_string(static_cast<int>(currentFrame._timestamp)), 6) + ".png");
+        debugTrackingPath_before.append(currentFrame._timestamp + ".png");
         cv::imwrite(debugTrackingPath_before.string() , debugTracking_before);
     }
     if (
@@ -816,7 +816,7 @@ bool FrameTracker::DoFacetBasedTrack(Frame& currentFrame, const Frame& lastFrame
             TDO_LOG_ERROR_FORMAT("Failed to create the folder: %s", debugTrackingPath.string());
             throw std::runtime_error("Debug");
         }
-        debugTrackingPath.append(mathutils::FillZeros(std::to_string(static_cast<int>(currentFrame._timestamp)), 6) + ".png");
+        debugTrackingPath.append(currentFrame._timestamp + ".png");
         cv::imwrite(debugTrackingPath.string() , debugTracking);
     }
 
@@ -971,7 +971,7 @@ bool FrameTracker::DoMotionBasedTrack(Frame& currentFrame, const Frame& lastFram
             TDO_LOG_ERROR_FORMAT("Failed to create the folder: %s", debugTrackingPath.string());
             throw std::runtime_error("Debug");
         }
-        debugTrackingPath.append(mathutils::FillZeros(std::to_string(static_cast<int>(currentFrame._timestamp)), 6) + ".png");
+        debugTrackingPath.append(currentFrame._timestamp + ".png");
         cv::imwrite(debugTrackingPath.string() , debugTracking);
     }
 
@@ -1220,7 +1220,7 @@ bool FrameTracker::Do2DTrackingBasedTrack(Frame& currentFrame, const Frame& last
             TDO_LOG_ERROR_FORMAT("Failed to create the folder: %s", debug2DTrackingPath.string());
             throw std::runtime_error(std::string("Error creating folder: ") + debug2DTrackingPath.string());
         }
-        debug2DTrackingPath.append(mathutils::FillZeros(std::to_string(static_cast<int>(currentFrame._timestamp)), 6) + ".png");
+        debug2DTrackingPath.append(currentFrame._timestamp + ".png");
         cv::imwrite(debug2DTrackingPath.string(), debugTracking);
         TDO_LOG_DEBUG_FORMAT("written testBinaryTracking debug image: %s", debug2DTrackingPath.string());
     }
