@@ -11,8 +11,11 @@
 
 #include <armadillo>
 
-const float minIoUToReject = 0.4f;  // used in tracking methods to build correspondences
-const float maxPoseError = 0.1f;  //  used in tracking methods to filter bad track
+const float minIoUToReject = 0.3f;  // used in tracking methods to build correspondences
+const float minIoUToRejectForCloseObject = 0.1f;
+const float distanceCloseEnough = 1.5f;
+const float maxPoseError = 0.12f;  //  used in tracking methods to filter bad track
+const float maxPoseErrorInX = 0.08f;
 const float maxPoseErrorBA = 0.2f;
 const float maxlandmarkErrorBA = 0.6f;
 const float maxRotationAngleDeg = 5.0f;  // used in tracking method to filter bad track
