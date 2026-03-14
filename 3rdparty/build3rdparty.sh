@@ -29,6 +29,18 @@ if [[ "$answer" == [yY] ]]; then
   make install)
 fi
 
+read -p "Do you want to build armadillo?(y/n)" answer
+if [[ "$answer" == [yY] ]]; then
+  # build armadillo
+  (cd armadillo-14
+  rm -r build/
+  mkdir -p build && cd build
+  mkdir -p armadilloinstall
+  cmake -DCMAKE_BUILD_TYPE=RELEASE -DCMAKE_INSTALL_PREFIX=../armadilloinstall/ ..
+  make
+  make install)
+fi
+
 read -p "Do you want to build opencv?(y/n)" answer
 if [[ "$answer" == [yY] ]]; then
   # build opencv
