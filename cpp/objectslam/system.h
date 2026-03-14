@@ -62,6 +62,9 @@ public:
 
     //! json node
     rapidjson::Document _jsonConfigNode;
+
+    //! tracker parameters loaded from "tracker" section of the config
+    TrackerParams _trackerParams;
 };
 
 class SLAMSystem {

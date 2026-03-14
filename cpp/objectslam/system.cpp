@@ -31,6 +31,18 @@ SystemConfig::SystemConfig(const std::string& configFilePath){
     );
     _jsonConfigNode.ParseStream(frs);
     fclose(fp);
+
+    if (_jsonConfigNode.HasMember("tracker")) {
+        const auto& t = _jsonConfigNode["tracker"];
+        if (t.HasMember("minIoUToReject"))            _trackerParams.minIoUToReject            = t["minIoUToReject"].GetFloat();
+        if (t.HasMember("minIoUToRejectForCloseObject")) _trackerParams.minIoUToRejectForCloseObject = t["minIoUToRejectForCloseObject"].GetFloat();
+        if (t.HasMember("distanceCloseEnough"))       _trackerParams.distanceCloseEnough       = t["distanceCloseEnough"].GetFloat();
+        if (t.HasMember("maxPoseError"))              _trackerParams.maxPoseError              = t["maxPoseError"].GetFloat();
+        if (t.HasMember("maxPoseErrorInX"))           _trackerParams.maxPoseErrorInX           = t["maxPoseErrorInX"].GetFloat();
+        if (t.HasMember("maxPoseErrorBA"))            _trackerParams.maxPoseErrorBA            = t["maxPoseErrorBA"].GetFloat();
+        if (t.HasMember("maxlandmarkErrorBA"))        _trackerParams.maxlandmarkErrorBA        = t["maxlandmarkErrorBA"].GetFloat();
+        if (t.HasMember("maxRotationAngleDeg"))       _trackerParams.maxRotationAngleDeg       = t["maxRotationAngleDeg"].GetFloat();
+    }
 }
 
 SystemConfig::SystemConfig(const SystemConfig& config){
@@ -42,7 +54,7 @@ SLAMSystem::SLAMSystem(const std::shared_ptr<SystemConfig>& cfg)
 :_cfg(cfg)
 {
     _pMapDb = std::make_shared<MapDataBase>();
-    _pMapper = std::make_unique<SemanticMapper>(_pMapDb);
+    _pMapper = std::make_unique<SemanticMapper>(_pMapDb, cfg->_trackerParams.maxPoseErrorBA);
 }
 
 void SLAMSystem::Startup() {
@@ -69,7 +81,7 @@ void SLAMSystem::InitializeCameraAndTracker(
     TDO_LOG_DEBUG_FORMAT("myStereoCamera imageWidth: %d", cols);
     nextFrameInCameraTransform = Eigen::Matrix4f::Identity();
 
-    _frameTracker = std::make_unique<FrameTracker>(_camera);
+    _frameTracker = std::make_unique<FrameTracker>(_camera, _cfg->_trackerParams);
     _frameTracker->_sStereoSequencePathForDebug = debugPath;  // To dump debug images.
 }
 

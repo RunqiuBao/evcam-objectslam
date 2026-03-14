@@ -11,7 +11,7 @@ class SemanticMapper {
 
 public:
     // Constructor
-    SemanticMapper(std::shared_ptr<MapDataBase> mapDb);
+    SemanticMapper(std::shared_ptr<MapDataBase> mapDb, const float maxPoseErrorBA = 0.2f);
 
     // Destructor
     ~SemanticMapper() = default;
@@ -45,6 +45,8 @@ private:
 
     //flag to abort local BA
     bool _abortLocalBA = false;
+
+    float _maxPoseErrorBA;
 
     // //! queue for keyframes
     // std::list<std::shared_ptr<KeyFrame>> _keyfrmsQueue;

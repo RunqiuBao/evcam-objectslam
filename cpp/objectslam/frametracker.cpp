@@ -428,7 +428,7 @@ bool FrameTracker::DoRelocalizeFromMap(Frame& currentFrame, const Frame& lastFra
             cv::bitwise_or(oneLandmarkPoseMask, currentDetectionPoseMask, unions);
             cv::Scalar sumOverlaps = cv::sum(overlaps);
             cv::Scalar sumUnions = cv::sum(unions);
-            if ((sumOverlaps[0] / sumUnions[0]) > largestIoU && (sumOverlaps[0] / sumUnions[0]) > minIoUToReject){
+            if ((sumOverlaps[0] / sumUnions[0]) > largestIoU && (sumOverlaps[0] / sumUnions[0]) > _params.minIoUToReject){
                 indexLargestOverlap = countDetection;
                 largestIoU = (sumOverlaps[0] / sumUnions[0]);
             }
@@ -509,13 +509,13 @@ bool FrameTracker::DoRelocalizeFromMap(Frame& currentFrame, const Frame& lastFra
         cv::Mat distCoeffs = cv::Mat::zeros(5, 1, CV_64F);
         // Set the appropriate values for the distCoeffs
         Mat44_t currentFrameInWorld, currentFrameInRefKeyFrame;
-        TrackWithPnP(objectPoints, imagePoints, cameraMatrix, distCoeffs, maxPoseError, currentFrameInWorld);
+        TrackWithPnP(objectPoints, imagePoints, cameraMatrix, distCoeffs, _params.maxPoseError, currentFrameInWorld);
         currentFrameInRefKeyFrame = (_pRefKeyframe->GetKeyframePoseInWorld()).inverse() * currentFrameInWorld;
         currentFrameInRefKeyFrame = mathutils::FixRxRzAndY<float>(currentFrameInRefKeyFrame);
         TDO_LOG_DEBUG("relocalization result current Frame in refKeyFrame: \n" << currentFrameInRefKeyFrame);
         velocity = lastFrame.GetPose().inverse() * currentFrameInRefKeyFrame;
         if (
-            velocity.block(0, 3, 3, 1).norm() > maxPoseError
+            velocity.block(0, 3, 3, 1).norm() > _params.maxPoseError
         )
         {
             // track failed
@@ -726,9 +726,9 @@ bool FrameTracker::DoDenseAlignmentBasedTrack(Frame& currentFrame, const Frame& 
         cv::imwrite(debugTrackingPath_before.string() , debugTracking_before);
     }
     if (
-        velocity.block(0, 3, 3, 1).norm() > maxPoseError ||
-        velocity(0, 3) > maxPoseErrorInX ||
-        std::abs(rotAngleDenseAlignDeg) > maxRotationAngleDeg ||
+        velocity.block(0, 3, 3, 1).norm() > _params.maxPoseError ||
+        velocity(0, 3) > _params.maxPoseErrorInX ||
+        std::abs(rotAngleDenseAlignDeg) > _params.maxRotationAngleDeg ||
         velocity.col(3).head<3>().norm() == 0  // Note: tracking completely failed.
     ){
         TDO_LOG_DEBUG("track by dense align fail. not updating camera pose. velocity is \n" << velocity << ", translation is " << velocity.block(0, 3, 3, 1) << ", rotations are " << rotAngleDenseAlignDeg);
@@ -779,7 +779,7 @@ bool FrameTracker::DoFacetBasedTrack(Frame& currentFrame, const Frame& lastFrame
             cv::bitwise_or(refObjectPoseMask, currentDetectionPoseMask, unions);
             cv::Scalar sumOverlaps = cv::sum(overlaps);
             cv::Scalar sumUnions = cv::sum(unions);
-            if ((sumOverlaps[0] / sumUnions[0]) > largestIoU && (sumOverlaps[0] / sumUnions[0]) > minIoUToReject){
+            if ((sumOverlaps[0] / sumUnions[0]) > largestIoU && (sumOverlaps[0] / sumUnions[0]) > _params.minIoUToReject){
                 indexLargestOverlap = countDetection;
                 largestIoU = (sumOverlaps[0] / sumUnions[0]);
                 currentDetectionPoseMask_Best = currentDetectionPoseMask;
@@ -877,7 +877,7 @@ bool FrameTracker::DoFacetBasedTrack(Frame& currentFrame, const Frame& lastFrame
         float rotAngleDeg = Eigen::AngleAxisf(velocity.block<3, 3>(0, 0)).angle() * 180.0 / M_PI;
         if (
             isHomographySuccess &&
-            velocity.block(0, 3, 3, 1).norm() < maxPoseError &&
+            velocity.block(0, 3, 3, 1).norm() < _params.maxPoseError &&
             std::abs(rotAngleDeg) < maxRotationAngleDeg
         ){
             currentFrame.SetPose(currentFrameInRefKeyFrame);
@@ -924,7 +924,7 @@ bool FrameTracker::DoMotionBasedTrack(Frame& currentFrame, const Frame& lastFram
     cv::Mat displayRefObjects(myStereoCamera._rows, myStereoCamera._cols, CV_8UC1, cv::Scalar(0));
     cv::Mat displayDetections(myStereoCamera._rows, myStereoCamera._cols, CV_8UC1, cv::Scalar(0));
     float distanceFarthestObject = GetDistanceToFarthestObject(currentFrame._threeDDetections);
-    float minIoUToRejectRT = (distanceFarthestObject < distanceCloseEnough)?minIoUToRejectForCloseObject:minIoUToReject;
+    float minIoUToRejectRT = (distanceFarthestObject < _params.distanceCloseEnough)?_params.minIoUToRejectForCloseObject:_params.minIoUToReject;
     for (std::shared_ptr<RefObject> refObject : refObjects){
         Eigen::MatrixXf transformedVertices = mathutils::TransformPoints<Eigen::MatrixXf>((lastFrame.GetPose() * velocity).inverse(), refObject->_detection.GetVertices3DInEigen());
         std::vector<cv::Point> points2DCV = mathutils::ProjectPoints3DToPoints2D(transformedVertices, myStereoCamera);
@@ -1064,9 +1064,9 @@ bool FrameTracker::DoMotionBasedTrack(Frame& currentFrame, const Frame& lastFram
                 Mat44_t landmarkInCurrFramePose = currFrameMomentumPose.inverse() * landmarkPose;
                 Vec3_t detection3DBodyCenterInCurrFrame = currentFrame._threeDDetections[indexCorrespondingDetection]._objectCenterInRefFrame;
                 float zUpdate = detection3DBodyCenterInCurrFrame(2) - landmarkInCurrFramePose(2, 3);
-                zUpdate = zUpdate > maxPoseError? 0 : zUpdate;
+                zUpdate = zUpdate > _params.maxPoseError? 0 : zUpdate;
                 float xUpdate = detection3DBodyCenterInCurrFrame(0) - landmarkInCurrFramePose(0, 3);
-                xUpdate = xUpdate > maxPoseError? 0 : xUpdate;
+                xUpdate = xUpdate > _params.maxPoseError? 0 : xUpdate;
                 zUpdates.push_back(zUpdate);
                 xUpdates.push_back(xUpdate);
             }
@@ -1077,8 +1077,8 @@ bool FrameTracker::DoMotionBasedTrack(Frame& currentFrame, const Frame& lastFram
         currFrameMomentumPose(0, 3) = currFrameMomentumPose(0, 3) - xUpdate;
         velocity = lastFrame.GetPose().inverse() * _pRefKeyframe->GetKeyframePoseInWorld().inverse() * currFrameMomentumPose;
         if (
-            velocity.block(0, 3, 3, 1).norm() > maxPoseError
-            || velocity(0, 3) > maxPoseErrorInX
+            velocity.block(0, 3, 3, 1).norm() > _params.maxPoseError
+            || velocity(0, 3) > _params.maxPoseErrorInX
             || xUpdates.size() == 0
         ){
             TDO_LOG_DEBUG("track fail. only " << objectPoints.size() << " ref objects. and velocity from landmark translation is " << velocity.block(0, 3, 3, 1));
@@ -1106,15 +1106,15 @@ bool FrameTracker::DoMotionBasedTrack(Frame& currentFrame, const Frame& lastFram
         // Set the appropriate values for the distCoeffs
 
         Mat44_t currentFrameInRefKeyFrame;
-        TrackWithPnP(objectPoints, imagePoints, cameraMatrix, distCoeffs, maxPoseError, currentFrameInRefKeyFrame);
+        TrackWithPnP(objectPoints, imagePoints, cameraMatrix, distCoeffs, _params.maxPoseError, currentFrameInRefKeyFrame);
         currentFrameInRefKeyFrame = mathutils::FixRxRzAndY<float>(currentFrameInRefKeyFrame);
         TDO_LOG_DEBUG("currentCameraInRefKeyFrame: \n" << currentFrameInRefKeyFrame);
         velocity = lastFrame.GetPose().inverse() * currentFrameInRefKeyFrame;  // Note: think like there is a point in last frame, first transform it to keyframe then to current frame.
         float rotAngleDeg = Eigen::AngleAxisf(velocity.block<3, 3>(0, 0)).angle() * 180.0 / M_PI;
         if (
-            velocity.block(0, 3, 3, 1).norm() > maxPoseError ||
-            velocity(0, 3) > maxPoseErrorInX ||
-            std::abs(rotAngleDeg) > maxRotationAngleDeg
+            velocity.block(0, 3, 3, 1).norm() > _params.maxPoseError ||
+            velocity(0, 3) > _params.maxPoseErrorInX ||
+            std::abs(rotAngleDeg) > _params.maxRotationAngleDeg
         ){
             TDO_LOG_DEBUG("track fail. not updating camera pose. velocity is \n" << velocity << ", translation is " << velocity.block(0, 3, 3, 1) << ", rotations are " << rotAngleDeg);
             // track failed
@@ -1259,10 +1259,10 @@ bool FrameTracker::Do2DTrackingBasedTrack(Frame& currentFrame, const Frame& last
         // Set the appropriate values for the distCoeffs
 
         Mat44_t currentFrameInRefKeyFrame;
-        TrackWithPnP(objectPoints, imagePoints, cameraMatrix, distCoeffs, maxPoseError, currentFrameInRefKeyFrame);
+        TrackWithPnP(objectPoints, imagePoints, cameraMatrix, distCoeffs, _params.maxPoseError, currentFrameInRefKeyFrame);
         TDO_LOG_DEBUG("currentCameraInWorld: \n" << currentFrameInRefKeyFrame);
         if (
-            currentFrameInRefKeyFrame.block(0, 3, 3, 1).norm() > maxPoseError
+            currentFrameInRefKeyFrame.block(0, 3, 3, 1).norm() > _params.maxPoseError
         ){
             // track failed
             velocity = Eigen::Matrix4f::Identity();

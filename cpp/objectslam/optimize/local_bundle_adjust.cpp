@@ -3,7 +3,6 @@
 #include "optimize/g2outils.h"
 #include "mapdatabase.h"
 #include "mathutils.h"
-#include "frametracker.h"
 
 #include <unordered_map>
 
@@ -14,7 +13,7 @@ TDO_LOGGER("objectslam.optimize.localBA")
 
 namespace eventobjectslam {
 
-void optimize::DoLocalBA(std::shared_ptr<KeyFrame> pCurrKeyframe, bool* const bForceStopFlag, const size_t numFirstIter, const size_t numSecondIter) {
+void optimize::DoLocalBA(std::shared_ptr<KeyFrame> pCurrKeyframe, bool* const bForceStopFlag, const size_t numFirstIter, const size_t numSecondIter, const float maxPoseErrorBA) {
     // -------- (1) --------
     // collect local/fixed keyframes, local landmark.
 

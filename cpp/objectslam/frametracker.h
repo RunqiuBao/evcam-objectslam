@@ -11,14 +11,16 @@
 
 #include <armadillo>
 
-const float minIoUToReject = 0.3f;  // used in tracking methods to build correspondences
-const float minIoUToRejectForCloseObject = 0.1f;
-const float distanceCloseEnough = 1.5f;
-const float maxPoseError = 0.12f;  //  used in tracking methods to filter bad track
-const float maxPoseErrorInX = 0.08f;
-const float maxPoseErrorBA = 0.2f;
-const float maxlandmarkErrorBA = 0.6f;
-const float maxRotationAngleDeg = 5.0f;  // used in tracking method to filter bad track
+struct TrackerParams {
+    float minIoUToReject = 0.3f;              // used in tracking methods to build correspondences
+    float minIoUToRejectForCloseObject = 0.1f;
+    float distanceCloseEnough = 1.5f;
+    float maxPoseError = 0.12f;               // used in tracking methods to filter bad track
+    float maxPoseErrorInX = 0.08f;
+    float maxPoseErrorBA = 0.2f;
+    float maxlandmarkErrorBA = 0.6f;
+    float maxRotationAngleDeg = 5.0f;         // used in tracking method to filter bad track
+};
 
 namespace eventobjectslam{
 
@@ -84,9 +86,11 @@ class FrameTracker {
 
 public:
     // constructor
-    FrameTracker(std::shared_ptr<camera::CameraBase> camera)
-    : _camera(camera), _pPoseOptimizer(std::make_shared<PoseOptimizer>(camera->_kk, camera->_baseline, 3))
+    FrameTracker(std::shared_ptr<camera::CameraBase> camera, const TrackerParams& params = TrackerParams{})
+    : _camera(camera), _params(params), _pPoseOptimizer(std::make_shared<PoseOptimizer>(camera->_kk, camera->_baseline, 3))
     {}
+
+    TrackerParams _params;
 
     bool DoDenseAlignmentBasedTrack(Frame& currentFrame, const Frame& lastFrame, const bool isDebug) const;
 

@@ -10,8 +10,8 @@ TDO_LOGGER("eventobjectslam.semanticmapper")
 
 namespace eventobjectslam {
 
-SemanticMapper::SemanticMapper(std::shared_ptr<MapDataBase> pMapDb)
-    :_pMapDb(pMapDb) {}
+SemanticMapper::SemanticMapper(std::shared_ptr<MapDataBase> pMapDb, const float maxPoseErrorBA)
+    :_pMapDb(pMapDb), _maxPoseErrorBA(maxPoseErrorBA) {}
 
 void SemanticMapper::SchedulePruneLandmarksTask(std::shared_ptr<KeyFrame> pTargetKeyframe) {
     TDO_LOG_DEBUG_FORMAT("scheduled landmark pruning in keyframe(%d)", pTargetKeyframe->_keyFrameID);
@@ -140,7 +140,7 @@ void SemanticMapper::Run() {
 
         _abortLocalBA = false;
         auto starttime = std::chrono::steady_clock::now();
-        optimize::DoLocalBA(_pCurrKeyfrm, &_abortLocalBA);
+        optimize::DoLocalBA(_pCurrKeyfrm, &_abortLocalBA, 5, 10, _maxPoseErrorBA);
         auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - starttime);
         TDO_LOG_DEBUG_FORMAT("one localBA(%d) task finished in %d milisec. keyframe (%d).", _countBA % duration.count() % _pCurrKeyfrm->_keyFrameID);
         _countBA++;
