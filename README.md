@@ -3,8 +3,16 @@ Estimate camera trajectory by stereo object detection in event cameras:<br>
 - Rapid camera motion tracking.
 - Object-level compact map.
 
-<img src="assets/evobjslam.gif" height="200"/>
-<img src="assets/seq0.gif" height="200"/>
+<table style="width: 100%;">
+  <tr>
+    <td>
+      <img src="assets/seq0.gif" height="200px">
+    </td>
+    <td>
+      <img src="assets/evobjslam.gif" height="200px">
+    </td>
+  </tr>
+</table>
 
 
 ## Installation
