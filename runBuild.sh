@@ -4,14 +4,15 @@ readonly YELLOW="\033[1;33m"
 readonly WHITE="\033[1;37m"
 readonly NC="\033[0m" # No Color
 
-INSTALL_PATH="/home/runqiu/code/event_camera_repo/tools/tool_eventbasedobjectslam/tdoinstall"
-LOG4CXX_LIB_PATH="/home/runqiu/code/event_camera_repo/tools/tool_eventbasedobjectslam/3rdparty/log4cxx/install/lib"
-RAPIDJSON_LIB_PATH="/home/runqiu/code/event_camera_repo/tools/tool_eventbasedobjectslam/3rdparty/rapidjson/rapidjsoninstall/lib"
-OPENCV4_LIB_PATH="/home/runqiu/code/event_camera_repo/tools/tool_eventbasedobjectslam/3rdparty/opencv/opencvinstall/lib"
-PANGOLIN_LIB_PATH="/home/runqiu/code/event_camera_repo/tools/tool_eventbasedobjectslam/3rdparty/Pangolin/pangolininstall/lib"
-G2O_LIB_PATH="/home/runqiu/code/event_camera_repo/tools/tool_eventbasedobjectslam/3rdparty/g2o/g2oinstall/lib"
-PCL_LIB_PATH="/home/runqiu/code/event_camera_repo/tools/tool_eventbasedobjectslam/3rdparty/pcl/pclinstall/lib"
-PYTHONPACKAGE_SRC_PATH="/home/runqiu/code/event_camera_repo/tools/tool_eventbasedobjectslam/python/src"
+SCRIPT_DIR="$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+INSTALL_PATH="${SCRIPT_DIR}/tdoinstall"
+LOG4CXX_LIB_PATH="${SCRIPT_DIR}/3rdparty/log4cxx/install/lib"
+RAPIDJSON_LIB_PATH="${SCRIPT_DIR}/3rdparty/rapidjson/rapidjsoninstall/lib"
+OPENCV4_LIB_PATH="${SCRIPT_DIR}/3rdparty/opencv/opencvinstall/lib"
+PANGOLIN_LIB_PATH="${SCRIPT_DIR}/3rdparty/Pangolin/pangolininstall/lib"
+G2O_LIB_PATH="${SCRIPT_DIR}/3rdparty/g2o/g2oinstall/lib"
+PCL_LIB_PATH="${SCRIPT_DIR}/3rdparty/pcl/pclinstall/lib"
+PYTHONPACKAGE_SRC_PATH="${SCRIPT_DIR}/python/src"
 isAddPaths=false
 isInstallPythonPackage=false
 
@@ -25,7 +26,7 @@ function display_help() {
     echo "Syntax: runBuild.bash [-h] [-i installpath] "
     echo "options:"
     echo "-h,    --help                     Display this help"
-    echo "-i,    --installpath              Define the path to install the library. By default is '/home/runqiu/code/event_camera_repo/tools/tool_eventbasedobjectslam/tdoinstall'"
+    echo "-i,    --installpath              Define the path to install the library. By default is '${INSTALL_PATH}'"
     echo "       --log4cxxlibpath           Define the path to the installed lib path of log4cxx. By default is ${LOG4CXX_LIB_PATH}"
     echo "       --rapidjsonlibpath         Define the path to the installed lib path of rapidjson. By default is ${RAPIDJSON_LIB_PATH}"
     echo "       --pangolinlibpath          Define the path to the installed lib path of Pangolin. By default is ${PANGOLIN_LIB_PATH}"
@@ -36,7 +37,7 @@ function display_help() {
     echo "-a,    --addpaths                 Add shared library paths to LD_LIBRARY_PATH. By default is false."
     echo
     echo -e "${GREEN}Example usages: ${NC}"
-    echo -e "${GREEN}  source runBuild.sh -a --installpythonpackage -i /home/runqiu/code/event_camera_repo/tools/tool_eventbasedobjectslam/tdoinstall ${NC}"
+    echo -e "${GREEN}  source runBuild.sh -a --installpythonpackage -i ${INSTALL_PATH} ${NC}"
     echo -e "${GREEN}  Note: source runBuild.sh at the first build to make addPaths global; -a to add shared libs paths to LD_LIBRARY_PATH ${NC}"
     echo -e "${GREEN}  Note: If you want to run executable in one terminal, need to source this script in that terminal. ${NC}"
 
