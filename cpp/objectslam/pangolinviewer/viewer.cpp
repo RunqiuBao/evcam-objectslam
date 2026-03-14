@@ -1,6 +1,6 @@
 #include "pangolinviewer/viewer.h"
 
-
+#include <algorithm>
 #include <logging.h>
 TDO_LOGGER("eventobjectslam.pangolinviewer.viewer")
 
@@ -9,11 +9,11 @@ TDO_LOGGER("eventobjectslam.pangolinviewer.viewer")
 #define Cos(th) std::cos(PI/180*(th))
 #define Sin(th) std::sin(PI/180*(th))
 #define DEF_D 5
-void DrawCylinder(Eigen::Matrix4f cylinder_pose_wo){
+void DrawCylinder(Eigen::Matrix4f cylinder_pose_wo, float alpha = 1.0f){
     float scale = 0.1;
     glBegin(GL_QUAD_STRIP);
     for (int j=0; j<=360;j+=DEF_D){
-        glColor3f(1.0, 0.5, 0.0);
+        glColor4f(1.0, 0.5, 0.0, alpha);
         Eigen::Vector4f vertex1;
         vertex1[0] = scale * Cos(j);
         vertex1[1] = scale * Sin(j);
@@ -28,7 +28,7 @@ void DrawCylinder(Eigen::Matrix4f cylinder_pose_wo){
     glEnd();
     glBegin(GL_TRIANGLE_FAN);
     for (int j=0; j<=360;j+=DEF_D){
-        glColor3f(0., 1., 1.);
+        glColor4f(0., 1., 1., alpha);
         Eigen::Vector4f vertex1;
         vertex1[0] = scale * Cos(j);
         vertex1[1] = scale * Sin(j);
@@ -40,7 +40,7 @@ void DrawCylinder(Eigen::Matrix4f cylinder_pose_wo){
     glEnd();
     glBegin(GL_TRIANGLE_FAN);
     for (int j=0; j<=360;j+=DEF_D){
-        glColor3f(0., 1., 1.);
+        glColor4f(0., 1., 1., alpha);
         Eigen::Vector4f vertex1;
         vertex1[0] = scale * Cos(j);
         vertex1[1] = scale * Sin(j);
@@ -180,9 +180,21 @@ void Viewer::Run(){
             const pangolin::OpenGlMatrix gl_camPoseCurrentInWorld(camPoseInRender.eval());
             DrawCurrentCamPose(gl_camPoseCurrentInWorld);
         }
-        for (std::shared_ptr<LandMark> oneLandmark : vLandmarks){
-            Mat44_t landmarkPoseInRender = worldInRenderTransform * oneLandmark->GetLandmarkPoseInWorld();
-            DrawCylinder(landmarkPoseInRender);
+        {
+            // Sort landmarks by ID so the oldest come first and the newest last.
+            std::vector<std::shared_ptr<LandMark>> vLandmarksSorted = vLandmarks;
+            std::sort(vLandmarksSorted.begin(), vLandmarksSorted.end(),
+                [](const std::shared_ptr<LandMark>& a, const std::shared_ptr<LandMark>& b){
+                    return a->_landmarkID < b->_landmarkID;
+                });
+            const float alphaMin = 0.1f;
+            const int n = static_cast<int>(vLandmarksSorted.size());
+            for (int i = 0; i < n; ++i) {
+                // alpha goes from alphaMin (oldest) to 1.0 (newest)
+                float alpha = (n == 1) ? 1.0f : alphaMin + (1.0f - alphaMin) * i / (n - 1);
+                Mat44_t landmarkPoseInRender = worldInRenderTransform * vLandmarksSorted[i]->GetLandmarkPoseInWorld();
+                DrawCylinder(landmarkPoseInRender, alpha);
+            }
         }
 
         // Swap frames and Process Events
