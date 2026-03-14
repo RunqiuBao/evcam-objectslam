@@ -25,3 +25,6 @@
 [submodule "3rdparty/pcl"]
 	path = 3rdparty/pcl
 	url = https://github.com/RunqiuBao/pcl.git
+[submodule "3rdparty/armadillo-14.0.1"]
+	path = 3rdparty/armadillo-14.0.1
+	url = git@github.com:RunqiuBao/armadillo-14.git
