@@ -1,8 +1,10 @@
 # evcam-objectslam
-Estimate camera trajectory with stereo object detection in event cameras:<br>
+Estimate camera trajectory by stereo object detection in event cameras:<br>
+- Rapid camera motion tracking.
+- Object-level compact map.
 <p align="left">
   <img src="assets/evobjslam.gif" height="200px"/>
-  <img src="assets/seq0.gif" height="200px"/>
+  <img src="assets/seq0.gif" height="300px"/>
 </p>
 
 ## Installation
