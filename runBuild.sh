@@ -12,6 +12,7 @@ OPENCV4_LIB_PATH="${SCRIPT_DIR}/3rdparty/opencv/opencvinstall/lib"
 PANGOLIN_LIB_PATH="${SCRIPT_DIR}/3rdparty/Pangolin/pangolininstall/lib"
 G2O_LIB_PATH="${SCRIPT_DIR}/3rdparty/g2o/g2oinstall/lib"
 PCL_LIB_PATH="${SCRIPT_DIR}/3rdparty/pcl/pclinstall/lib"
+ARMADILLO_LIB_PATH="${SCRIPT_DIR}/3rdparty/armadillo-14.0.1/armadilloinstall/lib"
 PYTHONPACKAGE_SRC_PATH="${SCRIPT_DIR}/python/src"
 isAddPaths=false
 isInstallPythonPackage=false
@@ -148,6 +149,7 @@ if $isAddPaths; then
     export LD_LIBRARY_PATH=${PANGOLIN_LIB_PATH}:${LD_LIBRARY_PATH}
     export LD_LIBRARY_PATH=${G2O_LIB_PATH}:${LD_LIBRARY_PATH}
     export LD_LIBRARY_PATH=${PCL_LIB_PATH}:${LD_LIBRARY_PATH}
+    export LD_LIBRARY_PATH=${ARMADILLO_LIB_PATH}:${LD_LIBRARY_PATH}
     # echo -e "[Add lib path & python src path] LD_LIBRARY_PATH: ${LD_LIBRARY_PATH}"
     # add paths for python packages
     export PYTHONPATH="${PYTHONPACKAGE_SRC_PATH}:$PYTHONPATH"
