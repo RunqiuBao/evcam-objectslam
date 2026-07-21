@@ -4,6 +4,8 @@
 #include "keyframe.h"
 #include "landmark.h"
 
+#include <opencv2/core.hpp>
+
 #include <mutex>
 #include <unordered_map>
 
@@ -58,11 +60,25 @@ public:
     void SetObjectSize(const Vec3_t& objectSize) {_objectSize = objectSize;}
     const Vec3_t GetObjectSize(){return _objectSize;}
 
+    // publish the per-frame debug view image (stereo frame with detections and tracking status) to the viewer thread
+    void SetDebugViewImage(const cv::Mat& debugViewImage) {
+        std::lock_guard<std::mutex> lock(_mtxDebugViewAccess);
+        _debugViewImage = debugViewImage;
+    }
+    cv::Mat GetDebugViewImage() const {
+        std::lock_guard<std::mutex> lock(_mtxDebugViewAccess);
+        return _debugViewImage;
+    }
+
 private:
     // mutex for mutal exclusion controll between class methods called in different threads
     mutable std::mutex _mtxMapKeyframesAccess;
 
     mutable std::mutex _mtxMapLandmarksAccess;
+
+    mutable std::mutex _mtxDebugViewAccess;
+
+    cv::Mat _debugViewImage;
 
     Vec3_t _objectSize;
 

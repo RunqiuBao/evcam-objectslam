@@ -1,5 +1,7 @@
 #include "pangolinviewer/viewer.h"
 
+#include <opencv2/highgui.hpp>
+
 #include <algorithm>
 #include <logging.h>
 TDO_LOGGER("eventobjectslam.pangolinviewer.viewer")
@@ -114,15 +116,14 @@ static void DrawCamera(const pangolin::OpenGlMatrix& gl_camPoseCurrentInWorld, c
     glPopMatrix();
 }
 
-void DrawCurrentCamPose(const pangolin::OpenGlMatrix& gl_cam_pose_wc) {
+void DrawCurrentCamPose(const pangolin::OpenGlMatrix& gl_cam_pose_wc, const float alpha = 1.0f) {
     // frustum size of the frame
     const float camera_size_ = 0.15;
     const float w = camera_size_;
     const float camera_line_width_ = 2;
 
     glLineWidth(camera_line_width_);
-    std::array<float, 3> curr_cam_ = {{0.7f, 0.7f, 1.0f}};
-    glColor3fv(curr_cam_.data());
+    glColor4f(0.7f, 0.7f, 1.0f, alpha);
     DrawCamera(gl_cam_pose_wc, w);
 }
 
@@ -175,10 +176,22 @@ void Viewer::Run(){
 
         std::vector<std::shared_ptr<KeyFrame>> vKeyFrames = _pMapDatabase->GetAllKeyframes();
         std::vector<std::shared_ptr<LandMark>> vLandmarks = _pMapDatabase->GetAllLandmarks();
-        for (std::shared_ptr<KeyFrame> oneKeyFrame : vKeyFrames){
-            Mat44_t camPoseInRender = worldInRenderTransform * oneKeyFrame->GetKeyframePoseInWorld();
-            const pangolin::OpenGlMatrix gl_camPoseCurrentInWorld(camPoseInRender.eval());
-            DrawCurrentCamPose(gl_camPoseCurrentInWorld);
+        {
+            // Sort keyframes by ID so the oldest come first and the newest last.
+            std::vector<std::shared_ptr<KeyFrame>> vKeyFramesSorted = vKeyFrames;
+            std::sort(vKeyFramesSorted.begin(), vKeyFramesSorted.end(),
+                [](const std::shared_ptr<KeyFrame>& a, const std::shared_ptr<KeyFrame>& b){
+                    return a->_keyFrameID < b->_keyFrameID;
+                });
+            const float alphaMin = 0.1f;
+            const int n = static_cast<int>(vKeyFramesSorted.size());
+            for (int i = 0; i < n; ++i) {
+                // alpha goes from alphaMin (oldest) to 1.0 (newest)
+                float alpha = (n == 1) ? 1.0f : alphaMin + (1.0f - alphaMin) * i / (n - 1);
+                Mat44_t camPoseInRender = worldInRenderTransform * vKeyFramesSorted[i]->GetKeyframePoseInWorld();
+                const pangolin::OpenGlMatrix gl_camPoseCurrentInWorld(camPoseInRender.eval());
+                DrawCurrentCamPose(gl_camPoseCurrentInWorld, alpha);
+            }
         }
         {
             // Sort landmarks by ID so the oldest come first and the newest last.
@@ -199,6 +212,13 @@ void Viewer::Run(){
 
         // Swap frames and Process Events
         pangolin::FinishFrame();
+
+        // Update the stereo debug view in sync with the map viewer.
+        cv::Mat debugViewImage = _pMapDatabase->GetDebugViewImage();
+        if (!debugViewImage.empty()){
+            cv::imshow("Debug View: stereo frame", debugViewImage);
+            cv::waitKey(1);
+        }
     }
 
 }

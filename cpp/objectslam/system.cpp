@@ -83,6 +83,72 @@ void SLAMSystem::InitializeCameraAndTracker(
 
     _frameTracker = std::make_unique<FrameTracker>(_camera, _cfg->_trackerParams);
     _frameTracker->_sStereoSequencePathForDebug = debugPath;  // To dump debug images.
+    _sStereoSequencePathForDebug = debugPath;
+}
+
+// load the input image of one side of the stereo pair from concentrated/<side>/; black canvas if not on disk.
+static cv::Mat LoadInputImageForDebugView(
+    const std::string& sequencePath,
+    const std::string& side,
+    const std::string& timestamp,
+    const unsigned int cols,
+    const unsigned int rows
+)
+{
+    std::filesystem::path imagePath = sequencePath;
+    imagePath.append("concentrated/" + side + "/").concat(timestamp + ".png");
+    if (std::filesystem::exists(imagePath)){
+        cv::Mat image = cv::imread(imagePath.string(), cv::IMREAD_COLOR);
+        if (!image.empty()){
+            return image;
+        }
+    }
+    return cv::Mat::zeros(rows, cols, CV_8UC3);
+}
+
+static void DrawDetectionsForDebugView(const std::vector<TwoDBoundingBox>& detections, cv::Mat& displayImage){
+    for (const TwoDBoundingBox& oneDetection : detections){
+        cv::Rect bbox(
+            cvRound(oneDetection._centerX - oneDetection._bWidth / 2.f),
+            cvRound(oneDetection._centerY - oneDetection._bHeight / 2.f),
+            cvRound(oneDetection._bWidth),
+            cvRound(oneDetection._bHeight)
+        );
+        cv::rectangle(displayImage, bbox, cv::Scalar(0, 255, 0), 2, cv::LINE_AA);
+        char scoreText[16];
+        std::snprintf(scoreText, sizeof(scoreText), "%.2f", oneDetection._detectionScore);
+        cv::putText(displayImage, scoreText, cv::Point(bbox.x, bbox.y - 5), cv::FONT_HERSHEY_SIMPLEX, 0.4, cv::Scalar(0, 255, 0), 1, cv::LINE_AA);
+    }
+}
+
+void SLAMSystem::UpdateDebugView(
+    const std::shared_ptr<Frame>& pFrame,
+    const bool isTrackingSuccess,
+    const Mat44_t& framePoseInWorld
+)
+{
+    cv::Mat leftImage = LoadInputImageForDebugView(_sStereoSequencePathForDebug, "left", pFrame->_timestamp, _camera->_cols, _camera->_rows);
+    cv::Mat rightImage = LoadInputImageForDebugView(_sStereoSequencePathForDebug, "right", pFrame->_timestamp, _camera->_cols, _camera->_rows);
+
+    DrawDetectionsForDebugView(pFrame->_leftCamDetections, leftImage);
+    DrawDetectionsForDebugView(pFrame->_rightCamDetections, rightImage);
+
+    if (!isTrackingSuccess){
+        cv::putText(leftImage, "TRACKING FAILURE", cv::Point(10, 30), cv::FONT_HERSHEY_SIMPLEX, 0.8, cv::Scalar(0, 0, 255), 2, cv::LINE_AA);
+    }
+    else{
+        char positionText[64];
+        std::snprintf(positionText, sizeof(positionText), "cam position: (%.2f, %.2f, %.2f)", framePoseInWorld(0, 3), framePoseInWorld(1, 3), framePoseInWorld(2, 3));
+        cv::putText(leftImage, positionText, cv::Point(10, 30), cv::FONT_HERSHEY_SIMPLEX, 0.6, cv::Scalar(0, 255, 255), 2, cv::LINE_AA);
+    }
+    cv::putText(leftImage, pFrame->_timestamp, cv::Point(10, leftImage.rows - 10), cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(255, 255, 255), 1, cv::LINE_AA);
+
+    if (leftImage.size() != rightImage.size()){
+        cv::resize(rightImage, rightImage, leftImage.size());
+    }
+    cv::Mat debugViewImage;
+    cv::hconcat(leftImage, rightImage, debugViewImage);
+    _pMapDb->SetDebugViewImage(debugViewImage);
 }
 
 void LoadDetectionsWithFacet(
@@ -370,6 +436,9 @@ const Mat44_t SLAMSystem::UpdateOneFrame(
                 frameInWorld = _frameTracker->_pRefKeyframe->GetKeyframePoseInWorld() * frameInWorld;
             }
         }
+        if (isDebug){
+            UpdateDebugView(pOneFrame, true, frameInWorld);
+        }
         return frameInWorld;
     }
 
@@ -416,6 +485,7 @@ const Mat44_t SLAMSystem::UpdateOneFrame(
     // }
 
     /* input the correct detections to frameTracker, get pose return from frameTracker and print. */
+    bool isSuccess = true;  // Note: the (re)initialization branch always succeeds.
     if (!_frameTracker->GetTrackerStatus()){
         pOneFrame->SetPose(Eigen::Matrix4f::Identity());
         pOneFrame->_isTracked = true;
@@ -430,7 +500,7 @@ const Mat44_t SLAMSystem::UpdateOneFrame(
     }
     else{
         Mat44_t nextFrameInCameraTransformBackup = nextFrameInCameraTransform;  // Note: backup in case first track fails and nextFrameInCameraTransform will be set to identity,
-        bool isSuccess = _frameTracker->DoMotionBasedTrack(*pOneFrame, (*_pFrameStack.back()), nextFrameInCameraTransform, isDebug);
+        isSuccess = _frameTracker->DoMotionBasedTrack(*pOneFrame, (*_pFrameStack.back()), nextFrameInCameraTransform, isDebug);
 
         // if (!isSuccess){
         //     // TODO: project all ref objects to previous frame then track.
@@ -491,7 +561,11 @@ const Mat44_t SLAMSystem::UpdateOneFrame(
     pOneFrame->_pRefKeyframe = _frameTracker->_pRefKeyframe;
     _frameTracker->_pRefKeyframe->_vFrames_ids[pOneFrame] = pOneFrame->_frameID;
     _pFrameStack.push_back(pOneFrame);
-    return _frameTracker->_pRefKeyframe->GetKeyframePoseInWorld() * pOneFrame->GetPose();
+    const Mat44_t frameInWorld = _frameTracker->_pRefKeyframe->GetKeyframePoseInWorld() * pOneFrame->GetPose();
+    if (isDebug){
+        UpdateDebugView(pOneFrame, isSuccess, frameInWorld);
+    }
+    return frameInWorld;
 }
 
 }

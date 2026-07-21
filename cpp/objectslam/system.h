@@ -105,8 +105,16 @@ public:
     Mat44_t nextFrameInCameraTransform;  // Note: camera velocity
 
 private:
+    // compose the stereo debug view (input frames + detections + tracking status) and publish it to _pMapDb
+    void UpdateDebugView(
+        const std::shared_ptr<Frame>& pFrame,
+        const bool isTrackingSuccess,
+        const Mat44_t& framePoseInWorld
+    );
+
     std::shared_ptr<camera::CameraBase> _camera = nullptr;
     std::unique_ptr<FrameTracker> _frameTracker = nullptr;
+    std::string _sStereoSequencePathForDebug;
 
 };
 
