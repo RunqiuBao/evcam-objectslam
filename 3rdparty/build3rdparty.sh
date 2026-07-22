@@ -78,10 +78,16 @@ fi
 read -p "Do you want to build g2o?(y/n)" answer
 if [[ "$answer" == [yY] ]]; then
   # build g2o
+  # IMPORTANT: g2o must use the SAME Eigen as the app (/usr/local/include/eigen3, NOT the bundled
+  # 3rdparty/eigen) and the SAME SIMD flags as PCL injects into the app (-march=native -mavx2).
+  # Mismatching either causes "data is not aligned" Eigen assertions and heap corruption at runtime.
   (cd g2o
    mkdir -p g2oinstall
    mkdir -p build && cd build
-   cmake -DCMAKE_INSTALL_PREFIX=../g2oinstall -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_COMPILER=clang ..
+   cmake -DCMAKE_INSTALL_PREFIX=../g2oinstall -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_COMPILER=clang \
+         -DEIGEN3_INCLUDE_DIR=/usr/local/include/eigen3 \
+         -DBUILD_WITH_MARCH_NATIVE=ON \
+         -DCMAKE_CXX_FLAGS="-msse4.2 -mfpmath=sse -march=native -mavx2" ..
    CC=clang CXX=clang++ make -j8
    make install
   )

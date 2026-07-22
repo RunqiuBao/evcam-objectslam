@@ -22,6 +22,16 @@ set(CMAKE_CXX_STANDARD 17)
 # set(CMAKE_BUILD_TYPE "Debug") // Note: control build type in the build script.
 message(STATUS "set CMAKE_BUILD_TYPE to ${CMAKE_BUILD_TYPE}")
 
+# Unify Eigen-relevant compile flags across ALL targets in this project. PCL's exported config
+# injects these SIMD flags and the EIGEN_HAS_CXX17_OVERALIGN define into targets linking PCL
+# (ObjectSlam), but not into the others (slamRunner, tdocommon, EventLinemod). A mismatch makes
+# alignof(Eigen::Matrix4f) differ between translation units (32 with AVX vs 16 without): stack/heap
+# matrices created in a non-AVX TU are then under-aligned for libObjectSlam's aligned AVX loads,
+# causing intermittent (stack-layout dependent) segfaults. g2o is built with these same flags in
+# 3rdparty/build3rdparty.sh — keep all three places in sync.
+add_compile_options(-msse4.2 -mfpmath=sse -march=native -mavx2)
+add_compile_definitions(EIGEN_HAS_CXX17_OVERALIGN=0)
+
 # thread library
 find_package(Threads REQUIRED)
 
@@ -30,7 +40,9 @@ set(CMAKE_PREFIX_PATH "${INSTALLED_LOG4CXX_LIB_PATH}/cmake/" ${CMAKE_PREFIX_PATH
 find_package(log4cxx REQUIRED)
 
 # include Eigen
-set(EIGEN3_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/eigen")
+# IMPORTANT: every library in this process (g2o, Pangolin, PCL, ObjectSlam) must be
+# built against the SAME Eigen (/usr/local/include/eigen3). Mixing Eigen versions
+# across shared libs causes "data is not aligned" assertions inside g2o.
 find_package (Eigen3 3.4 REQUIRED)
 
 # Find the Armadillo package
