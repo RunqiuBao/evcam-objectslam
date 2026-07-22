@@ -95,7 +95,7 @@ private:
     //graph node of the covisiblity graph
     std::unique_ptr<GraphNode> _graphNode = nullptr;
 
-    Mat44_t _poseCurrentFrameInWorld;  // Note: pose current to world
+    Mat44Unaligned_t _poseCurrentFrameInWorld;  // Note: pose current to world. unaligned, this class is make_shared-allocated.
 
     bool _bIsToDelete;
 

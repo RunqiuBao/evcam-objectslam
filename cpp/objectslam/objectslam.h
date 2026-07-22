@@ -25,6 +25,9 @@ template<size_t R, size_t C>
 using MatRC_d = Eigen::Matrix<double, R, C>;
 
 typedef Eigen::Matrix4f Mat44_t;
+// unaligned variant for class members and containers: no 16/32-byte over-alignment requirement, so it is
+// safe inside make_shared-allocated objects (this toolchain's make_shared ignores over-alignment).
+using Mat44Unaligned_t = Eigen::Matrix<float, 4, 4, Eigen::DontAlign>;
 typedef Eigen::Matrix3f Mat33_t;
 using Mat33_d = Eigen::Matrix3d;
 using Mat44_d = Eigen::Matrix4d;

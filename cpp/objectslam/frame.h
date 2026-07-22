@@ -80,7 +80,7 @@ private:
     cv::Mat _rightImage;
     cv::Mat _maskImage;
     // frame pose
-    Mat44_t _pose_kc;  // current in refKeyrame transform
+    Mat44Unaligned_t _pose_kc;  // current in refKeyrame transform. Note: unaligned, this class is make_shared-allocated.
     // camera instance that took this frame
     std::shared_ptr<camera::CameraBase> _pCamera;
 

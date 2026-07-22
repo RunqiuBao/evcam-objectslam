@@ -25,21 +25,33 @@ KeyFrame::KeyFrame(const std::shared_ptr<Frame> pRefFrame, const Mat44_t& refKey
 
 void KeyFrame::AddCovisibilityConnection(std::shared_ptr<KeyFrame> pTargetKeyframe, size_t weight) {
     std::lock_guard<std::mutex> lock(_mtxCovisibilityGraph);
+    if (!_graphNode) {
+        return;  // Note: covisibility graph not initialized yet (keyframe still being created).
+    }
     _graphNode->AddCovisibilityConnection(pTargetKeyframe, weight);
 }
 
 void KeyFrame::DeleteCovisibilityConnection(std::shared_ptr<KeyFrame> pTargetKeyframe) {
     std::lock_guard<std::mutex> lock(_mtxCovisibilityGraph);
+    if (!_graphNode) {
+        return;  // Note: covisibility graph not initialized yet (keyframe still being created).
+    }
     _graphNode->DeleteCovisibilityConnection(pTargetKeyframe);
 }
 
 std::vector<std::shared_ptr<KeyFrame>> KeyFrame::GetOrderedCovisibilities() const {
     std::lock_guard<std::mutex> lock(_mtxCovisibilityGraph);
+    if (!_graphNode) {
+        return {};  // Note: covisibility graph not initialized yet (keyframe still being created).
+    }
     return _graphNode->GetOrderedCovisibilities();
 }
 
 std::vector<std::shared_ptr<KeyFrame>> KeyFrame::GetOrderedFullCovisibilities() const {
     std::lock_guard<std::mutex> lock(_mtxCovisibilityGraph);
+    if (!_graphNode) {
+        return {};  // Note: covisibility graph not initialized yet (keyframe still being created).
+    }
     std::vector<std::shared_ptr<KeyFrame>> vFullCovisibilities = _graphNode->GetOrderedCovisibilities();
     std::set<unsigned int> profileOfObservedLandmarks = GetProfileOfObservedLandmarks();
     for (auto pFullCovisible : vFullCovisibilities) {
@@ -73,7 +85,10 @@ void KeyFrame::InitializeObservedLandmarks(std::map<std::shared_ptr<LandMark>, u
         _observedLandmarks_indicesRefObj = observedLandmarks_indicesRefObj;
     }
     // initialize covisibility graph node.
-    _graphNode = std::unique_ptr<GraphNode>(new GraphNode(this));
+    {
+        std::lock_guard<std::mutex> lock(_mtxCovisibilityGraph);
+        _graphNode = std::unique_ptr<GraphNode>(new GraphNode(this));
+    }
     _graphNode->ComputeCovisibility();  // Note: initialize the node in covisibility graph.
 
 }
@@ -81,17 +96,29 @@ void KeyFrame::InitializeObservedLandmarks(std::map<std::shared_ptr<LandMark>, u
 void KeyFrame::DeleteOneObservedLandmark(std::shared_ptr<LandMark> oneLandmarkToPrune) {
     std::lock_guard<std::mutex> lock(_mtxLandmarks);
     _observedLandmarks_indicesRefObj.erase(oneLandmarkToPrune);
-    _graphNode->UpdateEraseOneCovisibleLandmark(oneLandmarkToPrune->GetObservations());
+    // Note: the covisibility graph node is only created at the end of CreateNewLandmarks; a prune/merge from
+    // the mapper thread can reach a keyframe that is still being created — guard against the null graph node.
+    // (lock order: _mtxLandmarks -> _mtxCovisibilityGraph; no path takes them in the reverse order.)
+    std::lock_guard<std::mutex> lockGraph(_mtxCovisibilityGraph);
+    if (_graphNode) {
+        _graphNode->UpdateEraseOneCovisibleLandmark(oneLandmarkToPrune->GetObservations());
+    }
 }
 
 void KeyFrame::ReplaceOneObservedLandmark(std::shared_ptr<LandMark> oldLandmark, std::shared_ptr<LandMark> newLandmark) {
     std::lock_guard<std::mutex> lock(_mtxLandmarks);
-    // A keyframe observes each object instance at most once (exclusive association), so the merge target must
-    // not already be observed here — replacing would overwrite its entry and corrupt the map.
+    // A keyframe observes each object instance at most once (exclusive association). If this keyframe already
+    // observes the merge target (two co-observed instances got merged), replacing would overwrite the target's
+    // entry and corrupt the map — instead just drop the old entry and keep the existing target association.
     if (_observedLandmarks_indicesRefObj.count(newLandmark) > 0) {
-        TDO_LOG_ERROR_FORMAT("keyframe(%d) already observes merge-target landmark(%d) while replacing landmark(%d).",
+        TDO_LOG_WARN_FORMAT("keyframe(%d) already observes merge-target landmark(%d); dropping its entry for merged landmark(%d).",
                                 _keyFrameID % newLandmark->_landmarkID % oldLandmark->_landmarkID);
-        assert(false && "keyframe already observes the merge-target landmark");
+        _observedLandmarks_indicesRefObj.erase(oldLandmark);
+        return;
+    }
+    if (_observedLandmarks_indicesRefObj.count(oldLandmark) == 0) {
+        // Note: the observation may have been removed concurrently (e.g. pruning); nothing to replace.
+        return;
     }
     unsigned int indexRefObj = _observedLandmarks_indicesRefObj[oldLandmark];
     _observedLandmarks_indicesRefObj.erase(oldLandmark);

@@ -117,7 +117,9 @@ private:
 
     std::atomic<unsigned int> _latestFrameID{0};
 
-    Mat44_t _currentFramePoseInWorld = Mat44_t::Identity();
+    // Note: DontAlign — this object is created via make_shared, which does not honor Eigen's 32-byte
+    // over-alignment on this toolchain; an aligned member here would be misaligned and crash.
+    Eigen::Matrix<float, 4, 4, Eigen::DontAlign> _currentFramePoseInWorld = Mat44_t::Identity();
 
     bool _hasCurrentFramePose = false;
 

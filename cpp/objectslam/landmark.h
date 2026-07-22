@@ -88,7 +88,7 @@ public:
 private:
     std::map<std::shared_ptr<KeyFrame>, unsigned int> _observations_indices;  //Note: uint is the refOject index in this keyframe.
 
-    Mat44_t _poseLandmarkInWorld;
+    Mat44Unaligned_t _poseLandmarkInWorld;  // Note: unaligned, this class is make_shared-allocated.
     std::vector<Vec3_t> _vertices3DInLandmark;
 
     float _bestDetectionScore;  // if detection score becomes better, update landmark pose and corners.

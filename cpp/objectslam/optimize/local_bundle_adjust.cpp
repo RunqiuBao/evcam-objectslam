@@ -57,22 +57,6 @@ void optimize::DoLocalBA(std::shared_ptr<KeyFrame> pCurrKeyframe, bool* const bF
                 continue;
             }
             ids_localLandmarks[localLandmark_index.first->_landmarkID] = localLandmark_index.first;
-
-            /* ---------------------------------- Debug code ----------------------------------*/
-            const std::map<std::shared_ptr<KeyFrame>, unsigned int> observations_indices = localLandmark_index.first->GetObservations();
-            bool bFoundCurrKeyframe = false;
-            for (auto& pKeyframe_index : observations_indices) {
-                if (pKeyframe_index.first->_keyFrameID == pCurrKeyframe->_keyFrameID) {
-                    TDO_LOG_ERROR_FORMAT("Found curr keyframe (%d) in observs of landmark (%d).", pCurrKeyframe->_keyFrameID % localLandmark_index.first->_landmarkID);
-                    bFoundCurrKeyframe = true;
-                    break;
-                }
-            }
-            if (!bFoundCurrKeyframe) {
-                TDO_LOG_ERROR_FORMAT("!!!did not find curr keyframe (%d) in observs of landmark (%d).", pCurrKeyframe->_keyFrameID % localLandmark_index.first->_landmarkID);
-            }
-            /* ---------------------------------- Debug code ----------------------------------*/
-
         }
     }
     if (ids_localLandmarks.size() == 0) {
@@ -119,7 +103,6 @@ void optimize::DoLocalBA(std::shared_ptr<KeyFrame> pCurrKeyframe, bool* const bF
             ids_fixedKeyframes[pFixedKeyframe->_keyFrameID] = pFixedKeyframe;
         }
     }
-
     // -------- (2) --------
     // build optimizer
     ::g2o::SparseOptimizer optimizer;
@@ -338,7 +321,7 @@ void optimize::DoLocalBA(std::shared_ptr<KeyFrame> pCurrKeyframe, bool* const bF
             maxDistance = distance;
         }
     }
-    if (maxDistance < 8.0) {
+    if (maxDistance < 8) {
         TDO_LOG_WARN("keyframes are too close, skip localBA.");
         optimizer.optimize(numFirstIter);
         return;
@@ -452,13 +435,11 @@ void optimize::DoLocalBA(std::shared_ptr<KeyFrame> pCurrKeyframe, bool* const bF
     {
         std::lock_guard<std::mutex> lock(MapDataBase::_mtxDatabase);
         if (!outlier_observations_lms.empty()){
-            for (auto& outlier_obs_lm : outlier_observations_lms) {
-                auto pKeyfrm = outlier_obs_lm.first;
-                auto pLm = outlier_obs_lm.second;
-                TDO_LOG_DEBUG_FORMAT("outlier pair keyframe(%d), landmark(%d)", pKeyfrm->_keyFrameID % pLm->_landmarkID);
-                pKeyfrm->DeleteOneObservedLandmark(pLm);
-                pLm->DeleteObservation(pKeyfrm);
-            }
+            // Note: BA must never remove observations from the map (the trackings are trusted).
+            // When outliers are detected, abort the whole map update instead.
+            TDO_LOG_CRITICAL_FORMAT("localBA detected %d outlier pairs; aborting map update without removing anything.",
+                                        outlier_observations_lms.size());
+            return;
         }
 
         for (auto id_localKeyfrm : ids_localKeyframes) {
