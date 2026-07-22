@@ -1798,11 +1798,20 @@ void FrameTracker::CreateNewLandmarks(std::shared_ptr<KeyFrame> pRefKeyFrame, st
     }
 
     // ---- phase 4: create a new landmark for every ref object still without an instance. ----
+    // Stereo depth beyond this range is too noisy to trust for initializing a landmark; such
+    // detections are ignored here (they can still be associated with existing landmarks above).
+    constexpr float maxLandmarkCreationDistance = 2.0f;  // [m]
     for (int indexRefObject=0; indexRefObject < pRefKeyFrame->_refObjects.size(); indexRefObject++){
         if (isRefObjectAssigned[indexRefObject]){
             continue;
         }
         std::shared_ptr<RefObject> pRefObject = pRefKeyFrame->_refObjects[indexRefObject];
+        const float distanceToCamera = pRefObject->_detection._objectCenterInRefFrame.norm();
+        if (distanceToCamera > maxLandmarkCreationDistance){
+            TDO_LOG_INFO_FORMAT("Skip creating landmark for refObject %d: distance %f m exceeds trusted range (%f m).",
+                                    indexRefObject % distanceToCamera % maxLandmarkCreationDistance);
+            continue;
+        }
         Mat44_t poseLandmarkInWorld;
         std::vector<Vec3_t> vertices3DInLandmark;
         LandMark::ComputeLandmarkPoseInWorldByVertices3D(

@@ -80,7 +80,11 @@ public:
 
 private:
     static constexpr double _sigmaP = 0.02;
-    static constexpr double _sigmaM = 0.1;
+    // Measurement-noise scale: the main smoothness knob (higher = smoother but more lag behind fast
+    // motion). 5.0 halves the exported-trajectory roughness (RMS frame-to-frame jerk) vs the original
+    // 0.1, measured on the real unitree seq12_retrain sequence: 0.0153 -> 0.0078, with per-frame
+    // corrections (lag proxy) of 1-3 cm.
+    static constexpr double _sigmaM = 5.0;
     static constexpr double _sigmaV = 0.002;
     static constexpr size_t _burnInFrames = 15;
     static constexpr double _gateThreshold = 0.3;
