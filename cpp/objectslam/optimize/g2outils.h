@@ -222,7 +222,7 @@ public:
     void computeError() override {
         const ShotVertexSE2* vPose = static_cast<const ShotVertexSE2*>(_vertices.at(1));
         const LandmarkPointVertex2D* vPoint = static_cast<const LandmarkPointVertex2D*>(_vertices.at(0));
-        const ::g2o::SE2& X = vPose->estimate(); // (X_sw, Z_sw, Ry_sw)
+        const ::g2o::SE2& X = vPose->estimate(); // T_cw (world->camera): (tx_cw, tz_cw, Ry_cw); see CreateShotVertexSE2.
         const Eigen::Vector2d& p = vPoint->estimate();
         const double ct = std::cos(X.rotation().angle());
         const double st = std::sin(X.rotation().angle());
@@ -230,8 +230,9 @@ public:
         R << ct, -st,
              st,  ct;
         Vec2_d t(X.translation().x(), X.translation().y());
-        // predicted measurement: z_hat = R^T (p - t) => R*p_cam+t=p_world
-        Vec2_d p_cam = R.transpose() * (p - t);  // p_cam is (X, Z) in the camera frame.
+        // predicted measurement: the vertex holds T_cw, and the 3D yaw rotation R_y acts on (x, z) as R^T,
+        // so p_cam = R^T * p_world + t.
+        Vec2_d p_cam = R.transpose() * p + t;  // p_cam is (X, Z) in the camera frame.
         const Vec3_d obs(_measurement);  // measurement is (x_l, y_l, x_r) in pixel coords.
         Vec3_d obsUpdate = cam_project(p_cam);
         _error = obs - obsUpdate;
@@ -249,7 +250,7 @@ public:
     bool depth_is_positive() const {
         const ShotVertexSE2* vPose = static_cast<const ShotVertexSE2*>(_vertices.at(1));
         const LandmarkPointVertex2D* vPoint = static_cast<const LandmarkPointVertex2D*>(_vertices.at(0));
-        const ::g2o::SE2& X = vPose->estimate(); // (X_sw, Z_sw, Ry_sw)
+        const ::g2o::SE2& X = vPose->estimate(); // T_cw (world->camera), same convention as computeError.
         const Eigen::Vector2d& p = vPoint->estimate();
         const double ct = std::cos(X.rotation().angle());
         const double st = std::sin(X.rotation().angle());
@@ -257,11 +258,13 @@ public:
         R << ct, -st,
              st,  ct;
         Vec2_d t(X.translation().x(), X.translation().y());
-        Vec2_d p_cam = R.transpose() * (p - t);
+        Vec2_d p_cam = R.transpose() * p + t;
         return p_cam[1] > 0;
     }
 
-    void linearizeOplus() override;
+    // Note: no linearizeOplus override — g2o's numerical differentiation of computeError is used, which is
+    // guaranteed consistent with the error model (the former analytic jacobian had an uninitialized variable
+    // and sign inconsistencies, producing NaNs in every local BA).
 
     double _Y_ws, _Y_wp;  // Y_ws, is Y of T_ws; Y_wp is Y of T_wp. These will not be optimized by BA.
     double fx_, fy_, cx_, cy_, focal_x_baseline_;  // camera params will not be optimized by BA.
@@ -326,7 +329,10 @@ ReprojEdgeWrapper<T>::ReprojEdgeWrapper(const unsigned int edgeId, std::shared_p
 
     const Vec3_d obs{refObjX, refObjY, refObjX_right};
     edge->setMeasurement(obs);
-    edge->setInformation(Mat33_d::Identity()); // * inv_sigma_sq);  // Note: no octave in object slam.
+    // object bbox centers are noisy measurements (~10 px std); normalize residuals accordingly so that
+    // the chi2 outlier test and huber kernel operate on realistic units.
+    constexpr double obsNoiseSigmaPx = 10.0;
+    edge->setInformation(Mat33_d::Identity() / (obsNoiseSigmaPx * obsNoiseSigmaPx));
 
     edge->fx_ = _pCamera->_kk(0, 0);
     edge->fy_ = _pCamera->_kk(1, 1);
@@ -359,7 +365,10 @@ ReprojEdgeWrapper<T>::ReprojEdgeWrapper(const unsigned int edgeId, std::shared_p
 
     const Vec3_d obs{refObjX, refObjY, refObjX_right};
     edge->setMeasurement(obs);
-    edge->setInformation(Mat33_d::Identity()); // * inv_sigma_sq);  // Note: no octave in object slam.
+    // object bbox centers are noisy measurements (~10 px std); normalize residuals accordingly so that
+    // the chi2 outlier test and huber kernel operate on realistic units.
+    constexpr double obsNoiseSigmaPx = 10.0;
+    edge->setInformation(Mat33_d::Identity() / (obsNoiseSigmaPx * obsNoiseSigmaPx));
 
     edge->fx_ = _pCamera->_kk(0, 0);
     edge->fy_ = _pCamera->_kk(1, 1);

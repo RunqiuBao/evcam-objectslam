@@ -338,7 +338,7 @@ void optimize::DoLocalBA(std::shared_ptr<KeyFrame> pCurrKeyframe, bool* const bF
             maxDistance = distance;
         }
     }
-    if (maxDistance < 0.5) {
+    if (maxDistance < 8.0) {
         TDO_LOG_WARN("keyframes are too close, skip localBA.");
         optimizer.optimize(numFirstIter);
         return;
@@ -413,6 +413,12 @@ void optimize::DoLocalBA(std::shared_ptr<KeyFrame> pCurrKeyframe, bool* const bF
                                     % pEdge->chi2()
                                     % std::to_string(reprojEdgeWrap.IsDepthPositive()));
         if (chi_sq_3D < pEdge->chi2() || !reprojEdgeWrap.IsDepthPositive()) {
+            TDO_LOG_CRITICAL_FORMAT("outlier edge keyframe(%d), landmark(%d): chi2 %f (threshold %f), depthPositive %s",
+                                        reprojEdgeWrap._pShot->_keyFrameID
+                                        % reprojEdgeWrap._pLm->_landmarkID
+                                        % pEdge->chi2()
+                                        % chi_sq_3D
+                                        % std::to_string(reprojEdgeWrap.IsDepthPositive()));
             outlier_observations_lms.push_back(std::make_pair(reprojEdgeWrap._pShot, reprojEdgeWrap._pLm));
         }
     }
@@ -430,6 +436,12 @@ void optimize::DoLocalBA(std::shared_ptr<KeyFrame> pCurrKeyframe, bool* const bF
                                         % pEdge->chi2()
                                         % std::to_string(reprojEdgeKptWrap.IsDepthPositive()));
             if (chi_sq_3D < pEdge->chi2() || !reprojEdgeKptWrap.IsDepthPositive()) {
+                TDO_LOG_CRITICAL_FORMAT("outlier edge2 (keypt) keyframe(%d), landmark(%d): chi2 %f (threshold %f), depthPositive %s",
+                                            reprojEdgeKptWrap._pShot->_keyFrameID
+                                            % reprojEdgeKptWrap._pLm->_landmarkID
+                                            % pEdge->chi2()
+                                            % chi_sq_3D
+                                            % std::to_string(reprojEdgeKptWrap.IsDepthPositive()));
                 outlier_observations_lms.push_back(std::make_pair(reprojEdgeKptWrap._pShot, reprojEdgeKptWrap._pLm));
             }
         }
@@ -454,6 +466,10 @@ void optimize::DoLocalBA(std::shared_ptr<KeyFrame> pCurrKeyframe, bool* const bF
             auto pKeyfrmVtx = ids_keyfrmVtx[pLocalKeyfrm->_keyFrameID];
             TDO_LOG_DEBUG_FORMAT("updating pose of keyframe(%d)", pLocalKeyfrm->_keyFrameID);
             const Mat44_t newKeyframePoseInWorld = ReconstructNewCameraPoseInWorld(pKeyfrmVtx, pLocalKeyfrm->GetKeyframePoseInWorld());
+            if (!newKeyframePoseInWorld.allFinite()) {
+                TDO_LOG_CRITICAL_FORMAT("optimized pose of keyframe(%d) contains NaN/inf, skip updating.", pLocalKeyfrm->_keyFrameID);
+                continue;
+            }
             Vec3_t translation_update = newKeyframePoseInWorld.block<3, 1>(0, 3) - pLocalKeyfrm->GetKeyframePoseInWorld().block<3, 1>(0, 3);
             if (translation_update.norm() > maxPoseErrorBA) {
                 TDO_LOG_DEBUG_FORMAT("keyframe pose update too large (%f), skip updating keyframe(%d).",
@@ -470,6 +486,10 @@ void optimize::DoLocalBA(std::shared_ptr<KeyFrame> pCurrKeyframe, bool* const bF
             Mat44_t landmarkPoseInWorld = pLocalLm->GetLandmarkPoseInWorld();
             Vec3_t landmarkCenterInWorld = landmarkPoseInWorld.block(0, 3, 3, 1);
             landmarkPoseInWorld.block(0, 3, 3, 1) = ReconstructNewPointInWorld(pLmVtx, landmarkCenterInWorld);
+            if (!landmarkPoseInWorld.allFinite()) {
+                TDO_LOG_CRITICAL_FORMAT("optimized pose of landmark(%d) contains NaN/inf, skip updating.", pLocalLm->_landmarkID);
+                continue;
+            }
             TDO_LOG_DEBUG_FORMAT("updating pose of landmark(%d)", pLocalLm->_landmarkID);
             // Vec3_t translation_update = landmarkPoseInWorld.block<3, 1>(0, 3) - pLocalLm->GetLandmarkPoseInWorld().block<3, 1>(0, 3);
             pLocalLm->SetLandmarkPoseInWorld(landmarkPoseInWorld);

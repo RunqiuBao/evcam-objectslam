@@ -132,67 +132,9 @@ void StereoPerspectiveReprojEdge::linearizeOplus() {
 
 }
 
-void StereoPerspectiveReprojEdgeSE2::linearizeOplus() {
-    const ShotVertexSE2* vPose = static_cast<const ShotVertexSE2*>(_vertices.at(1));
-    const ::g2o::SE2 cam_pose_xzRy = vPose->ShotVertexSE2::estimate();
-    Vec2_d t = cam_pose_xzRy.translation();  // t = (1.0, 2.0)
-    double Ry = cam_pose_xzRy.rotation().angle();
-    Eigen::Matrix3d R = Eigen::AngleAxisd(Ry, Eigen::Vector3d::UnitY()).toRotationMatrix();
-    Mat44_d m_cam_pose_cw = Mat44_d::Identity();
-    m_cam_pose_cw.block<3, 3>(0, 0) = R;
-    m_cam_pose_cw(0, 3) = t(0);
-    m_cam_pose_cw(1, 3) = -1 * _Y_ws;  // -1 is for wc->cw, while Y axes are parallel for c and w frames.
-    m_cam_pose_cw(2, 3) = t(1);
-    const ::g2o::SE3Quat cam_pose_cw = ConvertToG2oSE3(m_cam_pose_cw);
-
-    const LandmarkPointVertex2D* vPoint = static_cast<LandmarkPointVertex2D*>(_vertices.at(0));
-    const Vec2_d pos_wp_xz = vPoint->LandmarkPointVertex2D::estimate();
-    const Vec3_d pos_wp_xyz(pos_wp_xz(0), _Y_wp, pos_wp_xz(1));
-    const Vec3_d pos_c = cam_pose_cw.map(pos_wp_xyz);
-
-    const auto x = pos_c(0);
-    const auto y = pos_c(1);
-    const auto z = pos_c(2);
-    const auto z_sq = z * z;
-
-    const Mat33_d rot_cw = cam_pose_cw.rotation().toRotationMatrix();
-
-    double c, s, deltaX, deltaZ, Xc, Zc, Z2, Y0, b;
-    c = std::cos(Ry);
-    s = std::sin(Ry);
-    deltaX = pos_wp_xyz(0) - t(0);
-    deltaZ - pos_wp_xyz(2) - t(1);
-    Xc = c * deltaX - s * deltaZ;
-    Zc = s * deltaX + c * deltaZ;
-    Z2 = Zc * Zc;
-    Y0 = _Y_wp - _Y_ws;
-    b = (focal_x_baseline_ / fx_);
-
-    // ∂uL / ∂Xw , ∂uL / ∂Zw
-    _jacobianOplusXi(0,0) = fx_ * (  c*Zc - s*Xc) / Z2;
-    _jacobianOplusXi(0,1) = fx_ * ( -s*Zc - c*Xc) / Z2;
-    // ∂vL / ∂Xw , ∂vL / ∂Zw
-    _jacobianOplusXi(1,0) = -fy_ * Y0 * s / Z2;
-    _jacobianOplusXi(1,1) = -fy_ * Y0 * c / Z2;
-    // ∂uR / ∂Xw , ∂uR / ∂Zw
-    _jacobianOplusXi(2,0) = fx_ * (c*Zc - s*(Xc - b)) / Z2;
-    _jacobianOplusXi(2,1) = fx_ * (-s*Zc - c*(Xc - b)) / Z2;
-
-    // --- uL ---
-    _jacobianOplusXj(0,0) = fx_ * (-c*Zc + s*Xc) / Z2;
-    _jacobianOplusXj(0,1) = fx_ * (s*Zc + c*Xc) / Z2;
-    _jacobianOplusXj(0,2) = fx_ * ((-s*deltaX - c*deltaZ)*Zc - Xc*( c*deltaX - s*deltaZ)) / Z2;
-    // --- vL ---
-    _jacobianOplusXj(1,0) = fy_ * Y0 * s / Z2;
-    _jacobianOplusXj(1,1) = fy_ * Y0 * c / Z2;
-    _jacobianOplusXj(1,2) = -fy_ * Y0 * (c*deltaZ - s*deltaZ) / Z2;
-    // --- uR (replace Xc → Xc-b) ---
-    const double XcR = Xc - b;
-    _jacobianOplusXj(2,0) = fx_ * (-c*Zc + s*XcR) / Z2;
-    _jacobianOplusXj(2,1) = fx_ * ( s*Zc + c*XcR) / Z2;
-    _jacobianOplusXj(2,2) = fx_ * ((-s*deltaX - c*deltaZ)*Zc - XcR*( c*deltaX - s*deltaZ)) / Z2;
-
-}
+// Note: StereoPerspectiveReprojEdgeSE2 deliberately has no linearizeOplus implementation — g2o's numerical
+// differentiation of computeError is used instead (the former analytic jacobian had an uninitialized deltaZ
+// and sign inconsistencies with computeError, producing NaN chi2 in every local BA).
 
 
 
