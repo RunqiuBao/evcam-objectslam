@@ -1,8 +1,7 @@
 #include "pangolinviewer/viewer.h"
 
-#include <opencv2/highgui.hpp>
-
 #include <algorithm>
+#include <set>
 #include <logging.h>
 TDO_LOGGER("eventobjectslam.pangolinviewer.viewer")
 
@@ -155,10 +154,21 @@ void Viewer::Run(){
                                    mapViewerWidth / 2, mapViewerHeight / 2, 0.1, 1e6),
         pangolin::ModelViewLookAt(viewpointX, viewpointY, viewpointZ, 0, 0, 0, 0.0, -1.0, 0.0)));
 
-    // create map window
+    // create map window (upper half)
     pangolin::View& dCam = pangolin::CreateDisplay()
-                                .SetBounds(0.0, 1.0, pangolin::Attach::Pix(175), 1.0, -mapViewerWidth / mapViewerHeight)
+                                .SetBounds(0.5, 1.0, 0.0, 1.0, -mapViewerWidth / mapViewerHeight)
                                 .SetHandler(new pangolin::Handler3D(*_sCam));
+
+    // debug view panel (stereo frame with detections and tracking status), docked at the bottom half.
+    // Note: rendered as a GL texture inside the pangolin window; cv::imshow must not be used here as
+    // opencv's GTK event loop conflicts with pangolin's GL context and crashes the process.
+    pangolin::View& dDebugView = pangolin::CreateDisplay()
+                                    .SetBounds(0.0, 0.5, 0.0, 1.0);
+    std::unique_ptr<pangolin::GlTexture> pDebugViewTexture = nullptr;
+
+    // step mode: each press of Enter on this window grants one SLAM step to the runner.
+    pangolin::RegisterKeyPressCallback('\r', [this](){ _pMapDatabase->GrantOneStep(); });
+    pangolin::RegisterKeyPressCallback('\n', [this](){ _pMapDatabase->GrantOneStep(); });
 
     Mat44_t worldInRenderTransform;
     worldInRenderTransform << 1, 0, 0, 0,
@@ -194,31 +204,56 @@ void Viewer::Run(){
             }
         }
         {
-            // Sort landmarks by ID so the oldest come first and the newest last.
-            std::vector<std::shared_ptr<LandMark>> vLandmarksSorted = vLandmarks;
-            std::sort(vLandmarksSorted.begin(), vLandmarksSorted.end(),
-                [](const std::shared_ptr<LandMark>& a, const std::shared_ptr<LandMark>& b){
-                    return a->_landmarkID < b->_landmarkID;
-                });
-            const float alphaMin = 0.1f;
-            const int n = static_cast<int>(vLandmarksSorted.size());
-            for (int i = 0; i < n; ++i) {
-                // alpha goes from alphaMin (oldest) to 1.0 (newest)
-                float alpha = (n == 1) ? 1.0f : alphaMin + (1.0f - alphaMin) * i / (n - 1);
-                Mat44_t landmarkPoseInRender = worldInRenderTransform * vLandmarksSorted[i]->GetLandmarkPoseInWorld();
+            // Current frame pose in red.
+            Mat44_t currentFramePoseInWorld;
+            if (_pMapDatabase->GetCurrentFramePoseInWorld(currentFramePoseInWorld)){
+                Mat44_t currentFramePoseInRender = worldInRenderTransform * currentFramePoseInWorld;
+                const pangolin::OpenGlMatrix gl_currentFramePose(currentFramePoseInRender.eval());
+                glLineWidth(3);
+                glColor4f(1.0f, 0.0f, 0.0f, 1.0f);
+                DrawCamera(gl_currentFramePose, 0.15f);
+            }
+        }
+        {
+            // Active landmarks (observed as ref objects by the current keyframe) are bright, all the others dark.
+            std::shared_ptr<KeyFrame> pCurrentKeyframe = nullptr;
+            for (const std::shared_ptr<KeyFrame>& pOneKeyFrame : vKeyFrames){
+                if (!pCurrentKeyframe || pOneKeyFrame->_keyFrameID > pCurrentKeyframe->_keyFrameID){
+                    pCurrentKeyframe = pOneKeyFrame;
+                }
+            }
+            std::set<unsigned int> activeLandmarkIDs;
+            if (pCurrentKeyframe){
+                for (const auto& landmark_indexRefObj : pCurrentKeyframe->GetObservedLandmarks()){
+                    activeLandmarkIDs.insert(landmark_indexRefObj.first->_landmarkID);
+                }
+            }
+            const float alphaInactive = 0.35f;
+            for (const std::shared_ptr<LandMark>& pOneLandmark : vLandmarks){
+                const float alpha = (activeLandmarkIDs.count(pOneLandmark->_landmarkID) > 0)? 1.0f : alphaInactive;
+                Mat44_t landmarkPoseInRender = worldInRenderTransform * pOneLandmark->GetLandmarkPoseInWorld();
                 DrawCylinder(landmarkPoseInRender, alpha);
             }
         }
 
-        // Swap frames and Process Events
-        pangolin::FinishFrame();
-
         // Update the stereo debug view in sync with the map viewer.
         cv::Mat debugViewImage = _pMapDatabase->GetDebugViewImage();
         if (!debugViewImage.empty()){
-            cv::imshow("Debug View: stereo frame", debugViewImage);
-            cv::waitKey(1);
+            if (!pDebugViewTexture || pDebugViewTexture->width != debugViewImage.cols || pDebugViewTexture->height != debugViewImage.rows){
+                pDebugViewTexture.reset(new pangolin::GlTexture(debugViewImage.cols, debugViewImage.rows, GL_RGB, false, 0, GL_BGR, GL_UNSIGNED_BYTE));
+                dDebugView.SetAspect(static_cast<double>(debugViewImage.cols) / debugViewImage.rows);
+            }
+            glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+            pDebugViewTexture->Upload(debugViewImage.data, GL_BGR, GL_UNSIGNED_BYTE);
+            dDebugView.Activate();
+            glDisable(GL_DEPTH_TEST);
+            glColor3f(1.0f, 1.0f, 1.0f);
+            pDebugViewTexture->RenderToViewportFlipY();
+            glEnable(GL_DEPTH_TEST);
         }
+
+        // Swap frames and Process Events
+        pangolin::FinishFrame();
     }
 
 }
