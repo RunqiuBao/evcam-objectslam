@@ -6,6 +6,7 @@
 #include "keyframe.h"
 #include "frame.h"
 #include "mapdatabase.h"
+#include "botsorttracker.h"
 
 #include <opencv2/opencv.hpp>
 
@@ -119,6 +120,10 @@ public:
     // association (nullptr if none); inherited instances are kept as-is instead of geometric re-association.
     void CreateNewLandmarks(std::shared_ptr<KeyFrame> pRefKeyFrame, std::shared_ptr<MapDataBase> mapDb, const bool isDebug = false, const std::vector<std::shared_ptr<LandMark>>& inheritedLandmarks = std::vector<std::shared_ptr<LandMark>>());
 
+    // run the BoT-SORT multi-object tracker on this frame's (stereo-matched) detections and store the
+    // resulting track ids/hits on the frame. Must be called exactly once per frame, before tracking.
+    void UpdateMOT(Frame& currentFrame);
+
     void SetTrackerStatus(const bool isInitialized){ _isInitialized = isInitialized; }
 
     bool GetTrackerStatus() { return _isInitialized; }
@@ -128,9 +133,9 @@ public:
     std::string _sStereoSequencePathForDebug;
 
 private:
-    // For each ref object of the ref keyframe, find the index of the corresponding current detection (-1 if none)
-    // by chaining 2D bbox overlaps: a current detection is matched to the past detection with the largest bbox IoU
-    // (if > 0.3); unresolved detections are checked against earlier frames until the ref keyframe.
+    // For each ref object of the ref keyframe, find the index of the corresponding current detection (-1 if
+    // none) via the BoT-SORT track ids: detection with track id t maps to the ref object whose host-frame
+    // detection carried track id t (keyframe's _trackIDToRefObjectIndex). Exclusive by construction.
     std::vector<int> AssociateDetectionsWithRefObjectsByBboxChain(const Frame& currentFrame) const;
 
     // Estimate the current frame pose from ref object <-> current detection correspondences (PnP, or landmark
@@ -152,6 +157,7 @@ private:
 
     std::shared_ptr<camera::CameraBase> _camera;
     std::shared_ptr<PoseOptimizer> _pPoseOptimizer;
+    BoTSortTracker _botSortTracker;
 
     bool _isInitialized = false;
 

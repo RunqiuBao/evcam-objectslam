@@ -491,6 +491,9 @@ const Mat44_t SLAMSystem::UpdateOneFrame(
     TDO_LOG_DEBUG_FORMAT("length of sDetection: %d", sDetections.size());
     if (sDetections.size() == 0){
         TDO_LOG_DEBUG("No detection in this frame. Early return with previous frame pose.");
+        if (_frameTracker){
+            _frameTracker->UpdateMOT(*pOneFrame);  // Note: advance the MOT (lost-track aging) even without detections.
+        }
         Mat44_t frameInWorld = Eigen::Matrix4f::Identity();
         if (_pFrameStack.size() > 0) {
             frameInWorld = _pFrameStack.back()->GetPose();
@@ -522,6 +525,7 @@ const Mat44_t SLAMSystem::UpdateOneFrame(
     auto matchedDetections = pOneFrame->GetMatchedDetections();  // Note: return a tuple.
     matchedLeftCamDetections = std::get<0>(matchedDetections);
     matchedRightCamDetections = std::get<1>(matchedDetections);
+    _frameTracker->UpdateMOT(*pOneFrame);  // Note: assigns BoT-SORT track ids to this frame's detections.
     // if (isDebug){
     //     std::filesystem::path leftCamImagePath = sStereoSequencePath;
     //     leftCamImagePath.append("concentrated/left/").append(timestamp + ".png");
@@ -567,6 +571,11 @@ const Mat44_t SLAMSystem::UpdateOneFrame(
         _pKeyFrameStack.push_back(pOneKeyframe);
         _pMapDb->AddKeyFrame(pOneKeyframe);
         pOneFrame->SetDetectionsAsRefObjects();
+        for (size_t indexDetection = 0; indexDetection < pOneFrame->_trackIDsOfDetections.size(); indexDetection++){
+            if (pOneFrame->_trackIDsOfDetections[indexDetection] >= 0){
+                pOneKeyframe->_trackIDToRefObjectIndex[pOneFrame->_trackIDsOfDetections[indexDetection]] = indexDetection;
+            }
+        }
         _frameTracker->CreateNewLandmarks(pOneKeyframe, _pMapDb, isDebug);
     }
     else{
@@ -644,7 +653,12 @@ const Mat44_t SLAMSystem::UpdateOneFrame(
                 }
                 const ThreeDDetection& newDetection = pOneFrame->_threeDDetections[indexDetection];
                 const float newObjectConfidenceThreshold = 0.5f;
-                if (newDetection._pLeftBbox->_detectionScore >= newObjectConfidenceThreshold
+                // Note: require a confirmed BoT-SORT track (matched in >= 2 frames) so that a spurious
+                // single-frame detection cannot force a keyframe.
+                const bool isConfirmedTrack = indexDetection < pOneFrame->_trackHitsOfDetections.size()
+                    && pOneFrame->_trackHitsOfDetections[indexDetection] >= 2;
+                if (isConfirmedTrack
+                    && newDetection._pLeftBbox->_detectionScore >= newObjectConfidenceThreshold
                     && newDetection._pRightBbox->_detectionScore >= newObjectConfidenceThreshold){
                     hasNewObject = true;
                     TDO_LOG_DEBUG_FORMAT("detection %d is a new object (no instance matched until the ref keyframe).", indexDetection);
@@ -699,6 +713,11 @@ const Mat44_t SLAMSystem::UpdateOneFrame(
             _pMapDb->AddKeyFrame(pOneKeyframe);
             _pKeyFrameStack.push_back(pOneKeyframe);
             pOneFrame->SetDetectionsAsRefObjects();
+            for (size_t indexDetection = 0; indexDetection < pOneFrame->_trackIDsOfDetections.size(); indexDetection++){
+                if (pOneFrame->_trackIDsOfDetections[indexDetection] >= 0){
+                    pOneKeyframe->_trackIDToRefObjectIndex[pOneFrame->_trackIDsOfDetections[indexDetection]] = indexDetection;
+                }
+            }
             pOneFrame->SetPose(Eigen::Matrix4f::Identity());
             TDO_LOG_INFO("keyframe insert! frame number: " << timestamp);
             TDO_LOG_INFO("keyframe in world pose: " << pOneKeyframe->GetKeyframePoseInWorld());

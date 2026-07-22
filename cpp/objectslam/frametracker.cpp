@@ -1298,63 +1298,43 @@ static float ComputeBboxIoU(const TwoDBoundingBox& bboxA, const TwoDBoundingBox&
 }
 
 std::vector<int> FrameTracker::AssociateDetectionsWithRefObjectsByBboxChain(const Frame& currentFrame) const{
-    const float minOverlapToTrackSameObject = 0.3f;
-    // collect the frames tracked against the ref keyframe (the keyframe's own ref frame included), newest first.
-    std::vector<std::shared_ptr<Frame>> frameChain;
-    frameChain.reserve(_pRefKeyframe->_vFrames_ids.size());
-    for (const auto& frame_id : _pRefKeyframe->_vFrames_ids){
-        if (frame_id.first->_frameID < currentFrame._frameID){
-            frameChain.push_back(frame_id.first);
-        }
-    }
-    std::sort(frameChain.begin(), frameChain.end(),
-        [](const std::shared_ptr<Frame>& a, const std::shared_ptr<Frame>& b){
-            return a->_frameID > b->_frameID;
-        });
-
+    // BoT-SORT based association: each detection carries the track id assigned in UpdateMOT; a ref object
+    // corresponds to the detection whose track id matches its host detection's track id at keyframe creation.
+    // Exclusive by construction (track ids are unique per frame).
     const size_t numRefObjects = _pRefKeyframe->_refObjects.size();
     std::vector<int> indicesCorrespondingDetection(numRefObjects, -1);
-    std::vector<float> bestIoUPerRefObject(numRefObjects, -1.f);
-    for (size_t indexDetection = 0; indexDetection < currentFrame._threeDDetections.size(); indexDetection++){
-        const TwoDBoundingBox& currentBbox = *currentFrame._threeDDetections[indexDetection]._pLeftBbox;
-        int correspondingRefObject = -1;
-        float trackedIoU = -1.f;
-        for (const std::shared_ptr<Frame>& pPastFrame : frameChain){
-            // find the past detection with the largest bbox overlap.
-            int indexLargestOverlap = -1;
-            float largestIoU = -1.f;
-            for (size_t indexPastDetection = 0; indexPastDetection < pPastFrame->_threeDDetections.size(); indexPastDetection++){
-                const float iou = ComputeBboxIoU(currentBbox, *pPastFrame->_threeDDetections[indexPastDetection]._pLeftBbox);
-                if (iou > largestIoU){
-                    largestIoU = iou;
-                    indexLargestOverlap = static_cast<int>(indexPastDetection);
-                }
-            }
-            if (indexLargestOverlap < 0 || largestIoU <= minOverlapToTrackSameObject){
-                // no instance of this object in this past frame; check one frame earlier.
-                continue;
-            }
-            // resolve the matched past detection to a ref object of the ref keyframe.
-            // (on the keyframe's own ref frame this mapping is the identity, so the walk ends there.)
-            for (size_t indexRefObject = 0; indexRefObject < pPastFrame->_detectionIDsOfCorrespondingRefObjects.size(); indexRefObject++){
-                if (pPastFrame->_detectionIDsOfCorrespondingRefObjects[indexRefObject] == indexLargestOverlap){
-                    correspondingRefObject = static_cast<int>(indexRefObject);
-                    trackedIoU = largestIoU;
-                    break;
-                }
-            }
-            if (correspondingRefObject >= 0){
-                break;
-            }
+    const std::map<int, unsigned int>& trackIDMap = _pRefKeyframe->_trackIDToRefObjectIndex;
+    for (size_t indexDetection = 0; indexDetection < currentFrame._trackIDsOfDetections.size()
+            && indexDetection < currentFrame._threeDDetections.size(); indexDetection++){
+        const int trackID = currentFrame._trackIDsOfDetections[indexDetection];
+        if (trackID < 0){
+            TDO_LOG_DEBUG_FORMAT("detection No.%d, corresponding refObject: -1 (no track)", indexDetection);
+            continue;
         }
-        if (correspondingRefObject >= 0 && correspondingRefObject < static_cast<int>(numRefObjects)
-            && trackedIoU > bestIoUPerRefObject[correspondingRefObject]){
-            indicesCorrespondingDetection[correspondingRefObject] = static_cast<int>(indexDetection);
-            bestIoUPerRefObject[correspondingRefObject] = trackedIoU;
+        const auto it = trackIDMap.find(trackID);
+        if (it == trackIDMap.end() || it->second >= numRefObjects){
+            TDO_LOG_DEBUG_FORMAT("detection No.%d (track %d), corresponding refObject: -1 (track not in keyframe)", indexDetection % trackID);
+            continue;
         }
-        TDO_LOG_DEBUG_FORMAT("detection No.%d, corresponding refObject: %d, iou: %f", indexDetection % correspondingRefObject % trackedIoU);
+        if (indicesCorrespondingDetection[it->second] < 0){
+            indicesCorrespondingDetection[it->second] = static_cast<int>(indexDetection);
+            TDO_LOG_DEBUG_FORMAT("detection No.%d (track %d), corresponding refObject: %d", indexDetection % trackID % it->second);
+        }
     }
     return indicesCorrespondingDetection;
+}
+
+void FrameTracker::UpdateMOT(Frame& currentFrame){
+    std::vector<BoTSortDetection> detections;
+    detections.reserve(currentFrame._threeDDetections.size());
+    for (size_t indexDetection = 0; indexDetection < currentFrame._threeDDetections.size(); indexDetection++){
+        const TwoDBoundingBox& bbox = *currentFrame._matchedLeftCamDetections[indexDetection];
+        detections.push_back(BoTSortDetection{bbox._centerX, bbox._centerY, bbox._bWidth, bbox._bHeight,
+                                              currentFrame._threeDDetections[indexDetection]._pLeftBbox->_detectionScore});
+    }
+    BoTSortTracker::Result result = _botSortTracker.Update(detections);
+    currentFrame._trackIDsOfDetections = std::move(result.trackIDs);
+    currentFrame._trackHitsOfDetections = std::move(result.trackHits);
 }
 
 bool FrameTracker::DoMotionBasedTrackDirect(Frame& currentFrame, const Frame& lastFrame, Mat44_t& velocity, const bool isDebug) const{

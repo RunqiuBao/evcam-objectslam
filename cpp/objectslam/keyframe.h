@@ -89,6 +89,9 @@ public:
 
     std::map<std::shared_ptr<Frame>, unsigned int> _vFrames_ids;  // ids means IDs of the frame
 
+    // BoT-SORT track id of each ref object's host detection -> ref object index; used for association.
+    std::map<int, unsigned int> _trackIDToRefObjectIndex;
+
     bool _bShouldNotPrune = false; // hack to keep keyframes distributed
 
 private:

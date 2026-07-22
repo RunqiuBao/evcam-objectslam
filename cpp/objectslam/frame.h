@@ -59,6 +59,9 @@ public:
     // 3D detections from the matched 2D detections
     std::vector<ThreeDDetection> _threeDDetections;
     std::vector<int> _detectionIDsOfCorrespondingRefObjects; // Note: size if same as refObjects in refKeyframe; if not correspondence, will be -1.
+    // BoT-SORT multi-object tracking results, aligned with _threeDDetections (-1 / 0 when unassigned).
+    std::vector<int> _trackIDsOfDetections;
+    std::vector<int> _trackHitsOfDetections;  // matched-frame count of each detection's track (confirmation).
     // 2D detections on the left- and right Image
     std::vector<TwoDBoundingBox> _leftCamDetections;
     std::vector<TwoDBoundingBox> _rightCamDetections;
