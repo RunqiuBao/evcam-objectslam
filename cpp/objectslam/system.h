@@ -11,6 +11,7 @@
 #include "keyframe.h"
 #include "mapdatabase.h"
 #include "semanticmapper.h"
+#include "trajectorysmoother.h"
 
 #include <rapidjson/document.h>
 #include <rapidjson/filereadstream.h>
@@ -35,9 +36,11 @@ void LoadDetections(
     std::shared_ptr<object::ObjectBase> pColorcone
 );
 
+
 void SaveOptimizedTraj(
     const std::string datasetRoot,
     std::vector<std::shared_ptr<Frame>> pFrameStack,
+    const std::vector<Mat44Unaligned_t>& smoothedTrajectoryInWorld,
     const Mat44_t worldInReadworldTransform
 );
 
@@ -99,6 +102,7 @@ public:
     std::unique_ptr<std::thread> _pMapperThread = nullptr;
 
     std::vector<std::shared_ptr<Frame>> _allFramesStack;  // Including frames that did not contain target objects.
+    std::vector<Mat44Unaligned_t> _smoothedTrajectoryInWorld;  // one smoothed world pose per frame in _allFramesStack.
     std::vector<std::shared_ptr<Frame>> _pFrameStack;
     std::vector<std::shared_ptr<KeyFrame>> _pKeyFrameStack;
 
@@ -122,7 +126,10 @@ private:
     size_t _maxNumDetectionsInHistory = 0;  // Note: the most detections ever seen in one frame during the run.
     // frames whose tracking failed since the last success; their poses get linearly interpolated at the next success.
     std::vector<std::shared_ptr<Frame>> _framesPendingInterpolation;
-    Mat44_t _lastSuccessfulFrameWorldPose = Eigen::Matrix4f::Identity();
+    // Note: DontAlign avoids imposing Eigen over-alignment on the (stack-allocated) SLAMSystem object.
+    Eigen::Matrix<float, 4, 4, Eigen::DontAlign> _lastSuccessfulFrameWorldPose = Eigen::Matrix4f::Identity();
+    // online kalman smoothing of the returned per-frame pose (port of tool_evalAndViszData/smooth_traj.py).
+    TrajectorySmoother _trajectorySmoother;
 
 };
 

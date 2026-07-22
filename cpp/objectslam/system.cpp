@@ -425,7 +425,7 @@ const bool CheckDetectionsConfidences(const std::vector<ThreeDDetection>& threeD
 //     return cam_pose_cw;
 // }
 
-void SaveOptimizedTraj(const std::string datasetRoot, std::vector<std::shared_ptr<Frame>> pFrameStack, const Mat44_t worldInReadworldTransform){
+void SaveOptimizedTraj(const std::string datasetRoot, std::vector<std::shared_ptr<Frame>> pFrameStack, const std::vector<Mat44Unaligned_t>& smoothedTrajectoryInWorld, const Mat44_t worldInReadworldTransform){
     std::filesystem::path trajFilePath = datasetRoot;
     trajFilePath.append("cameraTrackOptimized.txt");
     std::filesystem::path trajMaskFilePath = datasetRoot;
@@ -436,7 +436,11 @@ void SaveOptimizedTraj(const std::string datasetRoot, std::vector<std::shared_pt
     size_t frameCount = 0;
     for (auto pFrame : pFrameStack) {
         if (pFrame->_isTracked) {
-            Mat44_t frameInRealWorld = worldInReadworldTransform * pFrame->_pRefKeyframe->GetKeyframePoseInWorld() * pFrame->GetPose();
+            // save the smoothed trajectory (one smoothed world pose recorded per frame).
+            Mat44_t frameInWorld = (frameCount < smoothedTrajectoryInWorld.size())
+                ? smoothedTrajectoryInWorld[frameCount]
+                : pFrame->_pRefKeyframe->GetKeyframePoseInWorld() * pFrame->GetPose();
+            Mat44_t frameInRealWorld = worldInReadworldTransform * frameInWorld;
             Eigen::Quaternionf myQuaternion(frameInRealWorld.block<3, 3>(0, 0));
             trajFile << std::to_string(frameCount) << " " << frameInRealWorld(0, 3) << " " << frameInRealWorld(1, 3) << " " << frameInRealWorld(2, 3) << " " << myQuaternion.x() << " " << myQuaternion.y() << " " << myQuaternion.z() << " " << myQuaternion.w() << std::endl;
             trajMaskFile << "1" << std::endl;
@@ -495,10 +499,13 @@ const Mat44_t SLAMSystem::UpdateOneFrame(
                 frameInWorld = _frameTracker->_pRefKeyframe->GetKeyframePoseInWorld() * frameInWorld;
             }
         }
+        // no measurement this frame; the smoother coasts on its prediction.
+        const Mat44_t smoothedFrameInWorld = _trajectorySmoother.Smooth(frameInWorld, false);
+        _smoothedTrajectoryInWorld.push_back(smoothedFrameInWorld);
         if (isDebug){
-            UpdateDebugView(pOneFrame, true, frameInWorld, "", "");
+            UpdateDebugView(pOneFrame, true, smoothedFrameInWorld, "", "");
         }
-        return frameInWorld;
+        return smoothedFrameInWorld;
     }
 
     std::vector<TwoDBoundingBox> leftCamDetections, rightCamDetections;  // Note: load left and right detections and list correspondingly.
@@ -719,7 +726,11 @@ const Mat44_t SLAMSystem::UpdateOneFrame(
     _frameTracker->_pRefKeyframe->_vFrames_ids[pOneFrame] = pOneFrame->_frameID;
     _pFrameStack.push_back(pOneFrame);
     const Mat44_t frameInWorld = _frameTracker->_pRefKeyframe->GetKeyframePoseInWorld() * pOneFrame->GetPose();
-    _pMapDb->SetCurrentFramePoseInWorld(frameInWorld);
+    // smooth the rough estimated pose returned by the trackers (online kalman, see trajectorysmoother.h).
+    // Note: internal frame poses stay raw; only the published/returned pose is smoothed.
+    const Mat44_t smoothedFrameInWorld = _trajectorySmoother.Smooth(frameInWorld, isSuccess);
+    _smoothedTrajectoryInWorld.push_back(smoothedFrameInWorld);
+    _pMapDb->SetCurrentFramePoseInWorld(smoothedFrameInWorld);
 
     // stamp the observation age of the landmarks matched in this frame (for age-based pruning).
     if (isSuccess){
@@ -766,9 +777,9 @@ const Mat44_t SLAMSystem::UpdateOneFrame(
     }
 
     if (isDebug){
-        UpdateDebugView(pOneFrame, isSuccess, frameInWorld, keyframeInsertReason, trackingMethod);
+        UpdateDebugView(pOneFrame, isSuccess, smoothedFrameInWorld, keyframeInsertReason, trackingMethod);
     }
-    return frameInWorld;
+    return smoothedFrameInWorld;
 }
 
 }

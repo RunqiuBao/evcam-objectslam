@@ -175,7 +175,7 @@ void TestUnitreeSequence(const std::string sStereoSequencePath, eventobjectslam:
     }
     outputFile.close();
     // FIXME: the first keyframe will be optimized and bias from (0, 0, 0). Compensate it before saving.
-    eventobjectslam::SaveOptimizedTraj(sStereoSequencePath, thisSlamSys._allFramesStack, worldInRealWorld);
+    eventobjectslam::SaveOptimizedTraj(sStereoSequencePath, thisSlamSys._allFramesStack, thisSlamSys._smoothedTrajectoryInWorld, worldInRealWorld);
     eventobjectslam::SaveLandmarks(sStereoSequencePath, thisSlamSys._pMapDb, worldInRealWorld);
 
     // print debug infos
