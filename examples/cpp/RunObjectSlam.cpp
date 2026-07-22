@@ -28,9 +28,27 @@ void LoadTimestamps(const std::string& tsFilePath, std::vector<std::string>& tim
 }
 
 
-void TestUnitreeSequence(const std::string sStereoSequencePath, eventobjectslam::SLAMSystem& thisSlamSys){
+void TestUnitreeSequence(const std::string sStereoSequencePath, eventobjectslam::SLAMSystem& thisSlamSys, const std::string& stepModeSpec = ""){
     // the dataset dir includes `detections` and `sysconfig.json`
     rapidjson::Document& sysConfigJson = thisSlamSys._cfg->_jsonConfigNode;
+
+    // step mode spec: "+<ts>" step once the timestamp is larger than <ts>; "-<ts>" step while the timestamp is
+    // smaller than <ts>; any other non-empty value steps on every frame.
+    bool isStepModeAlways = false;
+    long long stepAfterTimestamp = -1, stepBeforeTimestamp = -1;
+    if (!stepModeSpec.empty()){
+        if (stepModeSpec[0] == '+' && stepModeSpec.size() > 1){
+            stepAfterTimestamp = std::atoll(stepModeSpec.c_str() + 1);
+            TDO_LOG_INFO_FORMAT("Step mode: stepping starts when timestamp > %d.", stepAfterTimestamp);
+        }
+        else if (stepModeSpec[0] == '-' && stepModeSpec.size() > 1){
+            stepBeforeTimestamp = std::atoll(stepModeSpec.c_str() + 1);
+            TDO_LOG_INFO_FORMAT("Step mode: stepping while timestamp < %d.", stepBeforeTimestamp);
+        }
+        else{
+            isStepModeAlways = true;
+        }
+    }
 
     eventobjectslam::Vec3_t objectSize;
     objectSize << sysConfigJson["objects"]["0"]["objectSize"][0].GetFloat(),
@@ -106,6 +124,19 @@ void TestUnitreeSequence(const std::string sStereoSequencePath, eventobjectslam:
     for(const std::string& timestamp : timestamps){
         TDO_LOG_DEBUG(timestamp);
 
+        if (thisSlamSys._pMapDb->IsStepMode()){
+            const long long timestampValue = std::atoll(timestamp.c_str());
+            const bool shouldStepThisFrame = isStepModeAlways
+                || (stepAfterTimestamp >= 0 && timestampValue > stepAfterTimestamp)
+                || (stepBeforeTimestamp >= 0 && timestampValue < stepBeforeTimestamp);
+            if (shouldStepThisFrame){
+                // wait for one press of Enter on the viewer window before running this SLAM step.
+                while (!thisSlamSys._pMapDb->TryConsumeOneStep()){
+                    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+                }
+            }
+        }
+
         auto starttime = std::chrono::steady_clock::now();
 
         // load detection results from txt file.
@@ -165,11 +196,16 @@ int main(int argc, char** argv){
      *  argv:
      *    - stereoseqpath: path to the stereo sequence.
      *    - sysconfigpath: path to the system config.
+     *    - stepmode (optional): run one SLAM step per press of Enter on the viewer window.
+     *        any value  -> step on every frame.
+     *        +<ts>      -> step only once the frame timestamp is larger than <ts>.
+     *        -<ts>      -> step only while the frame timestamp is smaller than <ts>.
      **/
     std::vector<std::string> options{
         "executable",
         "stereoseqpath",
-        "sysconfigpath"
+        "sysconfigpath",
+        "stepmode"
     };
     ArgumentParser argparser(argc, argv, options);
 
@@ -182,6 +218,11 @@ int main(int argc, char** argv){
 
     thisSlamSys.Startup();
 
+    if (argparser.cmdOptionExists("stepmode")){
+        thisSlamSys._pMapDb->SetStepMode(true);
+        TDO_LOG_INFO("Step mode enabled: press Enter on the viewer window to run one SLAM step.");
+    }
+
     // run the viewer in another thread
     std::thread thread1([&]() {
         std::this_thread::sleep_for(std::chrono::milliseconds(5));
@@ -189,7 +230,7 @@ int main(int argc, char** argv){
         viewer.Run();
     });
 
-    TestUnitreeSequence(argparser.getCmdOption("stereoseqpath"), thisSlamSys);
+    TestUnitreeSequence(argparser.getCmdOption("stereoseqpath"), thisSlamSys, argparser.getCmdOption("stepmode"));
 
     thread1.join();
 

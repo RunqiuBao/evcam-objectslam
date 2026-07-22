@@ -988,14 +988,18 @@ bool FrameTracker::DoMotionBasedTrack(Frame& currentFrame, const Frame& lastFram
         cv::imwrite(debugTrackingPath.string() , debugTracking);
     }
 
-    // 3D object points in world coordinates
-    std::vector<cv::Point3f> objectPoints;
-    // Populate objectPoints with the corresponding 3D points from the object
-    // 2D image points in image coordinates
-    std::vector<cv::Point2f> imagePoints, imagePointsRef;
-    // Populate imagePoints with the corresponding 2D points from the object in the image
+    return TrackPoseWithRefObjectCorrespondences(currentFrame, lastFrame, velocity, indicesCorrespondingDetecton);
+}
+
+void FrameTracker::CollectPnPCorrespondences(
+    const Frame& currentFrame,
+    const std::vector<int>& indicesCorrespondingDetection,
+    std::vector<cv::Point3f>& objectPoints,
+    std::vector<cv::Point2f>& imagePoints
+) const{
+    std::vector<std::shared_ptr<RefObject>> refObjects = _pRefKeyframe->_refObjects;
     size_t indexRefObject = 0;
-    for (int indexCorrespondingDetection : indicesCorrespondingDetecton){
+    for (int indexCorrespondingDetection : indicesCorrespondingDetection){
         if (indexCorrespondingDetection < 0){
             indexRefObject++;
             continue;
@@ -1012,18 +1016,13 @@ bool FrameTracker::DoMotionBasedTrack(Frame& currentFrame, const Frame& lastFram
             (*currentFrame._matchedLeftCamDetections[indexCorrespondingDetection])._centerY
         );
         imagePoints.push_back(point2D);
-        cv::Point2f point2DRef(
-            refObjects[indexRefObject]->_detection._pLeftBbox->_centerX,
-            refObjects[indexRefObject]->_detection._pLeftBbox->_centerY
-        );
-        imagePointsRef.push_back(point2DRef);
         indexRefObject++;
     }
 
     indexRefObject = 0;
     if (objectPoints.size() < 8){
         // not enough detection. Add keypts as well for tracking.
-        for (int indexCorrespondingDetection : indicesCorrespondingDetecton){
+        for (int indexCorrespondingDetection : indicesCorrespondingDetection){
             if (indexCorrespondingDetection < 0){
                 indexRefObject++;
                 continue;
@@ -1045,11 +1044,167 @@ bool FrameTracker::DoMotionBasedTrack(Frame& currentFrame, const Frame& lastFram
         }
 
     }
+}
+
+void FrameTracker::CollectLandmarkCorrespondences(
+    const Frame& currentFrame,
+    const std::vector<int>& indicesCorrespondingDetection,
+    std::vector<Vec3_t>& landmarksInRefKeyframe,
+    std::vector<Vec3_t>& landmarksInCurrentCamera
+) const{
+    const Mat44_t worldInRefKeyframe = _pRefKeyframe->GetKeyframePoseInWorld().inverse();
+    for (size_t indexRefObject = 0; indexRefObject < indicesCorrespondingDetection.size(); indexRefObject++){
+        const int indexDetection = indicesCorrespondingDetection[indexRefObject];
+        if (indexDetection < 0 || indexDetection >= static_cast<int>(currentFrame._threeDDetections.size())){
+            continue;
+        }
+        std::shared_ptr<LandMark> pTheLandmark = _pRefKeyframe->GetLandmarkByRefObjIndex(indexRefObject);
+        if (!pTheLandmark || pTheLandmark->IsToDelete()){
+            continue;
+        }
+        const Vec3_t landmarkInWorld = pTheLandmark->GetLandmarkPoseInWorld().col(3).head<3>();
+        landmarksInRefKeyframe.push_back(worldInRefKeyframe.block<3, 3>(0, 0) * landmarkInWorld + worldInRefKeyframe.col(3).head<3>());
+        landmarksInCurrentCamera.push_back(currentFrame._threeDDetections[indexDetection]._objectCenterInRefFrame);
+    }
+}
+
+bool FrameTracker::EstimateTranslationFromLandmarks(
+    const Frame& currentFrame,
+    const std::vector<int>& indicesCorrespondingDetection,
+    const Mat33_t& rotationCurrentInRefKeyframe,
+    Vec3_t& translation
+) const{
+    std::vector<Vec3_t> landmarksInRefKeyframe, landmarksInCurrentCamera;
+    CollectLandmarkCorrespondences(currentFrame, indicesCorrespondingDetection, landmarksInRefKeyframe, landmarksInCurrentCamera);
+    Vec3_t sumWeightedTranslation = Vec3_t::Zero();
+    float sumWeights = 0.f;
+    for (size_t indexLandmark = 0; indexLandmark < landmarksInRefKeyframe.size(); indexLandmark++){
+        // closer instances are more confident (stereo depth error grows with distance^2):
+        // weight each instance by the inverse squared distance to the camera.
+        const float distanceToCamera = std::max(landmarksInCurrentCamera[indexLandmark].norm(), 1e-3f);
+        const float weight = 1.f / (distanceToCamera * distanceToCamera);
+        sumWeightedTranslation += weight * (landmarksInRefKeyframe[indexLandmark] - rotationCurrentInRefKeyframe * landmarksInCurrentCamera[indexLandmark]);
+        sumWeights += weight;
+    }
+    if (landmarksInRefKeyframe.size() == 0 || sumWeights <= 0.f){
+        return false;
+    }
+    translation = sumWeightedTranslation / sumWeights;
+    TDO_LOG_DEBUG_FORMAT("estimated translation from %d landmark instances (distance weighted): %f, %f, %f", landmarksInRefKeyframe.size() % translation(0) % translation(1) % translation(2));
+    return true;
+}
+
+bool FrameTracker::DoSimple3DoFLeastSqauresTrack(Frame& currentFrame, const Frame& lastFrame, Mat44_t& velocity, const bool isDebug) const{
+    std::vector<int> indicesCorrespondingDetection = AssociateDetectionsWithRefObjectsByBboxChain(currentFrame);
+
+    // Note: this simple tracker is only for poorly-constrained frames; with 3 or more ref-matched objects the
+    // following (PnP-based) tracker is better constrained and should be used instead.
+    size_t countMatchedObjects = 0;
+    for (const int indexDetection : indicesCorrespondingDetection){
+        if (indexDetection >= 0){
+            countMatchedObjects++;
+        }
+    }
+    if (countMatchedObjects >= 3){
+        TDO_LOG_DEBUG_FORMAT("skip simple 3dof least-squares track: %d ref-matched objects (>= 3).", countMatchedObjects);
+        return false;
+    }
+
+    // step 1: estimate the new position from the landmark instances, with the momentum orientation.
+    const Mat33_t rotationMomentum = (lastFrame.GetPose() * velocity).block<3, 3>(0, 0);
+    Vec3_t translationCurrentInRefKeyframe;
+    if (!EstimateTranslationFromLandmarks(currentFrame, indicesCorrespondingDetection, rotationMomentum, translationCurrentInRefKeyframe)){
+        TDO_LOG_DEBUG("track by simple 3dof least-squares fail. no landmark instance available.");
+        velocity = Eigen::Matrix4f::Identity();
+        currentFrame.SetPose(lastFrame.GetPose() * velocity);
+        return false;
+    }
+
+    // step 2: at the new position, estimate the yaw heading w.r.t. the ref keyframe from the objects' optical
+    // flow: per landmark, take the observed horizontal flow (bearing change between the ref keyframe's view and
+    // the current view), eliminate the flow caused by the horizontal translation, and the residual flow is caused
+    // by the rotation. Least squares with equal weight per landmark = circular mean.
+    std::vector<Vec3_t> landmarksInRefKeyframe, landmarksInCurrentCamera;
+    CollectLandmarkCorrespondences(currentFrame, indicesCorrespondingDetection, landmarksInRefKeyframe, landmarksInCurrentCamera);
+    float sumSinYaw = 0.f, sumCosYaw = 0.f;
+    size_t countYawEstimates = 0;
+    const float minHorizontalNorm = 1e-3f;
+    for (size_t indexLandmark = 0; indexLandmark < landmarksInRefKeyframe.size(); indexLandmark++){
+        const Vec3_t& vLandmarkInKeyframe = landmarksInRefKeyframe[indexLandmark];
+        const Vec3_t vLandmarkFromNewPosition = vLandmarkInKeyframe - translationCurrentInRefKeyframe;
+        const Vec3_t& vLandmarkInCamera = landmarksInCurrentCamera[indexLandmark];
+        if (std::hypot(vLandmarkInKeyframe(0), vLandmarkInKeyframe(2)) < minHorizontalNorm
+            || std::hypot(vLandmarkFromNewPosition(0), vLandmarkFromNewPosition(2)) < minHorizontalNorm
+            || std::hypot(vLandmarkInCamera(0), vLandmarkInCamera(2)) < minHorizontalNorm){
+            continue;  // degenerate horizontal direction.
+        }
+        const float bearingInKeyframe = std::atan2(vLandmarkInKeyframe(0), vLandmarkInKeyframe(2));          // where the ref keyframe saw the object
+        const float bearingObserved = std::atan2(vLandmarkInCamera(0), vLandmarkInCamera(2));                // where the current camera sees it
+        const float bearingFromNewPosition = std::atan2(vLandmarkFromNewPosition(0), vLandmarkFromNewPosition(2));  // where it would appear from the new position with zero rotation
+        const float totalFlow = bearingObserved - bearingInKeyframe;
+        const float translationFlow = bearingFromNewPosition - bearingInKeyframe;
+        const float residualFlow = totalFlow - translationFlow;  // flow caused by the rotation only.
+        const float yawOneLandmark = -residualFlow;              // camera yaw w.r.t. the ref keyframe.
+        TDO_LOG_DEBUG_FORMAT("landmark %d flow (deg): total %f, translation %f, residual %f",
+                                indexLandmark % (totalFlow * 180.0 / M_PI) % (translationFlow * 180.0 / M_PI) % (residualFlow * 180.0 / M_PI));
+        sumSinYaw += std::sin(yawOneLandmark);
+        sumCosYaw += std::cos(yawOneLandmark);
+        countYawEstimates++;
+    }
+    if (countYawEstimates == 0){
+        TDO_LOG_DEBUG("track by simple 3dof least-squares fail. no valid yaw estimate.");
+        velocity = Eigen::Matrix4f::Identity();
+        currentFrame.SetPose(lastFrame.GetPose() * velocity);
+        return false;
+    }
+    const float yaw = std::atan2(sumSinYaw, sumCosYaw);
+    TDO_LOG_DEBUG_FORMAT("estimated yaw wrt ref keyframe from %d landmarks: %f deg", countYawEstimates % (yaw * 180.0 / M_PI));
+
+    Mat44_t currentFrameInRefKeyFrame = Eigen::Matrix4f::Identity();
+    currentFrameInRefKeyFrame.block<3, 3>(0, 0) = Eigen::AngleAxisf(yaw, Vec3_t::UnitY()).toRotationMatrix();
+    currentFrameInRefKeyFrame.col(3).head<3>() = translationCurrentInRefKeyframe;
+    currentFrameInRefKeyFrame = mathutils::FixRxRzAndY<float>(currentFrameInRefKeyFrame);
+    TDO_LOG_DEBUG("currentCameraInRefKeyFrame (simple 3dof): \n" << currentFrameInRefKeyFrame);
+
+    bool isSuccess = false;
+    Mat44_t velocityCandidate = lastFrame.GetPose().inverse() * currentFrameInRefKeyFrame;
+    float rotAngleDeg = Eigen::AngleAxisf(velocityCandidate.block<3, 3>(0, 0)).angle() * 180.0 / M_PI;
+    if (
+        velocityCandidate.block(0, 3, 3, 1).norm() > _params.maxPoseError ||
+        velocityCandidate(0, 3) > _params.maxPoseErrorInX ||
+        std::abs(rotAngleDeg) > _params.maxRotationAngleDeg
+    ){
+        TDO_LOG_DEBUG("track by simple 3dof least-squares fail. not updating camera pose. velocity is \n" << velocityCandidate << ", translation is " << velocityCandidate.block(0, 3, 3, 1) << ", rotations are " << rotAngleDeg);
+        velocity = Eigen::Matrix4f::Identity();
+        currentFrame.SetPose(lastFrame.GetPose() * velocity);
+    }
+    else{
+        velocity = velocityCandidate;
+        currentFrame.SetPose(currentFrameInRefKeyFrame);
+        currentFrame._isTracked = true;
+        currentFrame._detectionIDsOfCorrespondingRefObjects = indicesCorrespondingDetection;
+        TDO_LOG_DEBUG("track by simple 3dof least-squares succeeded. (rotAngleDeg, " << rotAngleDeg << "). currentFrameInLast:\n" << velocity);
+        isSuccess = true;
+    }
+    return isSuccess;
+}
+
+bool FrameTracker::TrackPoseWithRefObjectCorrespondences(
+    Frame& currentFrame,
+    const Frame& lastFrame,
+    Mat44_t& velocity,
+    const std::vector<int>& indicesCorrespondingDetecton
+) const{
+    std::vector<std::shared_ptr<RefObject>> refObjects = _pRefKeyframe->_refObjects;
+    camera::CameraBase myStereoCamera = *_camera;
+    std::vector<cv::Point3f> objectPoints;
+    std::vector<cv::Point2f> imagePoints;
+    CollectPnPCorrespondences(currentFrame, indicesCorrespondingDetecton, objectPoints, imagePoints);
 
     bool isSuccess = false;
     // Estimate current frame pose using PnP
     if (objectPoints.size() <= 4) {
-        indexRefObject = 0;
+        size_t indexRefObject = 0;
         // too few detections, only update camera translation
         std::vector<float> xUpdates, zUpdates;
         Mat44_t currFrameMomentumPose = _pRefKeyframe->GetKeyframePoseInWorld() * lastFrame.GetPose() * velocity.inverse();
@@ -1131,6 +1286,253 @@ bool FrameTracker::DoMotionBasedTrack(Frame& currentFrame, const Frame& lastFram
         }
     }
 
+    return isSuccess;
+}
+
+static float ComputeBboxIoU(const TwoDBoundingBox& bboxA, const TwoDBoundingBox& bboxB){
+    cv::Rect2f rectA(bboxA._centerX - bboxA._bWidth / 2.f, bboxA._centerY - bboxA._bHeight / 2.f, bboxA._bWidth, bboxA._bHeight);
+    cv::Rect2f rectB(bboxB._centerX - bboxB._bWidth / 2.f, bboxB._centerY - bboxB._bHeight / 2.f, bboxB._bWidth, bboxB._bHeight);
+    const float intersectionArea = (rectA & rectB).area();
+    const float unionArea = rectA.area() + rectB.area() - intersectionArea;
+    return (unionArea > 0.f)? intersectionArea / unionArea : 0.f;
+}
+
+std::vector<int> FrameTracker::AssociateDetectionsWithRefObjectsByBboxChain(const Frame& currentFrame) const{
+    const float minOverlapToTrackSameObject = 0.3f;
+    // collect the frames tracked against the ref keyframe (the keyframe's own ref frame included), newest first.
+    std::vector<std::shared_ptr<Frame>> frameChain;
+    frameChain.reserve(_pRefKeyframe->_vFrames_ids.size());
+    for (const auto& frame_id : _pRefKeyframe->_vFrames_ids){
+        if (frame_id.first->_frameID < currentFrame._frameID){
+            frameChain.push_back(frame_id.first);
+        }
+    }
+    std::sort(frameChain.begin(), frameChain.end(),
+        [](const std::shared_ptr<Frame>& a, const std::shared_ptr<Frame>& b){
+            return a->_frameID > b->_frameID;
+        });
+
+    const size_t numRefObjects = _pRefKeyframe->_refObjects.size();
+    std::vector<int> indicesCorrespondingDetection(numRefObjects, -1);
+    std::vector<float> bestIoUPerRefObject(numRefObjects, -1.f);
+    for (size_t indexDetection = 0; indexDetection < currentFrame._threeDDetections.size(); indexDetection++){
+        const TwoDBoundingBox& currentBbox = *currentFrame._threeDDetections[indexDetection]._pLeftBbox;
+        int correspondingRefObject = -1;
+        float trackedIoU = -1.f;
+        for (const std::shared_ptr<Frame>& pPastFrame : frameChain){
+            // find the past detection with the largest bbox overlap.
+            int indexLargestOverlap = -1;
+            float largestIoU = -1.f;
+            for (size_t indexPastDetection = 0; indexPastDetection < pPastFrame->_threeDDetections.size(); indexPastDetection++){
+                const float iou = ComputeBboxIoU(currentBbox, *pPastFrame->_threeDDetections[indexPastDetection]._pLeftBbox);
+                if (iou > largestIoU){
+                    largestIoU = iou;
+                    indexLargestOverlap = static_cast<int>(indexPastDetection);
+                }
+            }
+            if (indexLargestOverlap < 0 || largestIoU <= minOverlapToTrackSameObject){
+                // no instance of this object in this past frame; check one frame earlier.
+                continue;
+            }
+            // resolve the matched past detection to a ref object of the ref keyframe.
+            // (on the keyframe's own ref frame this mapping is the identity, so the walk ends there.)
+            for (size_t indexRefObject = 0; indexRefObject < pPastFrame->_detectionIDsOfCorrespondingRefObjects.size(); indexRefObject++){
+                if (pPastFrame->_detectionIDsOfCorrespondingRefObjects[indexRefObject] == indexLargestOverlap){
+                    correspondingRefObject = static_cast<int>(indexRefObject);
+                    trackedIoU = largestIoU;
+                    break;
+                }
+            }
+            if (correspondingRefObject >= 0){
+                break;
+            }
+        }
+        if (correspondingRefObject >= 0 && correspondingRefObject < static_cast<int>(numRefObjects)
+            && trackedIoU > bestIoUPerRefObject[correspondingRefObject]){
+            indicesCorrespondingDetection[correspondingRefObject] = static_cast<int>(indexDetection);
+            bestIoUPerRefObject[correspondingRefObject] = trackedIoU;
+        }
+        TDO_LOG_DEBUG_FORMAT("detection No.%d, corresponding refObject: %d, iou: %f", indexDetection % correspondingRefObject % trackedIoU);
+    }
+    return indicesCorrespondingDetection;
+}
+
+bool FrameTracker::DoMotionBasedTrackDirect(Frame& currentFrame, const Frame& lastFrame, Mat44_t& velocity, const bool isDebug) const{
+    std::vector<int> indicesCorrespondingDetection = AssociateDetectionsWithRefObjectsByBboxChain(currentFrame);
+
+    // orientation from the original method (PnP); momentum orientation when there are too few points.
+    Mat33_t rotationCurrentInRefKeyframe = (lastFrame.GetPose() * velocity).block<3, 3>(0, 0);
+    std::vector<cv::Point3f> objectPoints;
+    std::vector<cv::Point2f> imagePoints;
+    CollectPnPCorrespondences(currentFrame, indicesCorrespondingDetection, objectPoints, imagePoints);
+    if (objectPoints.size() > 4){
+        camera::CameraBase myStereoCamera = *_camera;
+        cv::Mat cameraMatrix = cv::Mat::eye(3, 3, CV_64F);
+        cameraMatrix.at<double>(0, 0) = static_cast<double>(myStereoCamera._kk(0, 0));
+        cameraMatrix.at<double>(0, 2) = static_cast<double>(myStereoCamera._kk(0, 2));
+        cameraMatrix.at<double>(1, 1) = static_cast<double>(myStereoCamera._kk(1, 1));
+        cameraMatrix.at<double>(1, 2) = static_cast<double>(myStereoCamera._kk(1, 2));
+        cv::Mat distCoeffs = cv::Mat::zeros(5, 1, CV_64F);
+        Mat44_t currentFrameInRefKeyFrameByPnP;
+        TrackWithPnP(objectPoints, imagePoints, cameraMatrix, distCoeffs, _params.maxPoseError, currentFrameInRefKeyFrameByPnP);
+        rotationCurrentInRefKeyframe = currentFrameInRefKeyFrameByPnP.block<3, 3>(0, 0);
+    }
+
+    // translation directly from the landmark instances (least squares).
+    Vec3_t translationCurrentInRefKeyframe;
+    if (!EstimateTranslationFromLandmarks(currentFrame, indicesCorrespondingDetection, rotationCurrentInRefKeyframe, translationCurrentInRefKeyframe)){
+        TDO_LOG_DEBUG("track (direct) fail. no landmark instance available for translation estimation.");
+        velocity = Eigen::Matrix4f::Identity();
+        currentFrame.SetPose(lastFrame.GetPose() * velocity);
+        return false;
+    }
+
+    Mat44_t currentFrameInRefKeyFrame = Eigen::Matrix4f::Identity();
+    currentFrameInRefKeyFrame.block<3, 3>(0, 0) = rotationCurrentInRefKeyframe;
+    currentFrameInRefKeyFrame.col(3).head<3>() = translationCurrentInRefKeyframe;
+    currentFrameInRefKeyFrame = mathutils::FixRxRzAndY<float>(currentFrameInRefKeyFrame);
+    TDO_LOG_DEBUG("currentCameraInRefKeyFrame (direct): \n" << currentFrameInRefKeyFrame);
+
+    bool isSuccess = false;
+    Mat44_t velocityCandidate = lastFrame.GetPose().inverse() * currentFrameInRefKeyFrame;
+    float rotAngleDeg = Eigen::AngleAxisf(velocityCandidate.block<3, 3>(0, 0)).angle() * 180.0 / M_PI;
+    if (
+        velocityCandidate.block(0, 3, 3, 1).norm() > _params.maxPoseError ||
+        velocityCandidate(0, 3) > _params.maxPoseErrorInX ||
+        std::abs(rotAngleDeg) > _params.maxRotationAngleDeg
+    ){
+        TDO_LOG_DEBUG("track (direct) fail. not updating camera pose. velocity is \n" << velocityCandidate << ", translation is " << velocityCandidate.block(0, 3, 3, 1) << ", rotations are " << rotAngleDeg);
+        velocity = Eigen::Matrix4f::Identity();
+        currentFrame.SetPose(lastFrame.GetPose() * velocity);
+    }
+    else{
+        velocity = velocityCandidate;
+        currentFrame.SetPose(currentFrameInRefKeyFrame);
+        currentFrame._isTracked = true;
+        currentFrame._detectionIDsOfCorrespondingRefObjects = indicesCorrespondingDetection;
+        TDO_LOG_DEBUG("track (direct) succeeded. (rotAngleDeg, " << rotAngleDeg << "). currentFrameInLast:\n" << velocity);
+        isSuccess = true;
+    }
+    return isSuccess;
+}
+
+bool FrameTracker::DoDenseAlignmentBasedTrackDirect(Frame& currentFrame, const Frame& lastFrame, const bool isDebug) const{
+    std::vector<std::shared_ptr<RefObject>> refObjects = _pRefKeyframe->_refObjects;
+    camera::CameraBase myStereoCamera = *_camera;
+    std::vector<int> indicesCorrespondingDetection = AssociateDetectionsWithRefObjectsByBboxChain(currentFrame);
+
+    // build bboxes for dense alignment: ref objects projected at the last frame pose vs. the current detected bboxes.
+    std::vector<TwoDBoundingBox> leftCamProjections_ref, rightCamProjections_ref, leftCamProjections, rightCamProjections;
+    for (size_t indexRefObject = 0; indexRefObject < refObjects.size(); indexRefObject++){
+        const int indexCorrespondingDetection = indicesCorrespondingDetection[indexRefObject];
+        if (indexCorrespondingDetection < 0){
+            continue;
+        }
+        std::shared_ptr<RefObject> refObject = refObjects[indexRefObject];
+        Eigen::MatrixXf transformedVertices = mathutils::TransformPoints<Eigen::MatrixXf>(lastFrame.GetPose().inverse(), refObject->_detection.GetVertices3DInEigen());
+        std::vector<cv::Point> points2DCV = mathutils::ProjectPoints3DToPoints2D(transformedVertices, myStereoCamera);
+        cv::Mat refObjectPoseMask = mathutils::Draw2DHullMaskFrom2DPointsSet(points2DCV, myStereoCamera._rows, myStereoCamera._cols);
+        std::vector<std::vector<cv::Point>> refObjectContours;
+        cv::findContours(refObjectPoseMask * 255, refObjectContours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
+        if (refObjectContours.size() == 0){
+            continue;
+        }
+        cv::Rect bboxRefObjProj = cv::boundingRect(refObjectContours[0]);
+        leftCamProjections_ref.push_back(std::move(TwoDBoundingBox(
+            bboxRefObjProj.x + bboxRefObjProj.width / 2,
+            bboxRefObjProj.y + bboxRefObjProj.height / 2,
+            bboxRefObjProj.width,
+            bboxRefObjProj.height,
+            refObject->_detection._pObjectInfo,
+            -1.,  // Note: not used.
+            std::vector<Vec2_t>(),  // Note: not used.
+            std::vector<Vec2_t>(),  // Note: not used.
+            false  // Note: not used.
+        )));
+        float disparityRefObj = refObject->_detection._pLeftBbox->_centerX - refObject->_detection._pRightBbox->_centerX;
+        rightCamProjections_ref.push_back(std::move(TwoDBoundingBox(
+            bboxRefObjProj.x + bboxRefObjProj.width / 2 - disparityRefObj,
+            bboxRefObjProj.y + bboxRefObjProj.height / 2,
+            bboxRefObjProj.width,  // Note: not important to be precise
+            bboxRefObjProj.height,
+            refObject->_detection._pObjectInfo,
+            -1.,  // Note: not used.
+            std::vector<Vec2_t>(),  // Note: not used.
+            std::vector<Vec2_t>(),  // Note: not used.
+            false
+        )));
+        leftCamProjections.push_back(*currentFrame._matchedLeftCamDetections[indexCorrespondingDetection]);
+        rightCamProjections.push_back(*currentFrame._matchedRightCamDetections[indexCorrespondingDetection]);
+    }
+
+    if (leftCamProjections_ref.size() == 0){
+        TDO_LOG_DEBUG("track by dense align (direct) fail. no ref object correspondence.");
+        currentFrame.SetPose(lastFrame.GetPose());
+        return false;
+    }
+
+    TDO_LOG_DEBUG("try once dense alignment (direct association)");
+    cv::Mat refDepth, refImage, currDepth, currImage;
+    const int imageWidth = _camera->_cols;
+    const int imageHeight = _camera->_rows;
+    _pPoseOptimizer->PrepareDepthAndFeatureMapFromBboxes(leftCamProjections_ref, rightCamProjections_ref, imageWidth, imageHeight, refImage, refDepth);
+    _pPoseOptimizer->PrepareDepthAndFeatureMapFromBboxes(leftCamProjections, rightCamProjections, imageWidth, imageHeight, currImage, currDepth);
+    if (isDebug){
+        std::vector<cv::Mat> channels;
+        cv::Mat zeroChannel(myStereoCamera._rows, myStereoCamera._cols, CV_32FC1, cv::Scalar(0.0));
+        channels.push_back(refImage * 4);
+        channels.push_back(currImage * 4);
+        channels.push_back(zeroChannel);
+        cv::Mat debugTracking;
+        cv::merge(channels, debugTracking);
+        std::filesystem::path debugTrackingPath = _sStereoSequencePathForDebug;
+        debugTrackingPath.append("debugTrackingByDenseAlignDirect/");
+        if (!std::filesystem::exists(debugTrackingPath) && !std::filesystem::create_directory(debugTrackingPath)){
+            TDO_LOG_ERROR_FORMAT("Failed to create the folder: %s", debugTrackingPath.string());
+            throw std::runtime_error("Debug");
+        }
+        debugTrackingPath.append(currentFrame._timestamp + ".png");
+        cv::imwrite(debugTrackingPath.string() , debugTracking);
+    }
+    Mat44_d currInPreviousTransform;
+    _pPoseOptimizer->EstimatePose(refDepth, refImage, leftCamProjections_ref, currDepth, currImage, currInPreviousTransform);
+    currInPreviousTransform = mathutils::FixRxRzAndY<double>(currInPreviousTransform);
+    TDO_LOG_DEBUG("currInPreviousTransform by dense align (direct): \n" << currInPreviousTransform);
+
+    // orientation from the original method (dense alignment); translation from the landmark instances.
+    Mat44_t currInRefTransformByDenseAlign = lastFrame.GetPose() * currInPreviousTransform.cast<float>();
+    Mat33_t rotationCurrentInRefKeyframe = currInRefTransformByDenseAlign.block<3, 3>(0, 0);
+    Vec3_t translationCurrentInRefKeyframe;
+    if (!EstimateTranslationFromLandmarks(currentFrame, indicesCorrespondingDetection, rotationCurrentInRefKeyframe, translationCurrentInRefKeyframe)){
+        TDO_LOG_DEBUG("track by dense align (direct) fail. no landmark instance available for translation estimation.");
+        currentFrame.SetPose(lastFrame.GetPose());
+        return false;
+    }
+    Mat44_t currInRefTransform = Eigen::Matrix4f::Identity();
+    currInRefTransform.block<3, 3>(0, 0) = rotationCurrentInRefKeyframe;
+    currInRefTransform.col(3).head<3>() = translationCurrentInRefKeyframe;
+    currInRefTransform = mathutils::FixRxRzAndY<float>(currInRefTransform);
+
+    Mat44_t velocity = lastFrame.GetPose().inverse() * currInRefTransform;
+    float rotAngleDenseAlignDeg = Eigen::AngleAxisf(velocity.block<3, 3>(0, 0)).angle() * 180.0 / M_PI;
+    bool isSuccess = false;
+    if (
+        velocity.block(0, 3, 3, 1).norm() > _params.maxPoseError ||
+        velocity(0, 3) > _params.maxPoseErrorInX ||
+        std::abs(rotAngleDenseAlignDeg) > _params.maxRotationAngleDeg
+    ){
+        TDO_LOG_DEBUG("track by dense align (direct) fail. not updating camera pose. velocity is \n" << velocity << ", translation is " << velocity.block(0, 3, 3, 1) << ", rotations are " << rotAngleDenseAlignDeg);
+        velocity = Eigen::Matrix4f::Identity();
+        currentFrame.SetPose(lastFrame.GetPose() * velocity);
+        // not updating cameraInWorld
+    }
+    else{
+        currentFrame.SetPose(currInRefTransform);
+        currentFrame._isTracked = true;
+        currentFrame._detectionIDsOfCorrespondingRefObjects = indicesCorrespondingDetection;
+        TDO_LOG_DEBUG("track by dense align (direct) succeeded. (rotAngleDeg, " << rotAngleDenseAlignDeg << "). currentFrameInLast:\n" << velocity);
+        isSuccess = true;
+    }
     return isSuccess;
 }
 
@@ -1282,97 +1684,170 @@ bool FrameTracker::Do2DTrackingBasedTrack(Frame& currentFrame, const Frame& last
 }
 
 
-void FrameTracker::CreateNewLandmarks(std::shared_ptr<KeyFrame> pRefKeyFrame, std::shared_ptr<MapDataBase> pMapDb, const bool isDebug){
-    float minIoUForCorrespondence = 0.6;
+void FrameTracker::CreateNewLandmarks(std::shared_ptr<KeyFrame> pRefKeyFrame, std::shared_ptr<MapDataBase> pMapDb, const bool isDebug, const std::vector<std::shared_ptr<LandMark>>& inheritedLandmarks){
+    float minIoUForCorrespondence = 0.1;
 
     std::vector<std::shared_ptr<LandMark>> visibleLandmarks = pMapDb->GetVisibleLandmarks(pRefKeyFrame);  // Note: find landmarks that might fall within FoV of this keyframe.
     std::map<std::shared_ptr<LandMark>, unsigned int> observedLandmarks_indicesRefObj;
     std::vector<int> indicesLandmarkForRefObjects(pRefKeyFrame->_refObjects.size(), -1);
-    std::vector<float> distancesObjectToClosestLandmark(pRefKeyFrame->_refObjects.size(), std::numeric_limits<float>::max());
-    std::vector<int> indicesForClosestLandmark(pRefKeyFrame->_refObjects.size(), -1);
     size_t countNewLandmark = 0;
     cv::Mat displayVisibleLdms((*pRefKeyFrame->_pCamera)._rows, (*pRefKeyFrame->_pCamera)._cols, CV_8UC1, cv::Scalar(0));
+    // ---- phase 1: instances inherited from the tracking association (exclusive by construction). ----
+    std::vector<bool> isRefObjectAssigned(pRefKeyFrame->_refObjects.size(), false);
+    std::set<unsigned int> usedLandmarkIDs;  // Note: a landmark can be assigned to at most one ref object per keyframe.
     for (int indexRefObject=0; indexRefObject < pRefKeyFrame->_refObjects.size(); indexRefObject++){
+        if (indexRefObject < static_cast<int>(inheritedLandmarks.size()) && inheritedLandmarks[indexRefObject]){
+            std::shared_ptr<LandMark> pInheritedLandmark = inheritedLandmarks[indexRefObject];
+            pInheritedLandmark->AddObservation(pRefKeyFrame, indexRefObject);
+            pInheritedLandmark->SetLastObservedFrameID(pRefKeyFrame->_pRefFrame->_frameID);
+            observedLandmarks_indicesRefObj[pInheritedLandmark] = indexRefObject;
+            isRefObjectAssigned[indexRefObject] = true;
+            usedLandmarkIDs.insert(pInheritedLandmark->_landmarkID);
+            TDO_LOG_DEBUG_FORMAT("Inherited object instance (landmark %d) from tracking for refObject %d.", pInheritedLandmark->_landmarkID % indexRefObject);
+        }
+    }
+
+    // ---- phase 2: overlaps between all unassigned ref objects and all unused visible instances. ----
+    struct OverlapCandidate {
+        float iou;
+        int indexRefObject;
+        int indexLandmark;
+    };
+    std::vector<OverlapCandidate> overlapCandidates;
+    std::vector<cv::Mat> landmarkPoseMasks(visibleLandmarks.size());
+    for (int indexVisibleLandmark=0; indexVisibleLandmark < visibleLandmarks.size(); indexVisibleLandmark++){
+        std::shared_ptr<LandMark> pOneLandmark = visibleLandmarks[indexVisibleLandmark];
+        Eigen::MatrixXf transformedVerticesInWorld = mathutils::TransformPoints<Eigen::MatrixXf>(pOneLandmark->GetLandmarkPoseInWorld(), pOneLandmark->GetVertices3DInLandmark());
+        Eigen::MatrixXf transformedVerticesInCamera = mathutils::TransformPoints<Eigen::MatrixXf>((pRefKeyFrame->GetKeyframePoseInWorld()).inverse(), transformedVerticesInWorld);
+        std::vector<cv::Point> oneLandmarkPoints2D = mathutils::ProjectPoints3DToPoints2D(transformedVerticesInCamera, (*pRefKeyFrame->_pCamera));
+        landmarkPoseMasks[indexVisibleLandmark] = mathutils::Draw2DHullMaskFrom2DPointsSet(oneLandmarkPoints2D, (*pRefKeyFrame->_pCamera)._rows, (*pRefKeyFrame->_pCamera)._cols);
+        if (isDebug){
+            cv::bitwise_or(landmarkPoseMasks[indexVisibleLandmark], displayVisibleLdms, displayVisibleLdms);
+        }
+    }
+    for (int indexRefObject=0; indexRefObject < pRefKeyFrame->_refObjects.size(); indexRefObject++){
+        if (isRefObjectAssigned[indexRefObject]){
+            continue;
+        }
         std::shared_ptr<RefObject> pRefObject = pRefKeyFrame->_refObjects[indexRefObject];
-        TDO_LOG_DEBUG("baodebug pRefObject->_detection.GetVertices3DInEigen(): \n" << pRefObject->_detection.GetVertices3DInEigen());
         std::vector<cv::Point> refObjectPoints2D = mathutils::ProjectPoints3DToPoints2D(pRefObject->_detection.GetVertices3DInEigen(), (*pRefKeyFrame->_pCamera));
         cv::Mat refObjectPoseMask = mathutils::Draw2DHullMaskFrom2DPointsSet(refObjectPoints2D, (*pRefKeyFrame->_pCamera)._rows, (*pRefKeyFrame->_pCamera)._cols);
+        float bestIoUForDebug = -1.f;
+        int bestLandmarkIDForDebug = -1;
         for (int indexVisibleLandmark=0; indexVisibleLandmark < visibleLandmarks.size(); indexVisibleLandmark++){
-            std::shared_ptr<LandMark> pOneLandmark = visibleLandmarks[indexVisibleLandmark];
-            Eigen::MatrixXf transformedVerticesInWorld = mathutils::TransformPoints<Eigen::MatrixXf>(pOneLandmark->GetLandmarkPoseInWorld(), pOneLandmark->GetVertices3DInLandmark());
-            Eigen::MatrixXf transformedVerticesInCamera = mathutils::TransformPoints<Eigen::MatrixXf>((pRefKeyFrame->GetKeyframePoseInWorld()).inverse(), transformedVerticesInWorld);
-            std::vector<cv::Point> oneLandmarkPoints2D = mathutils::ProjectPoints3DToPoints2D(transformedVerticesInCamera, (*pRefKeyFrame->_pCamera));
-            cv::Mat oneLandmarkPoseMask = mathutils::Draw2DHullMaskFrom2DPointsSet(oneLandmarkPoints2D, (*pRefKeyFrame->_pCamera)._rows, (*pRefKeyFrame->_pCamera)._cols);
+            if (usedLandmarkIDs.count(visibleLandmarks[indexVisibleLandmark]->_landmarkID) > 0){
+                continue;
+            }
             cv::Mat overlaps, unions;
-            cv::bitwise_and(refObjectPoseMask, oneLandmarkPoseMask, overlaps);
-            cv::bitwise_or(refObjectPoseMask, oneLandmarkPoseMask, unions);
+            cv::bitwise_and(refObjectPoseMask, landmarkPoseMasks[indexVisibleLandmark], overlaps);
+            cv::bitwise_or(refObjectPoseMask, landmarkPoseMasks[indexVisibleLandmark], unions);
             cv::Scalar overlapArea = cv::sum(overlaps);
             cv::Scalar unionsArea = cv::sum(unions);
-            if (isDebug && indexRefObject == 0){
-                cv::bitwise_or(oneLandmarkPoseMask, displayVisibleLdms, displayVisibleLdms);
+            const float iou = (unionsArea[0] > 0)? static_cast<float>(overlapArea[0] / unionsArea[0]) : 0.f;
+            if (iou > bestIoUForDebug){
+                bestIoUForDebug = iou;
+                bestLandmarkIDForDebug = static_cast<int>(visibleLandmarks[indexVisibleLandmark]->_landmarkID);
             }
-            if ((overlapArea[0] / unionsArea[0]) > minIoUForCorrespondence){
-                indicesLandmarkForRefObjects[indexRefObject] = indexVisibleLandmark;
-                observedLandmarks_indicesRefObj[visibleLandmarks[indexVisibleLandmark]] = indexRefObject;
-                break;
-            }
-            else if (overlapArea[0] > 0) {
-                // TODO: need collision check here.
-                Vec3_t objectCenterInWorld = pRefKeyFrame->GetKeyframePoseInWorld().block<3, 3>(0, 0) * pRefObject->_detection._objectCenterInRefFrame + pRefKeyFrame->GetKeyframePoseInWorld().col(3).head<3>();
-                Mat44_t poseExistingLandmark = visibleLandmarks[indexVisibleLandmark]->GetLandmarkPoseInWorld();
-                Eigen::Vector3f vObjectToLandmark = objectCenterInWorld - poseExistingLandmark.col(3).head<3>();
-                float distanceO2L = vObjectToLandmark.norm();
-                distancesObjectToClosestLandmark[indexRefObject] = distanceO2L;
-                indicesForClosestLandmark[indexRefObject] = indexVisibleLandmark;
-            }
-            else{
-                continue;
+            if (iou > minIoUForCorrespondence){
+                overlapCandidates.push_back(OverlapCandidate{iou, indexRefObject, indexVisibleLandmark});
             }
         }
-        float distanceThreshold;
-        if (indicesForClosestLandmark[indexRefObject] >= 0){
-            // found a closest landmark.
-            distanceThreshold = visibleLandmarks[indicesForClosestLandmark[indexRefObject]]->_horizontalSize * 3.;  // Note: 3.0 is a factor.
-        }
-        else{
-            // might be the initial keyframe. Or there are no visiable landmarks existing for this keyframe.
-            distanceThreshold = 0;
-        }
-        if (indicesLandmarkForRefObjects[indexRefObject] < 0){
-            if (distancesObjectToClosestLandmark[indexRefObject] > distanceThreshold){  // if within certain physical distance, still create correspondence.
-                // if not correspondence, create landmark.
-                Mat44_t poseLandmarkInWorld;
-                std::vector<Vec3_t> vertices3DInLandmark;
-                LandMark::ComputeLandmarkPoseInWorldByVertices3D(
-                    pRefKeyFrame,
-                    pRefObject,
-                    poseLandmarkInWorld,
-                    vertices3DInLandmark
-                );
+        TDO_LOG_DEBUG_FORMAT("refObject %d best unused-instance overlap: landmark %d, IoU %f", indexRefObject % bestLandmarkIDForDebug % bestIoUForDebug);
+    }
 
-                std::shared_ptr<object::ObjectBase> pObjectInfo = pRefObject->_detection._pObjectInfo;
-                std::shared_ptr<LandMark> pOneLandmark = std::make_shared<LandMark>(
-                    poseLandmarkInWorld,
-                    vertices3DInLandmark,
-                    pRefObject->_detection._horizontalSize,
-                    pObjectInfo,
-                    pRefObject->_detection._hasFacet
-                );
-                pOneLandmark->AddObservation(pRefKeyFrame, indexRefObject);
-                pMapDb->AddLandMark(pOneLandmark);
-                observedLandmarks_indicesRefObj[pOneLandmark] = indexRefObject;
-                TDO_LOG_DEBUG_FORMAT("Failed matching correspondence (distance %f). Creating new landmark...", distancesObjectToClosestLandmark[indexRefObject]);
-                countNewLandmark++;
-                pRefKeyFrame->_bContainNewLandmarks = true;
+    // ---- phase 3: greedy exclusive assignment, largest overlap first. If an instance overlaps two ref objects,
+    // it goes to the larger-overlap one; the other one falls through to remaining candidates or creates new. ----
+    std::sort(overlapCandidates.begin(), overlapCandidates.end(),
+        [](const OverlapCandidate& a, const OverlapCandidate& b){ return a.iou > b.iou; });
+    for (const OverlapCandidate& candidate : overlapCandidates){
+        if (isRefObjectAssigned[candidate.indexRefObject]
+            || usedLandmarkIDs.count(visibleLandmarks[candidate.indexLandmark]->_landmarkID) > 0){
+            continue;
+        }
+        indicesLandmarkForRefObjects[candidate.indexRefObject] = candidate.indexLandmark;
+        visibleLandmarks[candidate.indexLandmark]->AddObservation(pRefKeyFrame, candidate.indexRefObject);
+        visibleLandmarks[candidate.indexLandmark]->SetLastObservedFrameID(pRefKeyFrame->_pRefFrame->_frameID);
+        observedLandmarks_indicesRefObj[visibleLandmarks[candidate.indexLandmark]] = candidate.indexRefObject;
+        isRefObjectAssigned[candidate.indexRefObject] = true;
+        usedLandmarkIDs.insert(visibleLandmarks[candidate.indexLandmark]->_landmarkID);
+        TDO_LOG_DEBUG_FORMAT("Associated refObject %d with existing instance (landmark %d, IoU %f).", candidate.indexRefObject % visibleLandmarks[candidate.indexLandmark]->_landmarkID % candidate.iou);
+    }
+
+    // ---- phase 3.5: 3D-distance fallback — when the nearest unused instance is within the merge radius
+    // (1.5x object size), assign the object directly to it instead of creating a duplicate that the
+    // merger would fold back later. Exclusive, nearest pair first. ----
+    struct DistanceCandidate {
+        float distance;
+        int indexRefObject;
+        int indexLandmark;
+    };
+    std::vector<DistanceCandidate> distanceCandidates;
+    for (int indexRefObject=0; indexRefObject < pRefKeyFrame->_refObjects.size(); indexRefObject++){
+        if (isRefObjectAssigned[indexRefObject]){
+            continue;
+        }
+        std::shared_ptr<RefObject> pRefObject = pRefKeyFrame->_refObjects[indexRefObject];
+        const Mat44_t keyframePoseInWorld = pRefKeyFrame->GetKeyframePoseInWorld();
+        const Vec3_t objectCenterInWorld = keyframePoseInWorld.block<3, 3>(0, 0) * pRefObject->_detection._objectCenterInRefFrame + keyframePoseInWorld.col(3).head<3>();
+        for (int indexVisibleLandmark=0; indexVisibleLandmark < visibleLandmarks.size(); indexVisibleLandmark++){
+            if (usedLandmarkIDs.count(visibleLandmarks[indexVisibleLandmark]->_landmarkID) > 0){
                 continue;
             }
-            indicesLandmarkForRefObjects[indexRefObject] = indicesForClosestLandmark[indexRefObject];
-            TDO_LOG_DEBUG_FORMAT("Resurrect correspondence due to close 3d distance (%f m).", distancesObjectToClosestLandmark[indexRefObject]);
+            const float distance = (objectCenterInWorld - visibleLandmarks[indexVisibleLandmark]->GetLandmarkPoseInWorld().col(3).head<3>()).norm();
+            const float distanceThreshold = visibleLandmarks[indexVisibleLandmark]->_horizontalSize * 1.5f;  // Note: consistent with the merge radius.
+            if (distance < distanceThreshold){
+                distanceCandidates.push_back(DistanceCandidate{distance, indexRefObject, indexVisibleLandmark});
+            }
         }
-        // if correspondence, and new keyframe is closer, update landmark pose.
-        // TODO: should use multi-view stereo to update landmark pose. need stereo rectification and check if object is within FoV after stereo recti.
-        visibleLandmarks[indicesLandmarkForRefObjects[indexRefObject]]->AddObservation(pRefKeyFrame, indexRefObject);
-        observedLandmarks_indicesRefObj[visibleLandmarks[indicesLandmarkForRefObjects[indexRefObject]]] = indexRefObject;
+    }
+    std::sort(distanceCandidates.begin(), distanceCandidates.end(),
+        [](const DistanceCandidate& a, const DistanceCandidate& b){ return a.distance < b.distance; });
+    for (const DistanceCandidate& candidate : distanceCandidates){
+        if (isRefObjectAssigned[candidate.indexRefObject]
+            || usedLandmarkIDs.count(visibleLandmarks[candidate.indexLandmark]->_landmarkID) > 0){
+            continue;
+        }
+        indicesLandmarkForRefObjects[candidate.indexRefObject] = candidate.indexLandmark;
+        visibleLandmarks[candidate.indexLandmark]->AddObservation(pRefKeyFrame, candidate.indexRefObject);
+        visibleLandmarks[candidate.indexLandmark]->SetLastObservedFrameID(pRefKeyFrame->_pRefFrame->_frameID);
+        observedLandmarks_indicesRefObj[visibleLandmarks[candidate.indexLandmark]] = candidate.indexRefObject;
+        isRefObjectAssigned[candidate.indexRefObject] = true;
+        usedLandmarkIDs.insert(visibleLandmarks[candidate.indexLandmark]->_landmarkID);
+        TDO_LOG_DEBUG_FORMAT("Assigned refObject %d to nearest instance (landmark %d, 3d distance %f m).",
+                                candidate.indexRefObject % visibleLandmarks[candidate.indexLandmark]->_landmarkID % candidate.distance);
+    }
+
+    // ---- phase 4: create a new landmark for every ref object still without an instance. ----
+    for (int indexRefObject=0; indexRefObject < pRefKeyFrame->_refObjects.size(); indexRefObject++){
+        if (isRefObjectAssigned[indexRefObject]){
+            continue;
+        }
+        std::shared_ptr<RefObject> pRefObject = pRefKeyFrame->_refObjects[indexRefObject];
+        Mat44_t poseLandmarkInWorld;
+        std::vector<Vec3_t> vertices3DInLandmark;
+        LandMark::ComputeLandmarkPoseInWorldByVertices3D(
+            pRefKeyFrame,
+            pRefObject,
+            poseLandmarkInWorld,
+            vertices3DInLandmark
+        );
+
+        std::shared_ptr<object::ObjectBase> pObjectInfo = pRefObject->_detection._pObjectInfo;
+        std::shared_ptr<LandMark> pOneLandmark = std::make_shared<LandMark>(
+            poseLandmarkInWorld,
+            vertices3DInLandmark,
+            pRefObject->_detection._horizontalSize,
+            pObjectInfo,
+            pRefObject->_detection._hasFacet
+        );
+        pOneLandmark->AddObservation(pRefKeyFrame, indexRefObject);
+        pOneLandmark->SetLastObservedFrameID(pRefKeyFrame->_pRefFrame->_frameID);
+        pMapDb->AddLandMark(pOneLandmark);
+        observedLandmarks_indicesRefObj[pOneLandmark] = indexRefObject;
+        TDO_LOG_DEBUG_FORMAT("No unused instance with enough overlap for refObject %d. Created new landmark %d at world (%f, %f, %f).",
+                                indexRefObject % pOneLandmark->_landmarkID % poseLandmarkInWorld(0, 3) % poseLandmarkInWorld(1, 3) % poseLandmarkInWorld(2, 3));
+        countNewLandmark++;
+        pRefKeyFrame->_bContainNewLandmarks = true;
     }
 
     if (isDebug){

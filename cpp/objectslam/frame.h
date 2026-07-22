@@ -69,6 +69,8 @@ public:
 
     bool _isTracked = false; // Note: whether tracking succeeded or not on this frame.
 
+    bool _isPoseInterpolated = false; // Note: tracking failed on this frame; pose was linearly interpolated afterwards.
+
     unsigned int _frameID;
     static std::atomic<unsigned int> _nextID;
 

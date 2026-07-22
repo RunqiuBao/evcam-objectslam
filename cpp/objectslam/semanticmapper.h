@@ -27,10 +27,13 @@ public:
     static constexpr size_t _numNegativeCovisibilityToPruneLandmark = 5;  //!Note: if more than this of covisibility can not see the landmark, then prune it.
     static constexpr size_t _numMinCovisibilityToPruneLandmark = 2;
     static constexpr size_t _numMinObservableToPruneLandmark = 10;
+    static constexpr unsigned int _maxUnobservedFramesToPruneLandmark = 22;
 
 private:
     void _DoPruneLandmarks();  // every new keyframes, scan once the 5th newest keyframe and prune observed landmarks that are not observed enough overall.
     void _DoPruneLandmarks2();  // every Nth keyframes created, scan once if there are landmarks observed less than _numMinCovisibilityToPruneLandmark times, but could be observed _numMinObservableToPruneLandmark times.
+
+    void _DoPruneUnobservedLandmarks();  // remove landmarks whose object has not been observed for more than _maxUnobservedFramesToPruneLandmark frames.
     /*
      *  Assume all landmarks are same type. Merge them if they are within certain physical distance.
      */

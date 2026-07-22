@@ -74,6 +74,13 @@ public:
     void DeleteThis() { _bIsToDelete = true; }
     bool IsToDelete() { return _bIsToDelete; }
 
+    // frame-age bookkeeping for pruning: the newest frame ID at which this landmark's object was observed.
+    void SetLastObservedFrameID(const unsigned int frameID) {
+        unsigned int current = _lastObservedFrameID.load();
+        while (frameID > current && !_lastObservedFrameID.compare_exchange_weak(current, frameID)) {}
+    }
+    unsigned int GetLastObservedFrameID() const { return _lastObservedFrameID.load(); }
+
     float _horizontalSize;
     float _observedHeight;
     bool _hasFacet;
@@ -86,6 +93,8 @@ private:
 
     float _bestDetectionScore;  // if detection score becomes better, update landmark pose and corners.
     bool _bIsToDelete;
+
+    std::atomic<unsigned int> _lastObservedFrameID{0};
 
     mutable std::mutex _mtxObservations;
     mutable std::mutex _mtxLandmarkPose;

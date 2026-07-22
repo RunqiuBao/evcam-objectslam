@@ -2,6 +2,7 @@
 
 #include <set>
 #include <algorithm>
+#include <cassert>
 #include <logging.h>
 TDO_LOGGER("eventobjectslam.keyframe")
 
@@ -85,6 +86,13 @@ void KeyFrame::DeleteOneObservedLandmark(std::shared_ptr<LandMark> oneLandmarkTo
 
 void KeyFrame::ReplaceOneObservedLandmark(std::shared_ptr<LandMark> oldLandmark, std::shared_ptr<LandMark> newLandmark) {
     std::lock_guard<std::mutex> lock(_mtxLandmarks);
+    // A keyframe observes each object instance at most once (exclusive association), so the merge target must
+    // not already be observed here — replacing would overwrite its entry and corrupt the map.
+    if (_observedLandmarks_indicesRefObj.count(newLandmark) > 0) {
+        TDO_LOG_ERROR_FORMAT("keyframe(%d) already observes merge-target landmark(%d) while replacing landmark(%d).",
+                                _keyFrameID % newLandmark->_landmarkID % oldLandmark->_landmarkID);
+        assert(false && "keyframe already observes the merge-target landmark");
+    }
     unsigned int indexRefObj = _observedLandmarks_indicesRefObj[oldLandmark];
     _observedLandmarks_indicesRefObj.erase(oldLandmark);
     _observedLandmarks_indicesRefObj[newLandmark] = indexRefObj;

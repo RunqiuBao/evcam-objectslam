@@ -79,6 +79,18 @@ void SemanticMapper::_DoPruneLandmarks2() {
     _isPruneLandmarks = false;
 }
 
+void SemanticMapper::_DoPruneUnobservedLandmarks() {
+    const unsigned int latestFrameID = _pMapDb->GetLatestFrameID();
+    std::vector<std::shared_ptr<LandMark>> allLandmarksInDb = _pMapDb->GetAllLandmarks();
+    for (auto pLandmark : allLandmarksInDb) {
+        const unsigned int lastObservedFrameID = pLandmark->GetLastObservedFrameID();
+        if (latestFrameID > lastObservedFrameID && latestFrameID - lastObservedFrameID > _maxUnobservedFramesToPruneLandmark) {
+            TDO_LOG_DEBUG_FORMAT("pruning landmark %d: not observed for %d frames.", pLandmark->_landmarkID % (latestFrameID - lastObservedFrameID));
+            _pMapDb->PruneOneLandmark(pLandmark);
+        }
+    }
+}
+
 void SemanticMapper::_DoMergeLandmarks() {
     TDO_LOG_DEBUG_FORMAT("NumLandmarks in database before: %d", _pMapDb->_landmarks.size());
     std::vector<std::shared_ptr<LandMark>> allLandmarksInDb = _pMapDb->GetAllLandmarks();
@@ -94,9 +106,11 @@ void SemanticMapper::_DoMergeLandmarks() {
 
                 for (size_t indexDestLandmark = indexSrcLandmark + 1; indexDestLandmark < allLandmarksInDb.size(); indexDestLandmark++) {
                     if (!visited[indexDestLandmark]) {
-                        float distanceThreshold = allLandmarksInDb[indexDestLandmark]->_horizontalSize * 3.;  // Note: 3.0 is a factor.
+                        float distanceThreshold = allLandmarksInDb[indexDestLandmark]->_horizontalSize * 1.5;  // Note: 1.5 is a factor.
                         float distance = (allLandmarksInDb[indexSrcLandmark]->GetLandmarkPoseInWorld().block(0, 3, 3, 1) - allLandmarksInDb[indexDestLandmark]->GetLandmarkPoseInWorld().block(0, 3, 3, 1)).norm();
                         if (distance < distanceThreshold) {
+                            TDO_LOG_DEBUG_FORMAT("clustering landmark %d with landmark %d for merge (distance %f m, threshold %f m).",
+                                                    allLandmarksInDb[indexSrcLandmark]->_landmarkID % allLandmarksInDb[indexDestLandmark]->_landmarkID % distance % distanceThreshold);
                             cluster.push_back(allLandmarksInDb[indexDestLandmark]);
                             visited[indexDestLandmark] = true;
                         }                        
@@ -124,12 +138,9 @@ void SemanticMapper::Run() {
     while (!_isTerminate) {
         if (_isPruneLandmarks) {
             auto starttime = std::chrono::steady_clock::now();
-            _DoPruneLandmarks2();
-            auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - starttime);
-            TDO_LOG_DEBUG_FORMAT("one pruneLandmarks task finished in %d milisec.", duration.count());
-            starttime = std::chrono::steady_clock::now();
+            _DoPruneUnobservedLandmarks();
             _DoMergeLandmarks();
-            duration = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - starttime);
+            auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - starttime);
             TDO_LOG_DEBUG_FORMAT("one mergelandmarks task finished in %d milisec.", duration.count());
         }
 

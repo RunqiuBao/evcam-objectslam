@@ -105,16 +105,24 @@ public:
     Mat44_t nextFrameInCameraTransform;  // Note: camera velocity
 
 private:
-    // compose the stereo debug view (input frames + detections + tracking status) and publish it to _pMapDb
+    // compose the stereo debug view (input frames + detections + tracking status) and publish it to _pMapDb.
+    // keyframeInsertReason: non-empty when a keyframe was inserted on this frame; shown on the image.
+    // trackingMethod: name of the tracking method that succeeded on this frame; shown on the image.
     void UpdateDebugView(
         const std::shared_ptr<Frame>& pFrame,
         const bool isTrackingSuccess,
-        const Mat44_t& framePoseInWorld
+        const Mat44_t& framePoseInWorld,
+        const std::string& keyframeInsertReason,
+        const std::string& trackingMethod
     );
 
     std::shared_ptr<camera::CameraBase> _camera = nullptr;
     std::unique_ptr<FrameTracker> _frameTracker = nullptr;
     std::string _sStereoSequencePathForDebug;
+    size_t _maxNumDetectionsInHistory = 0;  // Note: the most detections ever seen in one frame during the run.
+    // frames whose tracking failed since the last success; their poses get linearly interpolated at the next success.
+    std::vector<std::shared_ptr<Frame>> _framesPendingInterpolation;
+    Mat44_t _lastSuccessfulFrameWorldPose = Eigen::Matrix4f::Identity();
 
 };
 

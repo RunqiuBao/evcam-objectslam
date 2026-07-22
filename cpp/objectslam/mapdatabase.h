@@ -6,6 +6,7 @@
 
 #include <opencv2/core.hpp>
 
+#include <atomic>
 #include <mutex>
 #include <unordered_map>
 
@@ -70,6 +71,36 @@ public:
         return _debugViewImage;
     }
 
+    // ---- current frame pose (world), published to the viewer ----
+    void SetCurrentFramePoseInWorld(const Mat44_t& poseInWorld) {
+        std::lock_guard<std::mutex> lock(_mtxCurrentFramePose);
+        _currentFramePoseInWorld = poseInWorld;
+        _hasCurrentFramePose = true;
+    }
+    bool GetCurrentFramePoseInWorld(Mat44_t& poseInWorld) const {
+        std::lock_guard<std::mutex> lock(_mtxCurrentFramePose);
+        poseInWorld = _currentFramePoseInWorld;
+        return _hasCurrentFramePose;
+    }
+
+    // ---- latest processed frame ID (for landmark age-based pruning) ----
+    void SetLatestFrameID(const unsigned int frameID) { _latestFrameID = frameID; }
+    unsigned int GetLatestFrameID() const { return _latestFrameID.load(); }
+
+    // ---- step mode: run one SLAM step per Enter keypress on the viewer window ----
+    void SetStepMode(const bool enabled) { _bStepMode = enabled; }
+    bool IsStepMode() const { return _bStepMode; }
+    void GrantOneStep() { _stepTokens++; }
+    bool TryConsumeOneStep() {
+        int tokens = _stepTokens.load();
+        while (tokens > 0){
+            if (_stepTokens.compare_exchange_weak(tokens, tokens - 1)){
+                return true;
+            }
+        }
+        return false;
+    }
+
 private:
     // mutex for mutal exclusion controll between class methods called in different threads
     mutable std::mutex _mtxMapKeyframesAccess;
@@ -79,6 +110,18 @@ private:
     mutable std::mutex _mtxDebugViewAccess;
 
     cv::Mat _debugViewImage;
+
+    std::atomic<bool> _bStepMode{false};
+
+    std::atomic<int> _stepTokens{0};
+
+    std::atomic<unsigned int> _latestFrameID{0};
+
+    Mat44_t _currentFramePoseInWorld = Mat44_t::Identity();
+
+    bool _hasCurrentFramePose = false;
+
+    mutable std::mutex _mtxCurrentFramePose;
 
     Vec3_t _objectSize;
 
