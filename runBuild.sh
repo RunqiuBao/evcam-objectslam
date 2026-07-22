@@ -118,6 +118,53 @@ function parse_args() {
 
 parse_args $@
 
+# ================================================================================================================================================== #
+# ============================================================== Ensure system Eigen =============================================================== #
+# ================================================================================================================================================== #
+# Every library in the SLAM process (g2o, Pangolin, PCL, ObjectSlam) must be compiled against the SAME
+# Eigen: /usr/local/include/eigen3. Mixing Eigen versions or SIMD flags across the shared libs causes
+# "data is not aligned" Eigen assertions inside g2o (see the note in CMakeLists.txt).
+readonly EIGEN_SYS_INCLUDE="/usr/local/include/eigen3"
+readonly EIGEN_VERSION="3.4.0"
+function ensure_system_eigen() {
+    if [ -f "${EIGEN_SYS_INCLUDE}/Eigen/Core" ]; then
+        local ver
+        ver=$(awk '/#define EIGEN_WORLD_VERSION|#define EIGEN_MAJOR_VERSION|#define EIGEN_MINOR_VERSION/{printf "%s.", $3}' \
+              "${EIGEN_SYS_INCLUDE}/Eigen/src/Core/util/Macros.h" 2>/dev/null | sed 's/\.$//')
+        echo -e "${GREEN}[Eigen] Found system Eigen ${ver} at ${EIGEN_SYS_INCLUDE}.${NC}"
+        if [[ "${ver}" != 3.4* ]]; then
+            echo -e "${YELLOW}[Eigen] Warning: expected Eigen 3.4.x; all 3rdparty libs must be rebuilt against this version.${NC}"
+        fi
+        return 0
+    fi
+
+    echo -e "${YELLOW}[Eigen] System Eigen not found at ${EIGEN_SYS_INCLUDE}. Installing Eigen ${EIGEN_VERSION} to /usr/local (needs sudo)...${NC}"
+    local srcdir="${SCRIPT_DIR}/3rdparty/eigen-${EIGEN_VERSION}"
+    local tarball="${SCRIPT_DIR}/3rdparty/eigen-${EIGEN_VERSION}.tar.gz"
+    if [ ! -d "${srcdir}" ]; then
+        if [ ! -f "${tarball}" ]; then
+            wget -O "${tarball}" "https://gitlab.com/libeigen/eigen/-/archive/${EIGEN_VERSION}/eigen-${EIGEN_VERSION}.tar.gz" || {
+                rm -f "${tarball}"
+                echo -e "${YELLOW}[Eigen] Download failed. Install Eigen ${EIGEN_VERSION} to /usr/local manually and re-run.${NC}"
+                return 1
+            }
+        fi
+        tar -xzf "${tarball}" -C "${SCRIPT_DIR}/3rdparty/" || return 1
+    fi
+    # Eigen is header-only: configure + install just copies headers and the Eigen3Config.cmake package files.
+    (cd "${srcdir}" \
+      && mkdir -p build && cd build \
+      && cmake -DCMAKE_INSTALL_PREFIX=/usr/local .. \
+      && sudo make install) || return 1
+    [ -f "${EIGEN_SYS_INCLUDE}/Eigen/Core" ] || return 1
+    echo -e "${GREEN}[Eigen] Installed Eigen ${EIGEN_VERSION} to ${EIGEN_SYS_INCLUDE}.${NC}"
+}
+
+if ! ensure_system_eigen; then
+    echo -e "${YELLOW}[Eigen] Aborting build: system Eigen is required.${NC}"
+    exit 1
+fi
+
 # install python dev headers
 sudo apt-get install python3-dev
 
