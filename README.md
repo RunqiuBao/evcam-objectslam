@@ -9,7 +9,7 @@ Estimate camera trajectory by stereo object detection in event cameras:<br>
       <img src="assets/seq0.gif" height="200px">
     </td>
     <td>
-      <img src="assets/evobjslam.gif" height="200px">
+      <img src="assets/evobjslam2.gif" height="200px">
     </td>
   </tr>
 </table>
