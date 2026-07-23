@@ -28,8 +28,8 @@ source runBuild.sh -a -i $(pwd)/tdoinstall
 ```
 # After installation
 cd tdoinstall/bin/
-rsync ../../assets/seq0.zip ./ && unzip seq0.zip
-./slamRunner ./seq0/ ./seq0/sysconfig.json
+rsync ../../assets/sample_data.zip ./ && unzip sample_data.zip
+./slamRunner ./sample_data/ ./sample_data/sysconfig.json
 ```
 
 ## License
