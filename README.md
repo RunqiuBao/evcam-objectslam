@@ -34,3 +34,7 @@ rsync ../../assets/seq0.zip ./ && unzip seq0.zip
 
 ## License
 MIT license
+
+## Our Supplementary Video
+<video src="https://github.com/user-attachments/assets/8699a359-94d8-4c84-8ab8-90dd1f507612" width="600" controls="controls"></video>
+
